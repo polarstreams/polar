@@ -20,3 +20,4 @@ Soda is a lightweight, kubernetes friendly messaging system.
 ## TODO
 - Multi region
 - Instant failover
+- Elasticity, multicloud
