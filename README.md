@@ -1,6 +1,6 @@
 # Soda Streams
 
-Soda is a lightweight, kubernetes friendly messaging system.
+Soda is a lightweight, elastic, kubernetes friendly messaging system.
 
 ## Features
 
@@ -11,6 +11,13 @@ Soda is a lightweight, kubernetes friendly messaging system.
 - Two nodes for a minimal highly available deployment.
 - No additional dependencies, i.e., no Zookeeper.
 
+### Elastic
+
+- New nodes can be started up in seconds, join the cluster and receive new
+data.
+- No need to assign data partitions
+- Scale down easily.
+
 ### Kubernetes friendly
 
 - Basic setup using StatefulSets.
@@ -18,6 +25,5 @@ Soda is a lightweight, kubernetes friendly messaging system.
 
 
 ## TODO
-- Multi region
+- Multi region, Multicloud
 - Instant failover
-- Elasticity, multicloud
