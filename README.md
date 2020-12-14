@@ -23,7 +23,11 @@ data.
 - Basic setup using StatefulSets.
 - Volume setup, scaling, rolling upgrades is managed by Kubernetes.
 
+## Limitations
 
-## TODO
+- No log compaction: data is kept after is consumed for a fixed period of time or
+when the log reaches some predetermined size.
+
+## TODO / Investigate
 - Multi region, Multicloud
-- Instant failover
+- Consumer replay
