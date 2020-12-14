@@ -8,7 +8,6 @@ Soda is a lightweight, elastic, kubernetes friendly messaging system.
 
 - Small binary size.
 - Limited memory footprint: Memory usage is capped at few hundreds of Mb.
-- Two nodes for a minimal highly available deployment.
 - No additional dependencies, i.e., no Zookeeper.
 
 ### Elastic
