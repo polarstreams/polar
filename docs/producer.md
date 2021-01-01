@@ -50,4 +50,4 @@ Luckily, there are some guarantees that limit the problem scope:
 
 ## Broker routing
 
-When a broker recieves messages for which is not an active leader, it can route to the correct broker instance.
+When a broker receives messages for which is not an active leader, it can route to the correct broker instance.
