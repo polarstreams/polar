@@ -16,16 +16,37 @@ Consider the following figure with four brokers:
    (T1)
    /  \
   /    \
- (T4) (T2)
+(T4)  (T2)
   \    /
    \  /
    (T3)
 ```
 
 Brokers with tokens 2 & 3 act as default followers for token 1.
+
 Brokers with tokens 4 & 1 act as default followers for token 3.
 
+Notation: `B1` is the broker assigned `T1` token, `Bn` is the broker assigned `Tn` token.
+
 ## Generations
+
+Each message is assigned a numerical offset that acts as identifier and denotes the position of the message in the log _generation_.
+
+When a broker starts, a _generation_ is created. A generation marks the leader for a given token at a certain time.
+
+For example, after B1 starts, it will communicate to broker instances B2 and B3 that a new generation for T1 is starting. After brokers for T2 and T3 agree, messages for T1 can be assigned offset identifiers.
+
+In case B1 goes offline, once B2 receives a message for T1 range, B2 will communicate with B3 the intention of starting a new generation for T1. If B3 agrees, a new generation for T1 will start. This generation will be valid until B1 becomes back online, at which time, B1 will try to start a new generation setting itself as leader of this new generation for T1.
+
+This _generational_ approach provides resilency to failure without the need to hold elections, as there will be a deterministic way to set the owner of the a generation at any given time.
+
+Creating generations and persisting them across multiple brokers in a strongly consistent manner requires additional metadata/state to be sent (i.e. see [distributed transactions across heterogenous stores](https://www.researchgate.net/publication/282156834_Scalable_Distributed_Transactions_across_Heterogeneous_Stores)).
+
+Luckily, there are some guarantees that limit the problem scope:
+
+- B3 will never try to start a generation for T1. Only B1 and B2 can do that. B3 will always be a follower for T1.
+- Generation creation will only occur when a broker goes offline/online or joins, so it can be a chatty algorithm without risk of overloading the system.
+- When B1 detects B2 and B3 offline, it will not attempt to continue acting as generation leader and will reject producer requests for T1. Once B1 regains connectivity to B2 or B3, it will communicate the intention of starting a new generation for T1. Once that is agreed upon, B1 will accept new T1 messages.
 
 ## Broker routing
 
