@@ -1,19 +1,26 @@
 package main
 
 import (
-	"fmt"
-
+	"github.com/jorgebay/soda/internal/configuration"
+	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/localdb"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
-	fmt.Println("Starting Soda")
-	fmt.Println("Initializing local db")
+	log.Info().Msg("Starting Soda")
+	log.Info().Msg("Initializing local db") 
+	config := configuration.Config{}
 	localDbClient := localdb.NewClient()
+	discoverer := discovery.NewDiscoverer(&config)
 
-	if localDbClient.Init() != nil {
-		// TODO
+	if err := localDbClient.Init(); err != nil {
+		log.Fatal().Err(err)
 	}
 
-	fmt.Println("Soda started")
+	if err := discoverer.Init(); err != nil {
+		log.Fatal().Err(err)
+	}
+
+	log.Info().Msg("Soda started")
 }
