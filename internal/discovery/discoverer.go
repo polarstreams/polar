@@ -12,11 +12,14 @@ type Discoverer interface {
 	Shutdown()
 }
 
-func NewDiscoverer(config *configuration.Config) Discoverer {
-	return &discoverer{}
+func NewDiscoverer(config configuration.Config) Discoverer {
+	return &discoverer{
+		config,
+	}
 }
 
 type discoverer struct {
+	config configuration.Config
 }
 
 func (d *discoverer) Init() error {

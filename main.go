@@ -9,10 +9,10 @@ import (
 
 func main() {
 	log.Info().Msg("Starting Soda")
-	log.Info().Msg("Initializing local db") 
-	config := configuration.Config{}
-	localDbClient := localdb.NewClient()
-	discoverer := discovery.NewDiscoverer(&config)
+	log.Info().Msg("Initializing local db")
+	config := configuration.NewConfig()
+	localDbClient := localdb.NewClient(config)
+	discoverer := discovery.NewDiscoverer(config)
 
 	if err := localDbClient.Init(); err != nil {
 		log.Fatal().Err(err)
