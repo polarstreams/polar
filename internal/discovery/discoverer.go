@@ -1,7 +1,7 @@
 package discovery
 
 import (
-	"github.com/jorgebay/soda/internal/configuration"
+	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/types"
 )
 
@@ -12,14 +12,14 @@ type Discoverer interface {
 	Shutdown()
 }
 
-func NewDiscoverer(config configuration.Config) Discoverer {
+func NewDiscoverer(config conf.Config) Discoverer {
 	return &discoverer{
 		config,
 	}
 }
 
 type discoverer struct {
-	config configuration.Config
+	config conf.Config
 }
 
 func (d *discoverer) Init() error {

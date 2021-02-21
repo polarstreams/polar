@@ -5,7 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/jorgebay/soda/internal/configuration"
+	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/localdb"
 	"github.com/jorgebay/soda/internal/producing"
@@ -15,10 +15,11 @@ import (
 func main() {
 	log.Info().Msg("Starting Soda")
 	log.Info().Msg("Initializing local db")
-	config := configuration.NewConfig()
+	config := conf.NewConfig()
 	localDbClient := localdb.NewClient(config)
 	discoverer := discovery.NewDiscoverer(config)
-	producer := producing.NewProducer(config)
+	//TODO: create a topic handler 
+	producer := producing.NewProducer(config, nil)
 
 	if err := localDbClient.Init(); err != nil {
 		log.Fatal().Err(err)
@@ -47,7 +48,7 @@ func main() {
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
-	<- sigc
+	<-sigc
 
 	log.Info().Msg("Shutting down")
 }

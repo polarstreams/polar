@@ -1,9 +1,9 @@
 package localdb
 
-import "github.com/jorgebay/soda/internal/configuration"
+import "github.com/jorgebay/soda/internal/conf"
 
 // NewClient creates a new instance of Client.
-func NewClient(config configuration.Config) Client {
+func NewClient(config conf.Config) Client {
 	return &client{
 		config,
 	}
@@ -15,7 +15,7 @@ type Client interface {
 }
 
 type client struct {
-	config configuration.Config
+	config conf.Config
 }
 
 func (c *client) Init() error {
