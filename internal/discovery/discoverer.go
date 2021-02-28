@@ -7,7 +7,7 @@ import (
 
 // Discoverer provides the cluster topology information.
 type Discoverer interface {
-	Init() error
+	types.Initializer
 	Peers() []types.BrokerInfo
 	Shutdown()
 }

@@ -6,9 +6,11 @@ import (
 	"syscall"
 
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/data/topics"
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/localdb"
 	"github.com/jorgebay/soda/internal/producing"
+	"github.com/jorgebay/soda/internal/types"
 	"github.com/rs/zerolog/log"
 )
 
@@ -17,20 +19,16 @@ func main() {
 	log.Info().Msg("Initializing local db")
 	config := conf.NewConfig()
 	localDbClient := localdb.NewClient(config)
+	topicHandler := topics.NewHandler(config)
 	discoverer := discovery.NewDiscoverer(config)
-	//TODO: create a topic handler 
-	producer := producing.NewProducer(config, nil)
+	producer := producing.NewProducer(config, topicHandler)
 
-	if err := localDbClient.Init(); err != nil {
-		log.Fatal().Err(err)
-	}
+	toInit := []types.Initializer{localDbClient, topicHandler, discoverer, producer}
 
-	if err := discoverer.Init(); err != nil {
-		log.Fatal().Err(err)
-	}
-
-	if err := producer.Init(); err != nil {
-		log.Fatal().Err(err)
+	for _, item := range toInit {
+		if err := item.Init(); err != nil {
+			log.Fatal().Err(err)
+		}
 	}
 
 	// Initialization phase ended

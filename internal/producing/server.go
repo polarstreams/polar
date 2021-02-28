@@ -6,7 +6,8 @@ import (
 	"strings"
 
 	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/data"
+	"github.com/jorgebay/soda/internal/data/topics"
+	"github.com/jorgebay/soda/internal/types"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
@@ -14,12 +15,12 @@ import (
 )
 
 type Producer interface {
-	Init() error
+	types.Initializer
 
 	AcceptConnections() error
 }
 
-func NewProducer(config conf.Config, topicGetter data.TopicGetter) Producer {
+func NewProducer(config conf.Config, topicGetter topics.TopicGetter) Producer {
 	return &producer{
 		config,
 		topicGetter,
@@ -28,7 +29,7 @@ func NewProducer(config conf.Config, topicGetter data.TopicGetter) Producer {
 
 type producer struct {
 	config      conf.Config
-	topicGetter data.TopicGetter
+	topicGetter topics.TopicGetter
 }
 
 func (p *producer) Init() error {

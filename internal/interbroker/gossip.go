@@ -1,10 +1,13 @@
 package interbroker
 
-import "github.com/jorgebay/soda/internal/conf"
+import (
+	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/types"
+)
 
 // Gossiper is responsible for communicating with other peers.
 type Gossiper interface {
-	Init(config conf.Config) error
+	types.Initializer
 
 	// Starts accepting connections from peers.
 	AcceptConnections() error
@@ -16,6 +19,6 @@ type Gossiper interface {
 	SendMessage()
 }
 
-func NewGossiper() Gossiper {
+func NewGossiper(config conf.Config) Gossiper {
 	return nil
 }
