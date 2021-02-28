@@ -32,5 +32,5 @@ func (h *topicHandler) Get(topic string) *types.TopicInfo {
 }
 
 func (h *topicHandler) Exists(topic string) bool {
-	return false
+	return true
 }

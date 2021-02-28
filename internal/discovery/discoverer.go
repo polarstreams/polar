@@ -8,8 +8,13 @@ import (
 // Discoverer provides the cluster topology information.
 type Discoverer interface {
 	types.Initializer
+	LeaderGetter
 	Peers() []types.BrokerInfo
 	Shutdown()
+}
+
+type LeaderGetter interface {
+	GetLeader(partitionKey string) *types.BrokerInfo
 }
 
 func NewDiscoverer(config conf.Config) Discoverer {
@@ -27,6 +32,10 @@ func (d *discoverer) Init() error {
 }
 
 func (d *discoverer) Peers() []types.BrokerInfo {
+	return nil
+}
+
+func (d *discoverer) GetLeader(partitionKey string) *types.BrokerInfo {
 	return nil
 }
 

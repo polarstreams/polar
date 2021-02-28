@@ -21,7 +21,7 @@ func main() {
 	localDbClient := localdb.NewClient(config)
 	topicHandler := topics.NewHandler(config)
 	discoverer := discovery.NewDiscoverer(config)
-	producer := producing.NewProducer(config, topicHandler)
+	producer := producing.NewProducer(config, topicHandler, discoverer)
 
 	toInit := []types.Initializer{localDbClient, topicHandler, discoverer, producer}
 

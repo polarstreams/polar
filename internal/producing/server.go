@@ -7,6 +7,7 @@ import (
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/data/topics"
+	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
@@ -20,16 +21,18 @@ type Producer interface {
 	AcceptConnections() error
 }
 
-func NewProducer(config conf.Config, topicGetter topics.TopicGetter) Producer {
+func NewProducer(config conf.Config, topicGetter topics.TopicGetter, leaderGetter discovery.LeaderGetter) Producer {
 	return &producer{
 		config,
 		topicGetter,
+		leaderGetter,
 	}
 }
 
 type producer struct {
-	config      conf.Config
-	topicGetter topics.TopicGetter
+	config       conf.Config
+	topicGetter  topics.TopicGetter
+	leaderGetter discovery.LeaderGetter
 }
 
 func (p *producer) Init() error {
@@ -41,7 +44,7 @@ func (p *producer) AcceptConnections() error {
 	address := fmt.Sprintf(":%d", port)
 	router := httprouter.New()
 
-	router.POST(conf.TopicMessageUrl, p.postMessage)
+	router.POST(conf.TopicMessageUrl, ToHandle(p.postMessage))
 	router.GET("/status", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		fmt.Fprintf(w, "Producer server listening on %d\n", port)
 	})
@@ -71,22 +74,39 @@ func (p *producer) AcceptConnections() error {
 	return nil
 }
 
-func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	var topic = strings.TrimSpace(ps.ByName("topic"))
-	if topic == "" {
-		badRequestResponse(w, "Invalid topic")
-		return
+type HandleWithError func(http.ResponseWriter, *http.Request, httprouter.Params) error
+
+func ToHandle(he HandleWithError) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+		if err := he(w, r, ps); err != nil {
+			httpErr, ok := err.(types.HttpError)
+
+			if !ok {
+				log.Err(err).Msg("Unexpected error when producing")
+				http.Error(w, "Internal server error", 500)
+				return
+			}
+
+			w.WriteHeader(httpErr.StatusCode())
+			// The message is supposed to be user friendly
+			fmt.Fprintf(w, err.Error())
+		}
 	}
-
-	//TODO: Lookup for topic
-
-	var partitionKey = r.URL.Query().Get("partitionKey")
-	fmt.Fprintf(w, "Received post %s %s\n", ps.ByName("topic"), partitionKey)
-
-	fmt.Fprintf(w, "OK")
 }
 
-func badRequestResponse(w http.ResponseWriter, message string) {
-	w.WriteHeader(http.StatusBadRequest)
-	fmt.Fprintf(w, message)
+func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	var topic = strings.TrimSpace(ps.ByName("topic"))
+	if topic == "" || !p.topicGetter.Exists(topic) {
+		return types.NewHttpError(http.StatusBadRequest, "Invalid topic")
+	}
+
+	partitionKey := r.URL.Query().Get("partitionKey")
+	leader := p.leaderGetter.GetLeader(partitionKey)
+
+	if leader == nil {
+		return fmt.Errorf("Leader was not found")
+	}
+
+	fmt.Fprintf(w, "OK")
+	return nil
 }
