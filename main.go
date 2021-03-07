@@ -6,6 +6,7 @@ import (
 	"syscall"
 
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/data/topics"
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/localdb"
@@ -21,7 +22,9 @@ func main() {
 	localDbClient := localdb.NewClient(config)
 	topicHandler := topics.NewHandler(config)
 	discoverer := discovery.NewDiscoverer(config)
-	producer := producing.NewProducer(config, topicHandler, discoverer)
+	datalog := data.NewDatalog(config)
+	// TODO: Create Gossiper
+	producer := producing.NewProducer(config, topicHandler, discoverer, datalog, nil)
 
 	toInit := []types.Initializer{localDbClient, topicHandler, discoverer, producer}
 

@@ -2,12 +2,15 @@ package producing
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
 
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/data/topics"
 	"github.com/jorgebay/soda/internal/discovery"
+	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
@@ -21,11 +24,19 @@ type Producer interface {
 	AcceptConnections() error
 }
 
-func NewProducer(config conf.Config, topicGetter topics.TopicGetter, leaderGetter discovery.LeaderGetter) Producer {
+func NewProducer(
+	config conf.Config,
+	topicGetter topics.TopicGetter,
+	leaderGetter discovery.LeaderGetter,
+	datalog data.Datalog,
+	gossiper interbroker.Gossiper,
+) Producer {
 	return &producer{
 		config,
 		topicGetter,
 		leaderGetter,
+		datalog,
+		gossiper,
 	}
 }
 
@@ -33,6 +44,8 @@ type producer struct {
 	config       conf.Config
 	topicGetter  topics.TopicGetter
 	leaderGetter discovery.LeaderGetter
+	datalog      data.Datalog
+	gossiper     interbroker.Gossiper
 }
 
 func (p *producer) Init() error {
@@ -101,10 +114,24 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 	}
 
 	partitionKey := r.URL.Query().Get("partitionKey")
-	leader := p.leaderGetter.GetLeader(partitionKey)
+	replicationInfo := p.leaderGetter.GetLeader(partitionKey)
+	leader := replicationInfo.Leader
 
 	if leader == nil {
 		return fmt.Errorf("Leader was not found")
+	}
+
+	// TODO: Global backpressure based on ContentLength
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil
+	}
+
+	if leader.IsSelf {
+		p.datalog.Append(replicationInfo.Token, topic, body)
+		// gossiper.SendToFollower(token, topic, body)
+	} else {
+		// gossiper.SendToLeader(token, topic, body)
 	}
 
 	fmt.Fprintf(w, "OK")

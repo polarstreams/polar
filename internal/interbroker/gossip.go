@@ -5,6 +5,8 @@ import (
 	"github.com/jorgebay/soda/internal/types"
 )
 
+// TODO: Inter-broker communication should be versioned
+
 // Gossiper is responsible for communicating with other peers.
 type Gossiper interface {
 	types.Initializer

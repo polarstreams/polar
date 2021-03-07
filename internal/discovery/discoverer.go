@@ -14,7 +14,7 @@ type Discoverer interface {
 }
 
 type LeaderGetter interface {
-	GetLeader(partitionKey string) *types.BrokerInfo
+	GetLeader(partitionKey string) types.ReplicationInfo
 }
 
 func NewDiscoverer(config conf.Config) Discoverer {
@@ -35,8 +35,8 @@ func (d *discoverer) Peers() []types.BrokerInfo {
 	return nil
 }
 
-func (d *discoverer) GetLeader(partitionKey string) *types.BrokerInfo {
-	return nil
+func (d *discoverer) GetLeader(partitionKey string) types.ReplicationInfo {
+	return types.ReplicationInfo{}
 }
 
 func (d *discoverer) Shutdown() {}
