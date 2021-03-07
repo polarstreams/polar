@@ -1,5 +1,13 @@
 package conf
 
+type FlowController interface {
+	// Allocate makes sure that buffer memory usage remains within the predefined boundaries.
+	Allocate(length int)
+
+	// Marks the provided length as ready to be allocated.
+	Free(length int)
+}
+
 type flowControl struct {
 	requestChannel chan allocRequest
 	freeChannel    chan int
@@ -20,28 +28,27 @@ func newFlowControl(maxLength int) *flowControl {
 		remaining:      maxLength,
 	}
 
-	f.startReceiving()
+	go f.startReceiving()
 
 	return f
 }
 
+// Receives in loop
 func (f *flowControl) startReceiving() {
-	go func() {
-		// requestChannel blocks until the next request
-		for r := range f.requestChannel {
-			// Receive all pending without blocking
-			f.receiveFreed()
+	// requestChannel blocks until the next request
+	for r := range f.requestChannel {
+		// Receive all pending without blocking
+		f.receiveFreed()
 
-			// Wait until we get enough space
-			f.ensureLength(r.length)
+		// Wait until we get enough space
+		f.ensureLength(r.length)
 
-			f.remaining -= r.length
-			r.sender <- true
+		f.remaining -= r.length
+		r.sender <- true
 
-			// Continue receiving before possibly blocking
-			f.receiveFreed()
-		}
-	}()
+		// Continue receiving before possibly blocking
+		f.receiveFreed()
+	}
 }
 
 func (f *flowControl) receiveFreed() {
@@ -63,7 +70,7 @@ func (f *flowControl) ensureLength(length int) {
 	}
 }
 
-func (f *flowControl) allocate(length int) {
+func (f *flowControl) Allocate(length int) {
 	response := make(chan bool, 1)
 	r := allocRequest{
 		length: length,
@@ -73,6 +80,6 @@ func (f *flowControl) allocate(length int) {
 	<-response
 }
 
-func (f *flowControl) free(length int) {
+func (f *flowControl) Free(length int) {
 	f.freeChannel <- length
 }

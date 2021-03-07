@@ -121,7 +121,16 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 		return fmt.Errorf("Leader was not found")
 	}
 
-	// TODO: Global backpressure based on ContentLength
+	if r.ContentLength <= 0 || r.ContentLength > int64(p.config.MaxMessageSize()) {
+		return types.NewHttpErrorf(
+			http.StatusBadRequest,
+			"Content length must be defined, greater than 0 and less than %d bytes",
+			p.config.MaxMessageSize())
+	}
+
+	// Make sure
+	p.config.FlowController().Allocate(int(r.ContentLength))
+	defer p.config.FlowController().Free(int(r.ContentLength))
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return nil
