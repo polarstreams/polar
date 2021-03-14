@@ -17,8 +17,10 @@ import (
 
 func main() {
 	log.Info().Msg("Starting Soda")
-	log.Info().Msg("Initializing local db")
 	config := conf.NewConfig()
+	log.Info().Msgf("Using home dir as %s", config.HomePath())
+	config.CreateAllDirs()
+
 	localDbClient := localdb.NewClient(config)
 	topicHandler := topics.NewHandler(config)
 	discoverer := discovery.NewDiscoverer(config)
@@ -30,7 +32,7 @@ func main() {
 
 	for _, item := range toInit {
 		if err := item.Init(); err != nil {
-			log.Fatal().Err(err)
+			log.Fatal().Err(err).Msg("Exiting")
 		}
 	}
 
@@ -52,4 +54,5 @@ func main() {
 	<-sigc
 
 	log.Info().Msg("Shutting down")
+	localDbClient.Close()
 }

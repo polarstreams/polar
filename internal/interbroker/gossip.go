@@ -6,6 +6,7 @@ import (
 )
 
 // TODO: Inter-broker communication should be versioned
+// TODO: Pass Context
 
 // Gossiper is responsible for communicating with other peers.
 type Gossiper interface {
@@ -17,8 +18,11 @@ type Gossiper interface {
 	// Starts opening connections to known peers.
 	OpenConnections() error
 
-	//TODO
-	SendMessage()
+	// Sends a message to be stored as replica of current broker's datalog
+	SendToFollowers(replicationInfo types.ReplicationInfo, topic string, body []byte) error
+
+	// Sends a message to be handled as a leader of a token
+	SendToLeader(replicationInfo types.ReplicationInfo, topic string, body []byte) error
 }
 
 func NewGossiper(config conf.Config) Gossiper {

@@ -128,19 +128,25 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 			p.config.MaxMessageSize())
 	}
 
-	// Make sure
 	p.config.FlowController().Allocate(int(r.ContentLength))
 	defer p.config.FlowController().Free(int(r.ContentLength))
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	if leader.IsSelf {
-		p.datalog.Append(replicationInfo.Token, topic, body)
-		// gossiper.SendToFollower(token, topic, body)
+		if err := p.datalog.Append(replicationInfo.Token, topic, body); err != nil {
+			return err
+		}
+
+		if err := p.gossiper.SendToFollowers(replicationInfo, topic, body); err != nil {
+			return err
+		}
 	} else {
-		// gossiper.SendToLeader(token, topic, body)
+		if err := p.gossiper.SendToLeader(replicationInfo, topic, body); err != nil {
+			return err
+		}
 	}
 
 	fmt.Fprintf(w, "OK")
