@@ -20,5 +20,5 @@ func getPrimaryToken(token Token, tokenRange []Token) Token {
 
 func getTokenAtIndex(length int, index int) Token {
 	size := int64(math.MaxUint64 / uint64(length))
-	return Token(startToken + size * int64(index))
+	return Token(startToken + size*int64(index))
 }

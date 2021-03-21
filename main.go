@@ -9,6 +9,7 @@ import (
 	"github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/data/topics"
 	"github.com/jorgebay/soda/internal/discovery"
+	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/localdb"
 	"github.com/jorgebay/soda/internal/producing"
 	"github.com/jorgebay/soda/internal/types"
@@ -25,10 +26,10 @@ func main() {
 	topicHandler := topics.NewHandler(config)
 	discoverer := discovery.NewDiscoverer(config)
 	datalog := data.NewDatalog(config)
-	// TODO: Create Gossiper
-	producer := producing.NewProducer(config, topicHandler, discoverer, datalog, nil)
+	gossiper := interbroker.NewGossiper(config)
+	producer := producing.NewProducer(config, topicHandler, discoverer, datalog, gossiper)
 
-	toInit := []types.Initializer{localDbClient, topicHandler, discoverer, producer}
+	toInit := []types.Initializer{localDbClient, topicHandler, discoverer, gossiper, producer}
 
 	for _, item := range toInit {
 		if err := item.Init(); err != nil {
@@ -39,15 +40,18 @@ func main() {
 	// Initialization phase ended
 	log.Info().Msg("Start accepting connections")
 
+	if err := gossiper.AcceptConnections(); err != nil {
+		log.Fatal().Err(err).Msg("Exiting")
+	}
+
 	if err := producer.AcceptConnections(); err != nil {
-		log.Fatal().Err(err)
+		log.Fatal().Err(err).Msg("Exiting")
 	}
 
 	log.Info().Msg("Soda started")
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc,
-		syscall.SIGHUP,
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGQUIT)

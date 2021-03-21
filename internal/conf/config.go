@@ -13,6 +13,7 @@ type Config interface {
 	ProducerPort() int
 	ConsumerPort() int
 	AdminPort() int
+	GossipPort() int
 	MaxMessageSize() int
 	LocalDbPath() string
 	HomePath() string
@@ -40,6 +41,10 @@ func (c *config) ConsumerPort() int {
 
 func (c *config) AdminPort() int {
 	return 8083
+}
+
+func (c *config) GossipPort() int {
+	return 8084
 }
 
 func (c *config) MaxMessageSize() int {

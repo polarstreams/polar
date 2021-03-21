@@ -12,6 +12,7 @@ import (
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/types"
+	"github.com/jorgebay/soda/internal/utils"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
@@ -57,7 +58,7 @@ func (p *producer) AcceptConnections() error {
 	address := fmt.Sprintf(":%d", port)
 	router := httprouter.New()
 
-	router.POST(conf.TopicMessageUrl, ToHandle(p.postMessage))
+	router.POST(conf.TopicMessageUrl, utils.ToHandle(p.postMessage))
 	router.GET("/status", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		fmt.Fprintf(w, "Producer server listening on %d\n", port)
 	})
@@ -85,26 +86,6 @@ func (p *producer) AcceptConnections() error {
 	<-c
 	log.Info().Msgf("Start listening to producers on port %d", port)
 	return nil
-}
-
-type HandleWithError func(http.ResponseWriter, *http.Request, httprouter.Params) error
-
-func ToHandle(he HandleWithError) httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		if err := he(w, r, ps); err != nil {
-			httpErr, ok := err.(types.HttpError)
-
-			if !ok {
-				log.Err(err).Msg("Unexpected error when producing")
-				http.Error(w, "Internal server error", 500)
-				return
-			}
-
-			w.WriteHeader(httpErr.StatusCode())
-			// The message is supposed to be user friendly
-			fmt.Fprintf(w, err.Error())
-		}
-	}
 }
 
 func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {

@@ -39,10 +39,10 @@ var _ = Describe("getTokenAtIndex()", func() {
 	})
 
 	It("should cover all the ring", func() {
-		nTokens := 6;
+		nTokens := 6
 		rangeLength := int64(math.MaxUint64 / uint64(nTokens))
 		for i := 1; i < nTokens; i++ {
-			Expect(getTokenAtIndex(nTokens, i)).To(Equal(Token(math.MinInt64 + (rangeLength*int64(i)))))
+			Expect(getTokenAtIndex(nTokens, i)).To(Equal(Token(math.MinInt64 + (rangeLength * int64(i)))))
 		}
 	})
 })

@@ -26,5 +26,25 @@ type Gossiper interface {
 }
 
 func NewGossiper(config conf.Config) Gossiper {
+	return &gossiper{config: config}
+}
+
+type gossiper struct {
+	config conf.Config
+}
+
+func (g *gossiper) Init() error {
+	return nil
+}
+
+func (g *gossiper) OpenConnections() error {
+	return nil
+}
+
+func (g *gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic string, body []byte) error {
+	return nil
+}
+
+func (g *gossiper) SendToLeader(replicationInfo types.ReplicationInfo, topic string, body []byte) error {
 	return nil
 }
