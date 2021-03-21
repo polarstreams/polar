@@ -13,6 +13,14 @@ func (c *client) hasLocalInfo() (bool, error) {
 	}
 }
 
-//TODO: create local info
+func (c *client) createLocalInfo() error {
+	q := "INSERT INTO local_info (key, schema_version_init, schema_version_current) VALUES (?, ?, ?)"
+	_, err := c.db.Exec(q, "local", "1.0", "1.0")
+	return err
+}
 
-//TODO: setCurrentSchemaVersion
+func (c *client) setCurrentSchemaVersion() error {
+	q := "UPDATE local_info SET schema_version_current = ? WHERE key = ?"
+	_, err := c.db.Exec(q, "1.0", "local")
+	return err
+}
