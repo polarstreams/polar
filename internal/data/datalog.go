@@ -7,7 +7,7 @@ import (
 
 type Datalog interface {
 	types.Initializer
-	Append(token *types.Token, topic string, body []byte) error
+	Append(token types.Token, topic string, body []byte) error
 }
 
 func NewDatalog(config conf.Config) Datalog {
@@ -20,7 +20,7 @@ type datalog struct {
 	config conf.Config
 }
 
-func (d *datalog) Append(token *types.Token, topic string, body []byte) error {
+func (d *datalog) Append(token types.Token, topic string, body []byte) error {
 	return nil
 }
 

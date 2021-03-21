@@ -3,7 +3,8 @@ package types
 // BrokerInfo contains information about a broker
 type BrokerInfo struct {
 	// Determines whether the broker refers to this instance
-	IsSelf bool
+	IsSelf  bool
+	Ordinal int
 }
 
 type TopicInfo struct {
@@ -13,7 +14,5 @@ type TopicInfo struct {
 type ReplicationInfo struct {
 	Leader    *BrokerInfo
 	Followers []BrokerInfo
-	Token     *Token
+	Token     Token
 }
-
-type Token string
