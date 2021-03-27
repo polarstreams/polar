@@ -16,3 +16,5 @@ type ReplicationInfo struct {
 	Followers []BrokerInfo
 	Token     Token
 }
+
+type TopologyChangeHandler func()

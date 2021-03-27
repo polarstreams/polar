@@ -1,7 +1,11 @@
 package interbroker
 
 import (
+	"sync"
+	"sync/atomic"
+
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/types"
 )
 
@@ -25,20 +29,29 @@ type Gossiper interface {
 	SendToLeader(replicationInfo types.ReplicationInfo, topic string, body []byte) error
 }
 
-func NewGossiper(config conf.Config) Gossiper {
-	return &gossiper{config: config}
+func NewGossiper(config conf.Config, discoverer discovery.Discoverer) Gossiper {
+	return &gossiper{
+		config:           config,
+		discoverer:       discoverer,
+		connectionsMutex: sync.Mutex{},
+		connections:      atomic.Value{},
+	}
 }
 
 type gossiper struct {
-	config conf.Config
+	config           conf.Config
+	discoverer       discovery.Discoverer
+	connectionsMutex sync.Mutex
+	connections      atomic.Value
 }
 
 func (g *gossiper) Init() error {
+	g.discoverer.RegisterListener(g.OnTopologyChange)
 	return nil
 }
 
-func (g *gossiper) OpenConnections() error {
-	return nil
+func (g *gossiper) OnTopologyChange() {
+	// TODO: Create new connections, refresh existing
 }
 
 func (g *gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic string, body []byte) error {

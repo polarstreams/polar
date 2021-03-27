@@ -26,7 +26,7 @@ func main() {
 	topicHandler := topics.NewHandler(config)
 	discoverer := discovery.NewDiscoverer(config)
 	datalog := data.NewDatalog(config)
-	gossiper := interbroker.NewGossiper(config)
+	gossiper := interbroker.NewGossiper(config, discoverer)
 	producer := producing.NewProducer(config, topicHandler, discoverer, datalog, gossiper)
 
 	toInit := []types.Initializer{localDbClient, topicHandler, discoverer, gossiper, producer}
@@ -41,6 +41,10 @@ func main() {
 	log.Info().Msg("Start accepting connections")
 
 	if err := gossiper.AcceptConnections(); err != nil {
+		log.Fatal().Err(err).Msg("Exiting")
+	}
+
+	if err := gossiper.OpenConnections(); err != nil {
 		log.Fatal().Err(err).Msg("Exiting")
 	}
 

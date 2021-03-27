@@ -12,7 +12,9 @@ import (
 )
 
 func (g *gossiper) AcceptConnections() error {
-	server := &http2.Server{}
+	server := &http2.Server{
+		MaxConcurrentStreams: 1024,
+	}
 	port := g.config.GossipPort()
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
