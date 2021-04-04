@@ -19,7 +19,7 @@ type Client interface {
 }
 
 // NewClient creates a new instance of Client.
-func NewClient(config conf.Config) Client {
+func NewClient(config conf.LocalDbConfig) Client {
 	return &client{
 		config:  config,
 		dbIsNew: false,
@@ -27,7 +27,7 @@ func NewClient(config conf.Config) Client {
 }
 
 type client struct {
-	config  conf.Config
+	config  conf.LocalDbConfig
 	dbIsNew bool
 	db      *sql.DB
 }

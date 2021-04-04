@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
@@ -34,6 +35,8 @@ func (g *gossiper) AcceptConnections() error {
 				continue
 			}
 
+			log.Debug().Msgf("Accepted new gossip connection on %v from %v", conn.LocalAddr(), conn.RemoteAddr())
+
 			router := httprouter.New()
 			router.GET("/status", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 				fmt.Fprintf(w, "Peer listening on %d\n", port)
@@ -41,9 +44,13 @@ func (g *gossiper) AcceptConnections() error {
 
 			//TODO: routes to propose/accept new generation
 
-			server.ServeConn(conn, &http2.ServeConnOpts{
-				Handler: h2c.NewHandler(router, server),
-			})
+			// server.ServeConn() will block until the connection is not readable anymore
+			// start it in the background
+			go func() {
+				server.ServeConn(conn, &http2.ServeConnOpts{
+					Handler: h2c.NewHandler(router, server),
+				})
+			}()
 		}
 	}()
 

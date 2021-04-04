@@ -29,7 +29,7 @@ type Gossiper interface {
 	SendToLeader(replicationInfo types.ReplicationInfo, topic string, body []byte) error
 }
 
-func NewGossiper(config conf.Config, discoverer discovery.Discoverer) Gossiper {
+func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Gossiper {
 	return &gossiper{
 		config:           config,
 		discoverer:       discoverer,
@@ -39,7 +39,7 @@ func NewGossiper(config conf.Config, discoverer discovery.Discoverer) Gossiper {
 }
 
 type gossiper struct {
-	config           conf.Config
+	config           conf.GossipConfig
 	discoverer       discovery.Discoverer
 	connectionsMutex sync.Mutex
 	connections      atomic.Value

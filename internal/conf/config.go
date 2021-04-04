@@ -10,15 +10,23 @@ const filePermissions = 0755
 
 // Config represents the application configuration
 type Config interface {
+	LocalDbConfig
+	GossipConfig
 	ProducerPort() int
 	ConsumerPort() int
 	AdminPort() int
-	GossipPort() int
 	MaxMessageSize() int
-	LocalDbPath() string
 	HomePath() string
 	FlowController() FlowController
 	CreateAllDirs() error
+}
+
+type LocalDbConfig interface {
+	LocalDbPath() string
+}
+
+type GossipConfig interface {
+	GossipPort() int
 }
 
 func NewConfig() Config {
