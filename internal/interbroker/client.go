@@ -3,6 +3,7 @@ package interbroker
 import (
 	"crypto/tls"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"sync"
@@ -13,6 +14,11 @@ import (
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
+)
+
+const (
+	baseReconnectionDelay = 20
+	maxReconnectionDelay  = 60_000
 )
 
 type ClientMap map[int]*clientInfo
@@ -31,7 +37,7 @@ func (g *gossiper) OpenConnections() error {
 		var wg sync.WaitGroup
 		for _, peer := range peers {
 			wg.Add(1)
-			clientInfo := g.createClient()
+			clientInfo := g.createClient(&peer)
 			log.Debug().Msgf("Before first connection, is up? %v", clientInfo.isHostUp())
 			m[peer.Ordinal] = clientInfo
 			go func(p *types.BrokerInfo) {
@@ -39,7 +45,7 @@ func (g *gossiper) OpenConnections() error {
 
 				wg.Done()
 				if err != nil {
-					// TODO: Continue reconnection in the background
+					// Reconnection will continue in the background as part of transport logic
 					log.Err(err).Msgf("Initial connection to peer %s failed", p)
 				} else {
 					log.Debug().Msgf("Connected to peer %s", p)
@@ -57,48 +63,102 @@ func (g *gossiper) OpenConnections() error {
 	return nil
 }
 
-func (g *gossiper) createClient() *clientInfo {
+func (g *gossiper) createClient(broker *types.BrokerInfo) *clientInfo {
 	var connection atomic.Value
 
-	transport := &http2.Transport{
-		AllowHTTP: true,
-		// Pretend we are dialing a TLS endpoint
-		DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
-			log.Debug().Msgf("Creating connection to %s", addr)
-			conn, err := net.Dial(network, addr)
-			if err != nil {
-				// Clean whatever is in cache with a connection marked as closed
-				connection.Store(newFailedConnection())
-				return conn, err
-			}
+	clientInfo := &clientInfo{connection: &connection, hostName: broker.HostName}
 
-			c := newOpenConnection(conn)
-			connection.Store(c)
-			return c, nil
+	clientInfo.client = &http.Client{
+		Transport: &http2.Transport{
+			AllowHTTP: true,
+			// Pretend we are dialing a TLS endpoint
+			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+				// When in-flight streams is below max, there's a single open connection
+				log.Debug().Msgf("Creating connection to %s", addr)
+				conn, err := net.Dial(network, addr)
+				if err != nil {
+					// Clean whatever is in cache with a connection marked as closed
+					connection.Store(newFailedConnection())
+					clientInfo.startReconnection(g, broker)
+					return conn, err
+				}
+
+				c := newOpenConnection(conn, func() { clientInfo.startReconnection(g, broker) })
+
+				// Store it at clientInfo level to retrieve the connection status later
+				connection.Store(c)
+				return c, nil
+			},
+			// Use an eager health check setting at the cost of a few bytes/sec
+			ReadIdleTimeout: 200 * time.Millisecond,
+			PingTimeout:     400 * time.Millisecond,
 		},
-		ReadIdleTimeout: 400 * time.Millisecond,
-		PingTimeout:     600 * time.Millisecond,
 	}
 
-	client := &http.Client{
-		Transport: transport,
-	}
-
-	return &clientInfo{client, transport, &connection}
+	return clientInfo
 }
 
 func (g *gossiper) GetPeerUrl(b *types.BrokerInfo, path string) string {
 	return fmt.Sprintf("http://%s:%d%s", b.HostName, g.config.GossipPort(), path)
 }
 
+func (g *gossiper) getClientInfo(broker *types.BrokerInfo) *clientInfo {
+	if m, ok := g.connections.Load().(ClientMap); ok {
+		if clientInfo, ok := m[broker.Ordinal]; ok {
+			return clientInfo
+		}
+	}
+
+	return nil
+}
+
 type clientInfo struct {
-	client     *http.Client
-	transport  *http2.Transport
-	connection *atomic.Value
+	client         *http.Client
+	connection     *atomic.Value
+	hostName       string
+	isReconnecting int32
 }
 
 // isHostUp determines whether a host is considered UP
 func (cli *clientInfo) isHostUp() bool {
 	c, ok := cli.connection.Load().(*connectionWrapper)
 	return ok && c.isOpen
+}
+
+// startReconnection starts reconnection in the background if it hasn't started
+func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
+	// Determine is already reconnecting
+	if !atomic.CompareAndSwapInt32(&c.isReconnecting, 0, 1) {
+		return
+	}
+
+	go func() {
+		i := 0
+		for {
+			delay := math.Pow(2, float64(i)) * baseReconnectionDelay
+			if delay > maxReconnectionDelay {
+				delay = maxReconnectionDelay
+			} else {
+				i++
+			}
+			// TODO: Add jitter
+			time.Sleep(time.Duration(delay) * time.Millisecond)
+
+			if c := g.getClientInfo(broker); c == nil || c.hostName != broker.HostName {
+				// Topology changed, stop reconnecting
+				break
+			}
+
+			log.Debug().Msgf("Attempting to reconnect to %s after %v ms", broker, delay)
+
+			_, err := c.client.Get(g.GetPeerUrl(broker, conf.StatusUrl))
+			if err == nil {
+				// Succeeded
+				break
+			}
+		}
+
+		// Leave field as 0 to allow new reconnections
+		atomic.StoreInt32(&c.isReconnecting, 0)
+	}()
 }

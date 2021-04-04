@@ -6,16 +6,17 @@ import (
 )
 
 type connectionWrapper struct {
-	conn   net.Conn
-	isOpen bool
+	conn         net.Conn
+	isOpen       bool
+	closeHandler func()
 }
 
-func newOpenConnection(conn net.Conn) *connectionWrapper {
-	return &connectionWrapper{conn, true}
+func newOpenConnection(conn net.Conn, closeHandler func()) *connectionWrapper {
+	return &connectionWrapper{conn, true, closeHandler}
 }
 
 func newFailedConnection() *connectionWrapper {
-	return &connectionWrapper{nil, false}
+	return &connectionWrapper{nil, false, nil}
 }
 
 func (c *connectionWrapper) Read(b []byte) (n int, err error) {
@@ -29,6 +30,9 @@ func (c *connectionWrapper) Write(b []byte) (n int, err error) {
 func (c *connectionWrapper) Close() error {
 	// Transport will invoke `Close()` when a request or ping fails
 	c.isOpen = false
+	if c.closeHandler != nil {
+		go c.closeHandler()
+	}
 	return c.conn.Close()
 }
 

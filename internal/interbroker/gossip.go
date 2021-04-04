@@ -42,7 +42,7 @@ type gossiper struct {
 	config           conf.GossipConfig
 	discoverer       discovery.Discoverer
 	connectionsMutex sync.Mutex
-	connections      atomic.Value
+	connections      atomic.Value // Map of connections
 }
 
 func (g *gossiper) Init() error {

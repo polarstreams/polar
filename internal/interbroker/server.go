@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
@@ -14,7 +13,7 @@ import (
 
 func (g *gossiper) AcceptConnections() error {
 	server := &http2.Server{
-		MaxConcurrentStreams: 1024,
+		MaxConcurrentStreams: 2048,
 	}
 	port := g.config.GossipPort()
 
@@ -30,9 +29,8 @@ func (g *gossiper) AcceptConnections() error {
 			// HTTP/2 only server (prior knowledge)
 			conn, err := listener.Accept()
 			if err != nil {
-				// TODO: Define whether this should exit loop
-				log.Warn().Msgf("Failed to accept connection")
-				continue
+				log.Err(err).Msgf("Failed to accept new connections")
+				break
 			}
 
 			log.Debug().Msgf("Accepted new gossip connection on %v from %v", conn.LocalAddr(), conn.RemoteAddr())
