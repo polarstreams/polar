@@ -21,7 +21,7 @@ const (
 	maxReconnectionDelay  = 60_000
 )
 
-type ClientMap map[int]*clientInfo
+type clientMap map[int]*clientInfo
 
 func (g *gossiper) OpenConnections() error {
 	// Open connections in the background
@@ -33,7 +33,7 @@ func (g *gossiper) OpenConnections() error {
 		g.connectionsMutex.Lock()
 		defer g.connectionsMutex.Unlock()
 		peers := g.discoverer.Peers()
-		m := make(ClientMap, len(peers))
+		m := make(clientMap, len(peers))
 		var wg sync.WaitGroup
 		for _, peer := range peers {
 			wg.Add(1)
@@ -103,7 +103,7 @@ func (g *gossiper) GetPeerUrl(b *types.BrokerInfo, path string) string {
 }
 
 func (g *gossiper) getClientInfo(broker *types.BrokerInfo) *clientInfo {
-	if m, ok := g.connections.Load().(ClientMap); ok {
+	if m, ok := g.connections.Load().(clientMap); ok {
 		if clientInfo, ok := m[broker.Ordinal]; ok {
 			return clientInfo
 		}
