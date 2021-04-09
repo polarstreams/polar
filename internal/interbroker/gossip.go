@@ -15,6 +15,7 @@ import (
 // Gossiper is responsible for communicating with other peers.
 type Gossiper interface {
 	types.Initializer
+	Replicator
 
 	// Starts accepting connections from peers.
 	AcceptConnections() error
@@ -22,11 +23,13 @@ type Gossiper interface {
 	// Starts opening connections to known peers.
 	OpenConnections() error
 
-	// Sends a message to be stored as replica of current broker's datalog
-	SendToFollowers(replicationInfo types.ReplicationInfo, topic string, body []byte) error
-
 	// Sends a message to be handled as a leader of a token
 	SendToLeader(replicationInfo types.ReplicationInfo, topic string, body []byte) error
+}
+
+type Replicator interface {
+	// Sends a message to be stored as replica of current broker's datalog
+	SendToFollowers(replicationInfo types.ReplicationInfo, topic string, body []byte) error
 }
 
 func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Gossiper {

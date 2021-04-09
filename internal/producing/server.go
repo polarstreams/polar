@@ -26,7 +26,7 @@ type Producer interface {
 }
 
 func NewProducer(
-	config conf.Config,
+	config conf.ProducerConfig,
 	topicGetter topics.TopicGetter,
 	leaderGetter discovery.LeaderGetter,
 	datalog data.Datalog,
@@ -35,18 +35,22 @@ func NewProducer(
 	return &producer{
 		config,
 		topicGetter,
-		leaderGetter,
 		datalog,
 		gossiper,
+		leaderGetter,
+		newCoalescer(config, datalog, gossiper),
 	}
 }
 
 type producer struct {
-	config       conf.Config
+	config       conf.ProducerConfig
 	topicGetter  topics.TopicGetter
-	leaderGetter discovery.LeaderGetter
 	datalog      data.Datalog
 	gossiper     interbroker.Gossiper
+	leaderGetter discovery.LeaderGetter
+	// We use a single coalescer for all topics and tokens for simplicity
+	// TODO: Partition coalescers per topic and per token
+	coalescer *coalescer
 }
 
 func (p *producer) Init() error {
@@ -94,6 +98,13 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 		return types.NewHttpError(http.StatusBadRequest, "Invalid topic")
 	}
 
+	if r.ContentLength <= 0 || r.ContentLength > int64(p.config.MaxMessageSize()) {
+		return types.NewHttpErrorf(
+			http.StatusBadRequest,
+			"Content length must be defined, greater than 0 and less than %d bytes",
+			p.config.MaxMessageSize())
+	}
+
 	partitionKey := r.URL.Query().Get("partitionKey")
 	replicationInfo := p.leaderGetter.GetLeader(partitionKey)
 	leader := replicationInfo.Leader
@@ -102,32 +113,24 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 		return fmt.Errorf("Leader was not found")
 	}
 
-	if r.ContentLength <= 0 || r.ContentLength > int64(p.config.MaxMessageSize()) {
-		return types.NewHttpErrorf(
-			http.StatusBadRequest,
-			"Content length must be defined, greater than 0 and less than %d bytes",
-			p.config.MaxMessageSize())
-	}
-
 	p.config.FlowController().Allocate(int(r.ContentLength))
 	defer p.config.FlowController().Free(int(r.ContentLength))
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		return err
-	}
 
-	if leader.IsSelf {
-		if err := p.datalog.Append(replicationInfo.Token, topic, body); err != nil {
+	if !leader.IsSelf {
+		// TODO: Define whether ReadAll is needed
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
 			return err
 		}
 
-		if err := p.gossiper.SendToFollowers(replicationInfo, topic, body); err != nil {
-			return err
-		}
-	} else {
+		// Route the message as is
 		if err := p.gossiper.SendToLeader(replicationInfo, topic, body); err != nil {
 			return err
 		}
+	}
+
+	if err := p.coalescer.append(topic, replicationInfo, r.ContentLength, r.Body); err != nil {
+		return err
 	}
 
 	fmt.Fprintf(w, "OK")

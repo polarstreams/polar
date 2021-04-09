@@ -7,6 +7,10 @@ import (
 
 type Datalog interface {
 	types.Initializer
+	Appender
+}
+
+type Appender interface {
 	Append(token types.Token, topic string, body []byte) error
 }
 

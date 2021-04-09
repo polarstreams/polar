@@ -12,17 +12,21 @@ const filePermissions = 0755
 type Config interface {
 	LocalDbConfig
 	GossipConfig
-	ProducerPort() int
+	ProducerConfig
 	ConsumerPort() int
 	AdminPort() int
-	MaxMessageSize() int
 	HomePath() string
-	FlowController() FlowController
 	CreateAllDirs() error
 }
 
 type LocalDbConfig interface {
 	LocalDbPath() string
+}
+
+type ProducerConfig interface {
+	ProducerPort() int
+	FlowController() FlowController
+	MaxMessageSize() int
 }
 
 type GossipConfig interface {
