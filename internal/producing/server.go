@@ -32,13 +32,15 @@ func NewProducer(
 	datalog data.Datalog,
 	gossiper interbroker.Gossiper,
 ) Producer {
+	coalescerMap := utils.NewCopyOnWriteMap()
+
 	return &producer{
 		config,
 		topicGetter,
 		datalog,
 		gossiper,
 		leaderGetter,
-		newCoalescer(config, datalog, gossiper),
+		coalescerMap,
 	}
 }
 
@@ -48,9 +50,8 @@ type producer struct {
 	datalog      data.Datalog
 	gossiper     interbroker.Gossiper
 	leaderGetter discovery.LeaderGetter
-	// We use a single coalescer for all topics and tokens for simplicity
-	// TODO: Partition coalescers per topic and per token
-	coalescer *coalescer
+	// We use a single coalescer per topics
+	coalescerMap *utils.CopyOnWriteMap
 }
 
 func (p *producer) Init() error {
@@ -129,10 +130,23 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 		}
 	}
 
-	if err := p.coalescer.append(topic, replicationInfo, r.ContentLength, r.Body); err != nil {
+	coalescer := p.getCoalescer(topic, replicationInfo.Token)
+	if err := coalescer.append(replicationInfo, r.ContentLength, r.Body); err != nil {
 		return err
 	}
 
 	fmt.Fprintf(w, "OK")
 	return nil
+}
+
+func (p *producer) getCoalescer(topic string, token types.Token) *coalescer {
+	c, loaded := p.coalescerMap.LoadOrStore(topic, func() interface{} {
+		return newCoalescer(topic, p.config, p.datalog.CreateAppender(topic, token), p.gossiper)
+	})
+
+	if !loaded {
+		log.Debug().Msgf("Created coalescer for topic '%s'", topic)
+	}
+
+	return c.(*coalescer)
 }

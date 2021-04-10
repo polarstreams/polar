@@ -27,6 +27,8 @@ type ProducerConfig interface {
 	ProducerPort() int
 	FlowController() FlowController
 	MaxMessageSize() int
+	// MaxGroupSize is the maximum size of an uncompressed group of messages
+	MaxGroupSize() int
 }
 
 type GossipConfig interface {
@@ -61,6 +63,10 @@ func (c *config) GossipPort() int {
 
 func (c *config) MaxMessageSize() int {
 	return 1024 * 1024
+}
+
+func (c *config) MaxGroupSize() int {
+	return 2 * 1024 * 1024
 }
 
 func (c *config) FlowController() FlowController {
