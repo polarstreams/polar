@@ -1,13 +1,18 @@
 package types
 
 import (
+	"fmt"
 	"math"
 	"sort"
 )
 
+const startToken = math.MinInt64
+
 type Token int64
 
-const startToken = math.MinInt64
+func (t Token) String() string {
+	return fmt.Sprintf("%d", t)
+}
 
 // getPrimaryToken gets the start of the token range for a given token
 func getPrimaryToken(token Token, tokenRange []Token) Token {

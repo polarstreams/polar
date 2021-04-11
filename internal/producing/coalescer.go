@@ -7,6 +7,7 @@ import (
 	"github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/types"
+	"github.com/rs/zerolog/log"
 )
 
 type coalescer struct {
@@ -16,12 +17,14 @@ type coalescer struct {
 	config   conf.ProducerConfig
 	appender data.Appender
 	gossiper interbroker.Replicator
+	offset   uint64
 }
 
 type record struct {
 	replication types.ReplicationInfo
 	length      int64
 	body        io.ReadCloser
+	offset      uint64
 	response    chan error
 }
 
@@ -35,6 +38,7 @@ func newCoalescer(topic string, config conf.ProducerConfig, appender data.Append
 		config:   config,
 		appender: appender,
 		gossiper: gossiper,
+		offset:   0, // TODO: Set the initial offset
 	}
 	// Start receiving in the background
 	go c.receive()
@@ -42,12 +46,13 @@ func newCoalescer(topic string, config conf.ProducerConfig, appender data.Append
 }
 
 func (c *coalescer) add(group []record, item *record, length *int64) ([]record, *record) {
-	if *length + item.length > int64(c.config.MaxGroupSize()) {
+	if *length+item.length > int64(c.config.MaxGroupSize()) {
 		// Return a non-nil record as a signal that it was not appended
 		return group, item
 	}
-	//TODO: set record offset
 	*length += item.length
+	item.offset = c.offset
+	c.offset++
 	group = append(group, *item)
 	return group, nil
 }
@@ -66,34 +71,39 @@ func (c *coalescer) receive() {
 		// Either there was a buffered item or we just received it
 		group, _ = c.add(group, item, &length)
 
-		AddLoop:
-			for {
-				// Receive without blocking until there are no more items
-				// or the max length for a group was reached
-				select {
-				case item = <-c.items:
-					group, item = c.add(group, item, &length)
-					if item != nil {
-						// The group can't contain the new item
-						break AddLoop
-					}
-				default:
-					break AddLoop
+		canAddNext := true
+		for canAddNext {
+			// Receive without blocking until there are no more items
+			// or the max length for a group was reached
+			select {
+			case item = <-c.items:
+				group, item = c.add(group, item, &length)
+				if item != nil {
+					// The group can't contain the new item
+					canAddNext = false
 				}
+			default:
+				canAddNext = false
 			}
+		}
 
 		data, err := c.compress(group)
 
 		if err != nil {
-			// TODO
+			log.Err(err).Msg("Unexpected compression error")
+			for _, r := range group {
+				r.response <- err
+			}
+			// The group will not be persisted, reset the offset
+			c.offset = group[0].offset
+			continue
 		}
 
-		// TODO: data
 		// TODO: Define whether the previous segment must be closed and pass it to the replicas
-		err = c.appender.Append(nil)
+		err = c.appender.Append(data)
 
 		if err != nil {
-			// TODO
+			// TODO: Define what to do
 		}
 
 		// Block until we can send
@@ -105,12 +115,12 @@ func (c *coalescer) receive() {
 	}
 }
 
-func (c *coalescer) compress(group []record) (int, error) {
+func (c *coalescer) compress(group []record) ([]byte, error) {
 	// TODO: Compress and crc
-	return 0, nil
+	return nil, nil
 }
 
-func (c *coalescer) send(block int, group []record) {
+func (c *coalescer) send(block []byte, group []record) {
 	defer c.doneSending()
 	//TODO: Implement
 
@@ -120,8 +130,14 @@ func (c *coalescer) send(block int, group []record) {
 }
 
 func (c *coalescer) append(replication types.ReplicationInfo, length int64, body io.ReadCloser) error {
-	//TODO: send to channel
-	return nil
+	record := &record{
+		replication: replication,
+		length:      length,
+		body:        body,
+		response:    make(chan error, 1),
+	}
+	c.items <- record
+	return <-record.response
 }
 
 func (c *coalescer) doneSending() {

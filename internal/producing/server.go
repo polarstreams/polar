@@ -130,7 +130,10 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 		}
 	}
 
-	coalescer := p.getCoalescer(topic, replicationInfo.Token)
+	coalescer, err := p.getCoalescer(topic, replicationInfo.Token)
+	if err != nil {
+		return err
+	}
 	if err := coalescer.append(replicationInfo, r.ContentLength, r.Body); err != nil {
 		return err
 	}
@@ -139,14 +142,22 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 	return nil
 }
 
-func (p *producer) getCoalescer(topic string, token types.Token) *coalescer {
-	c, loaded := p.coalescerMap.LoadOrStore(topic, func() interface{} {
-		return newCoalescer(topic, p.config, p.datalog.CreateAppender(topic, token), p.gossiper)
+func (p *producer) getCoalescer(topic string, token types.Token) (*coalescer, error) {
+	// TODO: Define genId (i.e: v1)
+	genId := "abc"
+	c, loaded, err := p.coalescerMap.LoadOrStore(topic, func() (interface{}, error) {
+		// Creating the appender is a blocking call
+		appender, err := p.datalog.CreateAppender(topic, token, genId, p.config)
+		return newCoalescer(topic, p.config, appender, p.gossiper), err
 	})
+
+	if err != nil {
+		return nil, err
+	}
 
 	if !loaded {
 		log.Debug().Msgf("Created coalescer for topic '%s'", topic)
 	}
 
-	return c.(*coalescer)
+	return c.(*coalescer), nil
 }

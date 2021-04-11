@@ -3,6 +3,8 @@ package conf
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/jorgebay/soda/internal/types"
 )
 
 const allocationPoolSize = 100 * 1024 * 1024 // 100Mib
@@ -23,7 +25,12 @@ type LocalDbConfig interface {
 	LocalDbPath() string
 }
 
+type DatalogConfig interface {
+	DatalogPath(topic string, token types.Token, genId string) string
+}
+
 type ProducerConfig interface {
+	DatalogConfig
 	ProducerPort() int
 	FlowController() FlowController
 	MaxMessageSize() int
@@ -87,6 +94,11 @@ func (c *config) dataPath() string {
 
 func (c *config) LocalDbPath() string {
 	return filepath.Join(c.dataPath(), "local.db")
+}
+
+func (c *config) DatalogPath(topic string, token types.Token, genId string) string {
+	// Pattern: /var/lib/soda/data/datalog/{topic}/{token}/{genId}/
+	return filepath.Join(c.dataPath(), "datalog", topic, token.String(), genId)
 }
 
 func (c *config) CreateAllDirs() error {

@@ -22,10 +22,10 @@ func NewCopyOnWriteMap() *CopyOnWriteMap {
 	return c
 }
 
-func (c *CopyOnWriteMap) LoadOrStore(key interface{}, valueCreator func() interface{}) (value interface{}, loaded bool) {
+func (c *CopyOnWriteMap) LoadOrStore(key interface{}, valueCreator func() (interface{}, error)) (value interface{}, loaded bool, err error) {
 	existingMap := c.m.Load().(map[interface{}]interface{})
 	if v, ok := existingMap[key]; ok {
-		return v, true
+		return v, true, nil
 	}
 
 	defer c.mu.Unlock()
@@ -34,7 +34,7 @@ func (c *CopyOnWriteMap) LoadOrStore(key interface{}, valueCreator func() interf
 	// Re check after acquiring the lock
 	existingMap = c.m.Load().(map[interface{}]interface{})
 	if v, ok := existingMap[key]; ok {
-		return v, true
+		return v, true, nil
 	}
 
 	// Shallow copy existing
@@ -43,9 +43,14 @@ func (c *CopyOnWriteMap) LoadOrStore(key interface{}, valueCreator func() interf
 		newMap[k] = v
 	}
 
-	newValue := valueCreator()
+	newValue, err := valueCreator()
+
+	if err != nil {
+		return nil, false, err
+	}
+
 	newMap[key] = newValue
 	c.m.Store(newMap)
 
-	return newValue, false
+	return newValue, false, nil
 }
