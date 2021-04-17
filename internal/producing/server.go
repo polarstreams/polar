@@ -102,7 +102,7 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 	if r.ContentLength <= 0 || r.ContentLength > int64(p.config.MaxMessageSize()) {
 		return types.NewHttpErrorf(
 			http.StatusBadRequest,
-			"Content length must be defined, greater than 0 and less than %d bytes",
+			"Content length must be defined (HTTP/1.1 chunked not supported), greater than 0 and less than %d bytes",
 			p.config.MaxMessageSize())
 	}
 

@@ -7,7 +7,8 @@ import (
 	"github.com/jorgebay/soda/internal/types"
 )
 
-const allocationPoolSize = 100 * 1024 * 1024 // 100Mib
+const Mib = 1024 * 1024
+const allocationPoolSize = 100 * Mib
 const filePermissions = 0755
 
 // Config represents the application configuration
@@ -27,6 +28,7 @@ type LocalDbConfig interface {
 
 type DatalogConfig interface {
 	DatalogPath(topic string, token types.Token, genId string) string
+	MaxSegmentSize() int
 }
 
 type ProducerConfig interface {
@@ -69,11 +71,15 @@ func (c *config) GossipPort() int {
 }
 
 func (c *config) MaxMessageSize() int {
-	return 1024 * 1024
+	return Mib
 }
 
 func (c *config) MaxGroupSize() int {
-	return 2 * 1024 * 1024
+	return 2 * Mib
+}
+
+func (c *config) MaxSegmentSize() int {
+	return 32 * Mib
 }
 
 func (c *config) FlowController() FlowController {

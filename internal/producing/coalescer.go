@@ -100,7 +100,7 @@ func (c *coalescer) receive() {
 		}
 
 		// TODO: Define whether the previous segment must be closed and pass it to the replicas
-		err = c.appender.Append(data)
+		_, err = c.appender.Append(data)
 
 		if err != nil {
 			// TODO: Define what to do
@@ -111,7 +111,6 @@ func (c *coalescer) receive() {
 
 		// send in the background while the next block is generated in the foreground
 		go c.send(data, group)
-		// compress and crc
 	}
 }
 
