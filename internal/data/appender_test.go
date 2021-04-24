@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestTokens(t *testing.T) {
+func TestAppender(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Appender Suite")
 }

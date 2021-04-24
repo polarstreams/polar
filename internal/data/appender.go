@@ -71,9 +71,6 @@ func (a *appender) createSegmentIfNeeded(length int) error {
 		name := fmt.Sprintf("%20d.dlog", a.segmentId)
 		a.segmentId++
 
-		//TODO: Check Direct IO and create file manually
-		//O_DIRECT                         = 0x4000
-
 		f, err := os.OpenFile(filepath.Join(a.basePath, name), conf.WriteFlags, filePermissions)
 		if err != nil {
 			return err
