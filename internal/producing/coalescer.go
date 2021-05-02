@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/data"
@@ -20,14 +21,14 @@ const writeConcurrencyLevel = 2
 var lengthBuffer []byte = []byte{0, 0, 0, 0}
 
 type coalescer struct {
-	items    chan *record
-	limiter  chan bool
-	topic    string
-	config   conf.ProducerConfig
-	appender data.Appender
-	gossiper interbroker.Replicator
-	offset   uint64
-	buffers  buffers
+	items     chan *record
+	dataItems chan *dataItem
+	topic     string
+	config    conf.ProducerConfig
+	appender  data.Appender
+	gossiper  interbroker.Replicator
+	offset    uint64
+	buffers   buffers
 }
 
 type record struct {
@@ -41,6 +42,11 @@ type record struct {
 type buffers struct {
 	group      [writeConcurrencyLevel]*bytes.Buffer
 	compressor [writeConcurrencyLevel]*zstd.Encoder
+}
+
+type dataItem struct {
+	data  []byte
+	group []record
 }
 
 func newBuffers(config conf.ProducerConfig) buffers {
@@ -62,18 +68,19 @@ func newBuffers(config conf.ProducerConfig) buffers {
 func newCoalescer(topic string, config conf.ProducerConfig, appender data.Appender, gossiper interbroker.Replicator) *coalescer {
 	c := &coalescer{
 		items: make(chan *record, 0),
-		// Limit's to 1 outstanding group
-		// The next group can be generated while the previous is being sent
-		limiter:  make(chan bool, 1),
-		topic:    topic,
-		config:   config,
-		appender: appender,
-		gossiper: gossiper,
-		offset:   0, // TODO: Set the initial offset
-		buffers:  newBuffers(config),
+		// Limit's to 1 outstanding write (the current one)
+		// The next group can be generated while the previous is being flushed and sent
+		dataItems: make(chan *dataItem, 0),
+		topic:     topic,
+		config:    config,
+		appender:  appender,
+		gossiper:  gossiper,
+		offset:    0, // TODO: Set the initial offset
+		buffers:   newBuffers(config),
 	}
 	// Start receiving in the background
 	go c.receive()
+	go c.flushTimer()
 	return c
 }
 
@@ -130,32 +137,57 @@ func (c *coalescer) receive() {
 			continue
 		}
 
-		// Block until we can send
-		c.limiter <- true
-
 		// Send in the background while the next block is generated in the foreground
-		go c.appendAndSend(data, group)
+		c.dataItems <- &dataItem{
+			data:  data,
+			group: group,
+		}
 	}
 }
 
-func (c *coalescer) appendAndSend(block []byte, group []record) {
-	defer c.doneSending()
+func (c *coalescer) appendAndSendInLoop() {
+	for item := range c.dataItems {
+		// TODO: Maybe panic on flush err
+		c.maybeFlushSegment()
+		if item == nil {
+			// It was only a signal to flush the segment, no data, move on
+			continue
+		}
+		segmentId, err := c.writeToSegmentBuffer(item.data)
+		if err != nil {
+			sendResponse(item.group, err)
+			continue
+		}
+		// Response channel should be buffered in case the response is discarded
+		response := make(chan error, 1)
 
-	// TODO: Define whether the previous segment must be closed and pass it to the replicas
-	_, err := c.appender.Append(block)
+		// Start sending in the background while flushing is occurring
+		go c.send(segmentId, item.data, item.group, response)
 
-	if err != nil {
-		// TODO: Define what to do (reset index / reject further groups / ...)
-		sendResponse(group, err)
-		return
+		// when it doesn't fit or time has passed since last flush
+		if err = c.maybeFlushSegment(); err != nil {
+			sendResponse(item.group, err)
+			continue
+		}
+		sendResponse(item.group, <-response)
 	}
+}
 
-	if err = c.send(block, group); err != nil {
-		sendResponse(group, err)
-		return
+func (c *coalescer) flushTimer() {
+	const resolution = 200 * time.Millisecond
+	for {
+		time.Sleep(resolution)
+		// Send a nil data item as an indication of a flush message
+		c.dataItems <- nil
 	}
+}
 
-	sendResponse(group, nil)
+func (c *coalescer) maybeFlushSegment() error {
+	return nil
+}
+
+func (c *coalescer) writeToSegmentBuffer(data []byte) (segmentId int64, err error) {
+	return 0, nil
 }
 
 func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
@@ -187,14 +219,13 @@ func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
 	return b, nil
 }
 
-func (c *coalescer) send(block []byte, group []record) error {
+func (c *coalescer) send(segmentId int64, block []byte, group []record, response chan error) {
 
 	//TODO: Implement
 
 	// if err := p.gossiper.SendToFollowers(replicationInfo, topic, body); err != nil {
 	// 	return err
 	// }
-	return nil
 }
 
 func (c *coalescer) append(replication types.ReplicationInfo, length int64, body io.ReadCloser) error {
@@ -206,11 +237,6 @@ func (c *coalescer) append(replication types.ReplicationInfo, length int64, body
 	}
 	c.items <- record
 	return <-record.response
-}
-
-func (c *coalescer) doneSending() {
-	// Allow the next to be sent
-	<-c.limiter
 }
 
 func sendResponse(group []record, err error) {
