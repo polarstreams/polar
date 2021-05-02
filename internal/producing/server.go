@@ -147,8 +147,7 @@ func (p *producer) getCoalescer(topic string, token types.Token) (*coalescer, er
 	genId := "abc"
 	c, loaded, err := p.coalescerMap.LoadOrStore(topic, func() (interface{}, error) {
 		// Creating the appender is a blocking call
-		appender, err := p.datalog.CreateAppender(topic, token, genId, p.config)
-		return newCoalescer(topic, p.config, appender, p.gossiper), err
+		return newCoalescer(topic, token, genId, p.config, p.gossiper)
 	})
 
 	if err != nil {

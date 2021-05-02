@@ -1,13 +1,17 @@
 package data
 
 import (
+	"os"
+
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/types"
 )
 
+const DirectoryPermissions os.FileMode = 0755
+const FilePermissions os.FileMode = 0644
+
 type Datalog interface {
 	types.Initializer
-	CreateAppender(topic string, token types.Token, genId string, config conf.DatalogConfig) (Appender, error)
 }
 
 func NewDatalog(config conf.Config) Datalog {
@@ -22,13 +26,4 @@ type datalog struct {
 
 func (d *datalog) Init() error {
 	return nil
-}
-
-func (d *datalog) CreateAppender(
-	topic string,
-	token types.Token,
-	genId string,
-	config conf.DatalogConfig,
-) (Appender, error) {
-	return newAppender(topic, token, genId, config)
 }

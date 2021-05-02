@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/klauspost/compress/zstd"
@@ -21,14 +19,13 @@ const writeConcurrencyLevel = 2
 var lengthBuffer []byte = []byte{0, 0, 0, 0}
 
 type coalescer struct {
-	items     chan *record
-	dataItems chan *dataItem
-	topic     string
-	config    conf.ProducerConfig
-	appender  data.Appender
-	gossiper  interbroker.Replicator
-	offset    uint64
-	buffers   buffers
+	items    chan *record
+	topic    string
+	config   conf.ProducerConfig
+	gossiper interbroker.Replicator
+	offset   uint64
+	buffers  buffers
+	segment  *segmentWriter
 }
 
 type record struct {
@@ -42,11 +39,6 @@ type record struct {
 type buffers struct {
 	group      [writeConcurrencyLevel]*bytes.Buffer
 	compressor [writeConcurrencyLevel]*zstd.Encoder
-}
-
-type dataItem struct {
-	data  []byte
-	group []record
 }
 
 func newBuffers(config conf.ProducerConfig) buffers {
@@ -65,23 +57,31 @@ func newBuffers(config conf.ProducerConfig) buffers {
 	return result
 }
 
-func newCoalescer(topic string, config conf.ProducerConfig, appender data.Appender, gossiper interbroker.Replicator) *coalescer {
+func newCoalescer(
+	topic string,
+	token types.Token,
+	genId string,
+	config conf.ProducerConfig,
+	gossiper interbroker.Replicator,
+) (*coalescer, error) {
+	s, err := newSegmentWriter(topic, token, genId, config)
+
+	if err != nil {
+		return nil, err
+	}
+
 	c := &coalescer{
-		items: make(chan *record, 0),
-		// Limit's to 1 outstanding write (the current one)
-		// The next group can be generated while the previous is being flushed and sent
-		dataItems: make(chan *dataItem, 0),
-		topic:     topic,
-		config:    config,
-		appender:  appender,
-		gossiper:  gossiper,
-		offset:    0, // TODO: Set the initial offset
-		buffers:   newBuffers(config),
+		items:    make(chan *record, 0),
+		topic:    topic,
+		config:   config,
+		gossiper: gossiper,
+		offset:   0, // TODO: Set the initial offset
+		buffers:  newBuffers(config),
+		segment:  s,
 	}
 	// Start receiving in the background
 	go c.receive()
-	go c.flushTimer()
-	return c
+	return c, nil
 }
 
 func (c *coalescer) add(group []record, item *record, length *int64) ([]record, *record) {
@@ -138,56 +138,11 @@ func (c *coalescer) receive() {
 		}
 
 		// Send in the background while the next block is generated in the foreground
-		c.dataItems <- &dataItem{
+		c.segment.items <- &dataItem{
 			data:  data,
 			group: group,
 		}
 	}
-}
-
-func (c *coalescer) appendAndSendInLoop() {
-	for item := range c.dataItems {
-		// TODO: Maybe panic on flush err
-		c.maybeFlushSegment()
-		if item == nil {
-			// It was only a signal to flush the segment, no data, move on
-			continue
-		}
-		segmentId, err := c.writeToSegmentBuffer(item.data)
-		if err != nil {
-			sendResponse(item.group, err)
-			continue
-		}
-		// Response channel should be buffered in case the response is discarded
-		response := make(chan error, 1)
-
-		// Start sending in the background while flushing is occurring
-		go c.send(segmentId, item.data, item.group, response)
-
-		// when it doesn't fit or time has passed since last flush
-		if err = c.maybeFlushSegment(); err != nil {
-			sendResponse(item.group, err)
-			continue
-		}
-		sendResponse(item.group, <-response)
-	}
-}
-
-func (c *coalescer) flushTimer() {
-	const resolution = 200 * time.Millisecond
-	for {
-		time.Sleep(resolution)
-		// Send a nil data item as an indication of a flush message
-		c.dataItems <- nil
-	}
-}
-
-func (c *coalescer) maybeFlushSegment() error {
-	return nil
-}
-
-func (c *coalescer) writeToSegmentBuffer(data []byte) (segmentId int64, err error) {
-	return 0, nil
 }
 
 func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
@@ -219,15 +174,6 @@ func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
 	return b, nil
 }
 
-func (c *coalescer) send(segmentId int64, block []byte, group []record, response chan error) {
-
-	//TODO: Implement
-
-	// if err := p.gossiper.SendToFollowers(replicationInfo, topic, body); err != nil {
-	// 	return err
-	// }
-}
-
 func (c *coalescer) append(replication types.ReplicationInfo, length int64, body io.ReadCloser) error {
 	record := &record{
 		replication: replication,
@@ -237,10 +183,4 @@ func (c *coalescer) append(replication types.ReplicationInfo, length int64, body
 	}
 	c.items <- record
 	return <-record.response
-}
-
-func sendResponse(group []record, err error) {
-	for _, r := range group {
-		r.response <- err
-	}
 }

@@ -18,13 +18,14 @@ func TestAppender(t *testing.T) {
 
 var _ = Describe("WriteFlags", func() {
 	It("should write blocks with direct I/O", func() {
+		// Shows the basic technique for alignment
 		blockSize := 512
 		dir, err := ioutil.TempDir("", "test_writeflags*")
 		Expect(err).NotTo(HaveOccurred())
 
 		filename := filepath.Join(dir, "sample.txt")
 
-		file, err := os.OpenFile(filename, conf.WriteFlags, filePermissions)
+		file, err := os.OpenFile(filename, conf.WriteFlags, FilePermissions)
 		Expect(err).NotTo(HaveOccurred())
 
 		buf := make([]byte, blockSize)
@@ -38,7 +39,7 @@ var _ = Describe("WriteFlags", func() {
 		file.Close()
 
 		buf = make([]byte, blockSize*4)
-		file, _ = os.OpenFile(filename, conf.ReadFlags, filePermissions)
+		file, _ = os.OpenFile(filename, conf.ReadFlags, FilePermissions)
 		n, err = file.Read(buf)
 		Expect(err).NotTo(HaveOccurred())
 		// It should retrieve what

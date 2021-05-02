@@ -79,7 +79,7 @@ func (c *config) MaxGroupSize() int {
 }
 
 func (c *config) MaxSegmentSize() int {
-	return 32 * Mib
+	return 1024 * Mib
 }
 
 func (c *config) FlowController() FlowController {
