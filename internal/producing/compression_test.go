@@ -14,7 +14,7 @@ import (
 
 func TestCompression(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Compression Suite")
+	RunSpecs(t, "Producing Suite")
 }
 
 var _ = Describe("Compression", func() {

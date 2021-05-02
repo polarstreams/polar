@@ -16,6 +16,9 @@ import (
 const flushResolution = 200 * time.Millisecond
 const flushInterval = 2 * time.Second
 const segmentMaxBufferSize = 32 * conf.Mib
+const alignmentSize = 512
+
+var alignmentBuffer = createAlignmentBuffer()
 
 type segmentWriter struct {
 	items         chan *dataItem
@@ -103,18 +106,18 @@ func (s *segmentWriter) maybeFlushSegment() error {
 		f, err := os.OpenFile(filepath.Join(s.basePath, name), conf.WriteFlags, data.FilePermissions)
 		if err != nil {
 			// Can't create segment
-			log.Err(err).Msgf("Failed to create segment file at %d", s.basePath)
+			log.Err(err).Msgf("Failed to create segment file at %s", s.basePath)
 			panic(err)
 		}
 		s.segmentFile = f
 	}
 
 	// Sync copy the buffer to the file
-	//TODO: Align
+	s.alignBuffer()
 	s.segmentFile.Write(s.buffer.Bytes())
 	if _, err := s.buffer.WriteTo(s.segmentFile); err != nil {
 		// Data loss, we should panic
-		log.Err(err).Msgf("Failed to write to segment file %d at %d", s.segmentId, s.basePath)
+		log.Err(err).Msgf("Failed to write to segment file %d at %s", s.segmentId, s.basePath)
 		panic(err)
 	}
 
@@ -131,6 +134,7 @@ func (s *segmentWriter) maybeFlushSegment() error {
 
 	return nil
 }
+
 func (s *segmentWriter) writeToSegmentBuffer(data []byte) {
 	if s.lastFlush.IsZero() {
 		s.lastFlush = time.Now()
@@ -149,6 +153,17 @@ func (c *segmentWriter) flushTimer() {
 	}
 }
 
+func (s *segmentWriter) alignBuffer() {
+	rem := s.buffer.Len() % alignmentSize
+	if rem == 0 {
+		return
+	}
+
+	toAlign := alignmentSize - rem
+
+	s.buffer.Write(alignmentBuffer[0:toAlign])
+}
+
 func (c *segmentWriter) send(segmentId int64, block []byte, group []record, response chan error) {
 
 	//TODO: Implement
@@ -156,6 +171,14 @@ func (c *segmentWriter) send(segmentId int64, block []byte, group []record, resp
 	// if err := p.gossiper.SendToFollowers(replicationInfo, topic, body); err != nil {
 	// 	return err
 	// }
+}
+
+func createAlignmentBuffer() []byte {
+	b := make([]byte, alignmentSize-1)
+	for i := range b {
+		b[i] = 0xff
+	}
+	return b
 }
 
 func sendResponse(group []record, err error) {
