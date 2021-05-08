@@ -65,7 +65,6 @@ type dataItem struct {
 
 func (s *segmentWriter) appendAndSend() {
 	for item := range s.items {
-		// TODO: Maybe panic on flush err
 		s.maybeFlushSegment()
 		if item == nil {
 			// It was only a signal to flush the segment, no data, move on
@@ -78,26 +77,24 @@ func (s *segmentWriter) appendAndSend() {
 		// Start sending in the background while flushing is occurring
 		go s.send(s.segmentId, item.data, item.group, response)
 
-		// when it doesn't fit or time has passed since last flush
-		if err := s.maybeFlushSegment(); err != nil {
-			sendResponse(item.group, err)
-			continue
-		}
+		s.maybeFlushSegment()
 		sendResponse(item.group, <-response)
 	}
 }
 
-func (s *segmentWriter) maybeFlushSegment() error {
+// maybeFlushSegment will write to the file when the next group doesn't fit in memory
+// or time has passed since last flush
+func (s *segmentWriter) maybeFlushSegment() {
 	if s.buffer.Len() == 0 {
 		// No data to flush yet
-		return nil
+		return
 	}
 
 	canBufferNextGroup := s.buffer.Len()+s.config.MaxGroupSize() < segmentMaxBufferSize
 	if canBufferNextGroup && time.Now().Sub(s.lastFlush) < flushInterval {
 		// Time has not passed and there's enough capacity
 		// in the buffer for the next group
-		return nil
+		return
 	}
 
 	if s.segmentFile == nil {
@@ -112,8 +109,8 @@ func (s *segmentWriter) maybeFlushSegment() error {
 		s.segmentFile = f
 	}
 
-	// Sync copy the buffer to the file
 	s.alignBuffer()
+	// Sync copy the buffer to the file
 	s.segmentFile.Write(s.buffer.Bytes())
 	if _, err := s.buffer.WriteTo(s.segmentFile); err != nil {
 		// Data loss, we should panic
@@ -132,7 +129,7 @@ func (s *segmentWriter) maybeFlushSegment() error {
 	s.buffer.Reset()
 	s.lastFlush = time.Now()
 
-	return nil
+	return
 }
 
 func (s *segmentWriter) writeToSegmentBuffer(data []byte) {
@@ -171,6 +168,7 @@ func (c *segmentWriter) send(segmentId int64, block []byte, group []record, resp
 	// if err := p.gossiper.SendToFollowers(replicationInfo, topic, body); err != nil {
 	// 	return err
 	// }
+	response <- nil
 }
 
 func createAlignmentBuffer() []byte {

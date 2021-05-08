@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,6 +14,7 @@ import (
 	"github.com/jorgebay/soda/internal/localdb"
 	"github.com/jorgebay/soda/internal/producing"
 	"github.com/jorgebay/soda/internal/types"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 )
 
@@ -52,6 +54,8 @@ func main() {
 		log.Fatal().Err(err).Msg("Exiting")
 	}
 
+	startMetricsEndpoint()
+
 	log.Info().Msg("Soda started")
 
 	sigc := make(chan os.Signal, 1)
@@ -63,4 +67,15 @@ func main() {
 
 	log.Info().Msg("Shutting down")
 	localDbClient.Close()
+}
+
+func startMetricsEndpoint() {
+	c := make(chan bool, 1)
+	go func() {
+		c <- true
+		http.Handle("/metrics", promhttp.Handler())
+		http.ListenAndServe(":9902", nil)
+	}()
+	<-c
+	log.Info().Msg("Metrics endpoint started")
 }

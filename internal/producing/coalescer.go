@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/klauspost/compress/zstd"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog/log"
 )
 
@@ -17,6 +20,18 @@ import (
 const writeConcurrencyLevel = 2
 
 var lengthBuffer []byte = []byte{0, 0, 0, 0}
+
+var (
+	messagesProcessed = promauto.NewCounter(prometheus.CounterOpts{
+			Name: "soda_coalescer_messages_total",
+			Help: "The total number of processed messages",
+	})
+
+	messagesCoalesced = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "soda_coalescer_messages_coalesced",
+		Help:    "Number of messages coalesced into compressed buffers",
+	})
+)
 
 type coalescer struct {
 	items    chan *record
@@ -92,6 +107,7 @@ func (c *coalescer) add(group []record, item *record, length *int64) ([]record, 
 	*length += item.length
 	item.offset = c.offset
 	c.offset++
+	messagesProcessed.Inc()
 	group = append(group, *item)
 	return group, nil
 }
@@ -110,8 +126,10 @@ func (c *coalescer) receive() {
 
 		// Either there was a buffered item or we just received it
 		group, _ = c.add(group, item, &length)
+		item = nil
 
 		canAddNext := true
+		timeout := time.After(100 * time.Microsecond)
 		for canAddNext {
 			// Receive without blocking until there are no more items
 			// or the max length for a group was reached
@@ -122,7 +140,7 @@ func (c *coalescer) receive() {
 					// The group can't contain the new item
 					canAddNext = false
 				}
-			default:
+			case <-timeout:
 				canAddNext = false
 			}
 		}
@@ -136,6 +154,8 @@ func (c *coalescer) receive() {
 			c.offset = group[0].offset
 			continue
 		}
+
+		messagesCoalesced.Observe(float64(len(group)))
 
 		// Send in the background while the next block is generated in the foreground
 		c.segment.items <- &dataItem{
