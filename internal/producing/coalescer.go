@@ -23,13 +23,13 @@ var lengthBuffer []byte = []byte{0, 0, 0, 0}
 
 var (
 	messagesProcessed = promauto.NewCounter(prometheus.CounterOpts{
-			Name: "soda_coalescer_messages_total",
-			Help: "The total number of processed messages",
+		Name: "soda_coalescer_messages_total",
+		Help: "The total number of processed messages",
 	})
 
 	messagesCoalesced = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "soda_coalescer_messages_coalesced",
-		Help:    "Number of messages coalesced into compressed buffers",
+		Name: "soda_coalescer_messages_coalesced",
+		Help: "Number of messages coalesced into compressed buffers",
 	})
 )
 

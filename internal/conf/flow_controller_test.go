@@ -2,17 +2,11 @@ package conf
 
 import (
 	"sync/atomic"
-	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
-
-func TestFlowControl(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Flow Controller Suite")
-}
 
 var _ = Describe("flowControl", func() {
 	Describe("allocate()", func() {

@@ -3,6 +3,8 @@ package conf
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 
 	"github.com/jorgebay/soda/internal/types"
 )
@@ -11,11 +13,14 @@ const Mib = 1024 * 1024
 const allocationPoolSize = 100 * Mib
 const filePermissions = 0755
 
+var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
+
 // Config represents the application configuration
 type Config interface {
 	LocalDbConfig
 	GossipConfig
 	ProducerConfig
+	DiscovererConfig
 	ConsumerPort() int
 	AdminPort() int
 	HomePath() string
@@ -29,6 +34,13 @@ type LocalDbConfig interface {
 type DatalogConfig interface {
 	DatalogPath(topic string, token types.Token, genId string) string
 	MaxSegmentSize() int
+}
+
+type DiscovererConfig interface {
+	Ordinal() int
+	// BaseHostName is name prefix that should be concatenated with the ordinal to
+	// return the host name of a replica
+	BaseHostName() string
 }
 
 type ProducerConfig interface {
@@ -45,13 +57,35 @@ type GossipConfig interface {
 }
 
 func NewConfig() Config {
+	hostName, _ := os.Hostname()
+	baseHostName, ordinal := parseHostName(hostName)
 	return &config{
 		flowControl: newFlowControl(allocationPoolSize),
+		baseHostName: baseHostName,
+		ordinal: ordinal,
 	}
 }
 
 type config struct {
 	flowControl *flowControl
+	baseHostName string
+	ordinal int
+}
+
+func parseHostName(hostName string) (baseHostName string, ordinal int) {
+	if hostName == "" {
+		return "soda-", 0
+	}
+
+	matches := hostRegex.FindAllStringSubmatch(hostName, -1)
+
+	if len(matches) == 0 {
+		return "soda-", 0
+	}
+
+	m := matches[0]
+	ordinal, _ = strconv.Atoi(m[2])
+	return m[1] + "-", ordinal
 }
 
 func (c *config) ProducerPort() int {
@@ -109,4 +143,12 @@ func (c *config) DatalogPath(topic string, token types.Token, genId string) stri
 
 func (c *config) CreateAllDirs() error {
 	return os.MkdirAll(c.dataPath(), filePermissions)
+}
+
+func (c *config) Ordinal() int {
+	return c.ordinal
+}
+
+func (c *config) BaseHostName() string {
+	return c.baseHostName
 }
