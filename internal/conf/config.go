@@ -60,16 +60,16 @@ func NewConfig() Config {
 	hostName, _ := os.Hostname()
 	baseHostName, ordinal := parseHostName(hostName)
 	return &config{
-		flowControl: newFlowControl(allocationPoolSize),
+		flowControl:  newFlowControl(allocationPoolSize),
 		baseHostName: baseHostName,
-		ordinal: ordinal,
+		ordinal:      ordinal,
 	}
 }
 
 type config struct {
-	flowControl *flowControl
+	flowControl  *flowControl
 	baseHostName string
-	ordinal int
+	ordinal      int
 }
 
 func parseHostName(hostName string) (baseHostName string, ordinal int) {
