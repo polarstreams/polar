@@ -73,6 +73,20 @@ var _ = Describe("discoverer", func() {
 				},
 			}))
 		})
+
+		It("should create the token ring", func() {
+			os.Setenv(envReplicas, "3")
+			d := &discoverer{
+				config: &configFake{
+					baseHostName: "soda-",
+				},
+			}
+
+			d.Init()
+
+			// 3 parts of 6148914691236517205 length each (math.MaxUint64 / 3)
+			Expect(d.ring).To(Equal([]types.Token{-9223372036854775808, -3074457345618258603, 3074457345618258602}))
+		})
 	})
 
 	Describe("Peers()", func() {
