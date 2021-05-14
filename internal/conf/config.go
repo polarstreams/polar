@@ -9,9 +9,16 @@ import (
 	"github.com/jorgebay/soda/internal/types"
 )
 
-const Mib = 1024 * 1024
-const allocationPoolSize = 100 * Mib
-const filePermissions = 0755
+const (
+	Mib                = 1024 * 1024
+	allocationPoolSize = 100 * Mib
+	filePermissions    = 0755
+)
+
+const (
+	envHome                 = "SODA_HOME"
+	envListenOnAllAddresses = "SODA_LISTEN_ON_ALL"
+)
 
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
 
@@ -54,6 +61,7 @@ type ProducerConfig interface {
 
 type GossipConfig interface {
 	GossipPort() int
+	ListenOnAllAddresses() bool
 }
 
 func NewConfig() Config {
@@ -104,6 +112,10 @@ func (c *config) GossipPort() int {
 	return 8084
 }
 
+func (c *config) ListenOnAllAddresses() bool {
+	return os.Getenv(envListenOnAllAddresses) != "false"
+}
+
 func (c *config) MaxMessageSize() int {
 	return Mib
 }
@@ -121,7 +133,7 @@ func (c *config) FlowController() FlowController {
 }
 
 func (c *config) HomePath() string {
-	homePath := os.Getenv("SODA_HOME")
+	homePath := os.Getenv(envHome)
 	if homePath == "" {
 		return filepath.Join("/var", "lib", "soda")
 	}

@@ -16,8 +16,15 @@ func (g *gossiper) AcceptConnections() error {
 		MaxConcurrentStreams: 2048,
 	}
 	port := g.config.GossipPort()
+	address := fmt.Sprintf(":%d", port)
 
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if !g.config.ListenOnAllAddresses() {
+		info := g.discoverer.GetBrokerInfo()
+		// Use the provided name / address
+		address = fmt.Sprintf("%s:%d", info.HostName, port)
+	}
+
+	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		return err
 	}
@@ -33,7 +40,7 @@ func (g *gossiper) AcceptConnections() error {
 				break
 			}
 
-			log.Debug().Msgf("Accepted new gossip connection on %v from %v", conn.LocalAddr(), conn.RemoteAddr())
+			log.Debug().Msgf("Accepted new gossip connection on %v", conn.LocalAddr())
 
 			router := httprouter.New()
 			router.GET("/status", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {

@@ -34,23 +34,23 @@ func (g *gossiper) OpenConnections() error {
 		defer g.connectionsMutex.Unlock()
 		peers := g.discoverer.Peers()
 		m := make(clientMap, len(peers))
+		log.Debug().Msgf("Connecting to peers %v", peers)
 		var wg sync.WaitGroup
 		for _, peer := range peers {
 			wg.Add(1)
-			clientInfo := g.createClient(&peer)
-			log.Debug().Msgf("Before first connection, is up? %v", clientInfo.isHostUp())
-			m[peer.Ordinal] = clientInfo
-			go func(p *types.BrokerInfo) {
-				_, err := clientInfo.client.Get(g.GetPeerUrl(p, conf.StatusUrl))
+			c := g.createClient(peer)
+			m[peer.Ordinal] = c
+			p := peer
+			go func() {
+				defer wg.Done()
+				log.Debug().Msgf("Creating initial peer request to %s", p.HostName)
+				_, err := c.client.Get(g.GetPeerUrl(&p, conf.StatusUrl))
 
-				wg.Done()
 				if err != nil {
 					// Reconnection will continue in the background as part of transport logic
-					log.Err(err).Msgf("Initial connection to peer %s failed", p)
-				} else {
-					log.Debug().Msgf("Connected to peer %s", p)
+					log.Err(err).Msgf("Initial connection to peer %s failed", p.HostName)
 				}
-			}(&peer)
+			}()
 		}
 		wg.Wait()
 
@@ -63,7 +63,7 @@ func (g *gossiper) OpenConnections() error {
 	return nil
 }
 
-func (g *gossiper) createClient(broker *types.BrokerInfo) *clientInfo {
+func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 	var connection atomic.Value
 
 	clientInfo := &clientInfo{connection: &connection, hostName: broker.HostName}
@@ -79,11 +79,12 @@ func (g *gossiper) createClient(broker *types.BrokerInfo) *clientInfo {
 				if err != nil {
 					// Clean whatever is in cache with a connection marked as closed
 					connection.Store(newFailedConnection())
-					clientInfo.startReconnection(g, broker)
+					clientInfo.startReconnection(g, &broker)
 					return conn, err
 				}
 
-				c := newOpenConnection(conn, func() { clientInfo.startReconnection(g, broker) })
+				log.Info().Msgf("Connected to peer %s", addr)
+				c := newOpenConnection(conn, func() { clientInfo.startReconnection(g, &broker) })
 
 				// Store it at clientInfo level to retrieve the connection status later
 				connection.Store(c)
@@ -131,6 +132,8 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
 	if !atomic.CompareAndSwapInt32(&c.isReconnecting, 0, 1) {
 		return
 	}
+
+	log.Info().Msgf("Start reconnecting to %s", broker.HostName)
 
 	go func() {
 		i := 0

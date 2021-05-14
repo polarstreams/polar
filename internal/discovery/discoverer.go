@@ -22,6 +22,8 @@ type Discoverer interface {
 	LeaderGetter
 	Peers() []types.BrokerInfo
 	RegisterListener(l types.TopologyChangeHandler)
+	// GetBrokerInfo returns the information of the current broker (self)
+	GetBrokerInfo() *types.BrokerInfo
 	Shutdown()
 }
 
@@ -105,10 +107,14 @@ func parseFixedBrokers(ordinal int) []types.BrokerInfo {
 	return brokers
 }
 
+func (d *discoverer) GetBrokerInfo() *types.BrokerInfo {
+	return &d.brokers[d.ordinal]
+}
+
 func (d *discoverer) GetLeader(partitionKey string) types.ReplicationInfo {
 	if partitionKey == "" {
 		return types.ReplicationInfo{
-			Leader:    &d.brokers[d.ordinal],
+			Leader:    d.GetBrokerInfo(),
 			Followers: d.Peers(),
 			Token:     0,
 		}
