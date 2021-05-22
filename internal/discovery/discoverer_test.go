@@ -11,7 +11,7 @@ import (
 
 func Test(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Discoverer Controller Suite")
+	RunSpecs(t, "Discoverer Suite")
 }
 
 var _ = Describe("discoverer", func() {

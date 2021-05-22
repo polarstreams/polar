@@ -9,7 +9,7 @@ import (
 
 func Test(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Config Controller Suite")
+	RunSpecs(t, "Config Suite")
 }
 
 var _ = Describe("parseHostName()", func() {

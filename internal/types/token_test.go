@@ -10,7 +10,7 @@ import (
 
 func TestTokens(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Token Controller Suite")
+	RunSpecs(t, "Token Suite")
 }
 
 var _ = Describe("getPrimaryToken()", func() {

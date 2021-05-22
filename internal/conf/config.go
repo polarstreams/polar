@@ -61,6 +61,9 @@ type ProducerConfig interface {
 
 type GossipConfig interface {
 	GossipPort() int
+	GossipDataPort() int
+	// MaxDataBodyLength is the maximum size of an interbroker data body
+	MaxDataBodyLength() int
 	ListenOnAllAddresses() bool
 }
 
@@ -112,6 +115,10 @@ func (c *config) GossipPort() int {
 	return 8084
 }
 
+func (c *config) GossipDataPort() int {
+	return 8085
+}
+
 func (c *config) ListenOnAllAddresses() bool {
 	return os.Getenv(envListenOnAllAddresses) != "false"
 }
@@ -126,6 +133,12 @@ func (c *config) MaxGroupSize() int {
 
 func (c *config) MaxSegmentSize() int {
 	return 1024 * Mib
+}
+
+func (c *config) MaxDataBodyLength() int {
+	// It's a different setting but points to the same value
+	// The amount of the data sent in a single message is the size of a group of records
+	return c.MaxGroupSize()
 }
 
 func (c *config) FlowController() FlowController {

@@ -28,8 +28,9 @@ var (
 	})
 
 	messagesCoalesced = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name: "soda_coalescer_messages_coalesced",
-		Help: "Number of messages coalesced into compressed buffers",
+		Name:    "soda_coalescer_messages_coalesced",
+		Help:    "Number of messages coalesced into compressed buffers",
+		Buckets: prometheus.ExponentialBuckets(1, 4, 9), // buckets from 1 to 262144
 	})
 )
 
