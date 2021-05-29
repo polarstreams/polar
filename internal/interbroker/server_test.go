@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/jorgebay/soda/internal/conf"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -16,30 +17,33 @@ func Test(t *testing.T) {
 }
 
 var _ = Describe("errorResponse", func() {
-	It("should be read into a slice", func() {
-		buffer := make([]byte, 1024)
+	It("should be marshal into bytes", func() {
+		buffer := bytes.NewBuffer(make([]byte, 0))
 		for i := 0; i < 20; i++ {
+			buffer.Reset()
 			message := fmt.Sprintf("Hello world %d", i)
 			r := &errorResponse{
 				message:  message,
 				streamId: 1,
 			}
 
-			n, err := r.Read(buffer)
+			err := r.Marshal(buffer)
+			b := buffer.Bytes()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(n).To(BeNumerically(">", headerSize))
 
 			header := header{}
-			reader := bytes.NewReader(buffer)
-			err = binary.Read(reader, binary.BigEndian, &header)
+			err = binary.Read(buffer, conf.Endianness, &header)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(header.StreamId).To(Equal(r.streamId))
 			bodyLength := len([]byte(message))
 			Expect(int(header.BodyLength)).To(Equal(bodyLength))
 
-			Expect(n).To(Equal(headerSize + bodyLength))
-			Expect(string(buffer[headerSize:n])).To(Equal(message))
+			Expect(len(b)).To(Equal(headerSize + bodyLength))
+			messageBuffer := make([]byte, bodyLength)
+			_, err = buffer.Read(messageBuffer)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(messageBuffer)).To(Equal(message))
 		}
 	})
 })

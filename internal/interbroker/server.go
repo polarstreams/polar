@@ -17,6 +17,7 @@ import (
 )
 
 const maxDataResponseSize = 1024
+const receiveBufferSize = 32 * 1024
 
 func (g *gossiper) AcceptConnections() error {
 	if err := g.acceptHttpConnections(); err != nil {
@@ -144,14 +145,14 @@ type peerDataServer struct {
 func (s *peerDataServer) serve() {
 	headerBuf := make([]byte, headerSize)
 	largeBodyBuf := make([]byte, s.config.MaxDataBodyLength())
-	c := bufio.NewReader(s.conn)
+	c := bufio.NewReaderSize(s.conn, receiveBufferSize)
 	for {
 		if _, err := io.ReadFull(c, headerBuf); err != nil {
 			log.Warn().Msg("There was an error reading header from peer")
 			break
 		}
-		header := header{}
-		if err := binary.Read(bytes.NewReader(headerBuf), binary.BigEndian, &header); err != nil {
+		header := &header{}
+		if err := binary.Read(bytes.NewReader(headerBuf), conf.Endianness, header); err != nil {
 			log.Warn().Msg("Invalid data header from peer, closing connection")
 			break
 		}
@@ -166,58 +167,71 @@ func (s *peerDataServer) serve() {
 			s.initialized = true
 			// It's the first message
 			if header.Op != startupOp {
-				//TODO: s.writeError("Invalid first message")
+				s.responses <- newErrorResponse("Invalid first message", header)
 				break
+			}
+			s.responses <- &emptyResponse{streamId: header.StreamId, op: readyOp}
+
+			// Process the next message
+			continue
+		}
+
+		if header.Op != dataOp {
+			s.responses <- newErrorResponse("Only data operations are supported", header)
+			break
+		}
+
+		request, err := s.parseDataRequest(bodyBuf)
+
+		if err != nil {
+			s.responses <- newErrorResponse("Parsing error", header)
+		} else {
+			if err = s.append(request); err == nil {
+				s.responses <- &emptyResponse{streamId: header.StreamId, op: dataOp}
+			} else {
+				s.responses <- newErrorResponse(fmt.Sprintf("Append error: %s", err.Error()), header)
 			}
 		}
 	}
 	_ = s.conn.Close()
 }
 
+func (s *peerDataServer) append(*dataRequest) error {
+	// TODO Implement
+	return nil
+}
+
+func (s *peerDataServer) parseDataRequest(body []byte) (*dataRequest, error) {
+	meta := dataRequestMeta{}
+	reader := bytes.NewReader(body)
+	if err := binary.Read(reader, conf.Endianness, &meta); err != nil {
+		return nil, err
+	}
+
+	index := dataRequestMetaSize
+	topic := string(body[index : index+int(meta.topicLength)])
+	index += int(meta.topicLength)
+	request := &dataRequest{
+		meta:  meta,
+		topic: topic,
+		data:  body[index:],
+	}
+
+	return request, nil
+}
+
 func (s *peerDataServer) writeResponses() {
 	// TODO: Coalesce responses and disable Nagle
 
-	// Response buffer
-	buffer := make([]byte, maxDataResponseSize)
+	w := bufio.NewWriterSize(s.conn, maxDataResponseSize)
 	for response := range s.responses {
-		if _, err := io.CopyBuffer(s.conn, response, buffer); err != nil {
+		w.Reset(w)
+		if err := response.Marshal(w); err != nil {
 			log.Warn().Msg("There was an error while writing to peer, closing connection")
 			break
 		}
+		w.Flush()
 	}
 
 	_ = s.conn.Close()
-}
-
-type dataResponse interface {
-	// We could use another abstraction when implementing message coalescing
-	io.Reader
-}
-
-type errorResponse struct {
-	message  string
-	streamId uint16
-}
-
-func (r *errorResponse) Read(p []byte) (n int, err error) {
-	message := []byte(r.message)
-	if len(message)+headerSize > len(p) {
-		return 0, io.ErrShortBuffer
-	}
-
-	buffer := bytes.NewBuffer(p)
-	buffer.Reset()
-	header := header{
-		Version:    1,
-		StreamId:   r.streamId,
-		Op:         errorOp,
-		BodyLength: uint32(len(message)),
-	}
-	err = binary.Write(buffer, binary.BigEndian, header)
-	buffer.Write(message)
-	n = 0
-	if err == nil {
-		n = buffer.Len()
-	}
-	return
 }

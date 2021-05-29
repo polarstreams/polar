@@ -2,7 +2,6 @@ package producing
 
 import (
 	"bytes"
-	"encoding/binary"
 	"io"
 	"time"
 
@@ -190,7 +189,7 @@ func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
 
 	b := buf.Bytes()
 	// Write the length of the whole block
-	binary.BigEndian.PutUint32(b, uint32(len(b)-4))
+	conf.Endianness.PutUint32(b, uint32(len(b)-4))
 
 	return b, nil
 }

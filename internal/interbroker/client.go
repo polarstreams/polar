@@ -18,7 +18,7 @@ import (
 
 const (
 	baseReconnectionDelay = 20
-	maxReconnectionDelay  = 60_000
+	maxReconnectionDelay  = 10_000
 )
 
 type clientMap map[int]*clientInfo
@@ -44,11 +44,11 @@ func (g *gossiper) OpenConnections() error {
 			go func() {
 				defer wg.Done()
 				log.Debug().Msgf("Creating initial peer request to %s", p.HostName)
-				_, err := c.client.Get(g.GetPeerUrl(&p, conf.StatusUrl))
+				_, err := c.client.Get(g.getPeerUrl(&p, conf.StatusUrl))
 
 				if err != nil {
 					// Reconnection will continue in the background as part of transport logic
-					log.Err(err).Msgf("Initial connection to peer %s failed", p.HostName)
+					log.Err(err).Msgf("Initial connection to http peer %s failed", p.HostName)
 				}
 			}()
 		}
@@ -66,7 +66,7 @@ func (g *gossiper) OpenConnections() error {
 func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 	var connection atomic.Value
 
-	clientInfo := &clientInfo{connection: &connection, hostName: broker.HostName}
+	clientInfo := &clientInfo{connection: &connection, dataConn: &atomic.Value{}, hostName: broker.HostName}
 
 	clientInfo.client = &http.Client{
 		Transport: &http2.Transport{
@@ -96,10 +96,12 @@ func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 		},
 	}
 
+	go clientInfo.openDataConnection(g.config)
+
 	return clientInfo
 }
 
-func (g *gossiper) GetPeerUrl(b *types.BrokerInfo, path string) string {
+func (g *gossiper) getPeerUrl(b *types.BrokerInfo, path string) string {
 	return fmt.Sprintf("http://%s:%d%s", b.HostName, g.config.GossipPort(), path)
 }
 
@@ -116,8 +118,34 @@ func (g *gossiper) getClientInfo(broker *types.BrokerInfo) *clientInfo {
 type clientInfo struct {
 	client         *http.Client
 	connection     *atomic.Value
+	dataConn       *atomic.Value
+	dataMessages   chan *dataRequest
 	hostName       string
 	isReconnecting int32
+}
+
+func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
+	i := 0
+	for {
+		c, err := newDataConnection(c, config)
+		if err != nil {
+			delay := math.Pow(2, float64(i)) * baseReconnectionDelay
+			if delay > maxReconnectionDelay {
+				delay = maxReconnectionDelay
+			} else {
+				i++
+			}
+			// TODO: Add jitter
+			time.Sleep(time.Duration(delay) * time.Millisecond)
+			continue
+		}
+
+		// Reset delay
+		i = 0
+
+		// Wait for connection to be closed
+		<-c.closed
+	}
 }
 
 // isHostUp determines whether a host is considered UP
@@ -154,7 +182,7 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
 
 			log.Debug().Msgf("Attempting to reconnect to %s after %v ms", broker, delay)
 
-			_, err := c.client.Get(g.GetPeerUrl(broker, conf.StatusUrl))
+			_, err := c.client.Get(g.getPeerUrl(broker, conf.StatusUrl))
 			if err == nil {
 				// Succeeded
 				break
