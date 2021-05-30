@@ -3,10 +3,12 @@ package interbroker
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/rs/zerolog/log"
 )
 
 const maxStreamIds = 512
@@ -53,9 +55,36 @@ func newDataConnection(cli *clientInfo, config conf.GossipConfig) (*dataConnecti
 }
 
 func (c *dataConnection) readDataResponses(conn net.Conn, config conf.GossipConfig, closeHandler func()) {
-	// TODO: read from connection
+	r := bufio.NewReaderSize(conn, receiveBufferSize)
+	headerBuffer := make([]byte, headerSize)
+	bodyBuffer := make([]byte, maxDataResponseSize)
 	for {
 
+		if _, err := io.ReadFull(r, headerBuffer); err != nil {
+			log.Warn().Msg("There was an error reading header from peer")
+			break
+		}
+		header, err := readHeader(headerBuffer)
+		if err != nil {
+			log.Warn().Msg("Invalid data header from peer, closing connection")
+			break
+		}
+
+		body := bodyBuffer[:header.BodyLength]
+		if _, err := io.ReadFull(r, body); err != nil {
+			log.Warn().Msg("There was an error reading body from peer")
+			break
+		}
+
+		response := unmarshallResponse(header, body)
+		value, ok := c.handlers.LoadAndDelete(header.StreamId)
+
+		if !ok {
+			log.Error().Uint16("streamId", uint16(header.StreamId)).Msg("Invalid message from the server")
+			break
+		}
+		handler := value.(func(dataResponse))
+		handler(response)
 	}
 
 	closeHandler()

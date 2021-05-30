@@ -142,12 +142,16 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 	return nil
 }
 
-func (p *producer) getCoalescer(topic string, token types.Token) (*coalescer, error) {
-	// TODO: Define genId (i.e: v1)
-	genId := "abc"
-	c, loaded, err := p.coalescerMap.LoadOrStore(topic, func() (interface{}, error) {
+func (p *producer) getCoalescer(topicName string, token types.Token) (*coalescer, error) {
+	topic := types.TopicDataId{
+		Name:  topicName,
+		Token: token,
+		// TODO: Define genId (i.e: v1)
+		GenId: 0,
+	}
+	c, loaded, err := p.coalescerMap.LoadOrStore(topicName, func() (interface{}, error) {
 		// Creating the appender is a blocking call
-		return newCoalescer(topic, token, genId, p.config, p.gossiper)
+		return newCoalescer(topic, p.config, p.gossiper)
 	})
 
 	if err != nil {
@@ -155,7 +159,7 @@ func (p *producer) getCoalescer(topic string, token types.Token) (*coalescer, er
 	}
 
 	if !loaded {
-		log.Debug().Msgf("Created coalescer for topic '%s'", topic)
+		log.Debug().Msgf("Created coalescer for topic '%s'", topicName)
 	}
 
 	return c.(*coalescer), nil

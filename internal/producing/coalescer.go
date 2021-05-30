@@ -35,7 +35,7 @@ var (
 
 type coalescer struct {
 	items    chan *record
-	topic    string
+	topic    types.TopicDataId
 	config   conf.ProducerConfig
 	gossiper interbroker.Replicator
 	offset   uint64
@@ -73,13 +73,11 @@ func newBuffers(config conf.ProducerConfig) buffers {
 }
 
 func newCoalescer(
-	topic string,
-	token types.Token,
-	genId string,
+	topic types.TopicDataId,
 	config conf.ProducerConfig,
 	gossiper interbroker.Replicator,
 ) (*coalescer, error) {
-	s, err := newSegmentWriter(topic, token, genId, config)
+	s, err := newSegmentWriter(topic, gossiper, config)
 
 	if err != nil {
 		return nil, err

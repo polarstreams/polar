@@ -151,15 +151,15 @@ func (s *peerDataServer) serve() {
 			log.Warn().Msg("There was an error reading header from peer")
 			break
 		}
-		header := &header{}
-		if err := binary.Read(bytes.NewReader(headerBuf), conf.Endianness, header); err != nil {
+		header, err := readHeader(headerBuf)
+		if err != nil {
 			log.Warn().Msg("Invalid data header from peer, closing connection")
 			break
 		}
 
 		bodyBuf := largeBodyBuf[:header.BodyLength]
 		if _, err := io.ReadFull(c, bodyBuf); err != nil {
-			log.Warn().Msg("There was an error reading header from peer")
+			log.Warn().Msg("There was an error reading body from peer")
 			break
 		}
 

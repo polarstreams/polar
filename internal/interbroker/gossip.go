@@ -9,7 +9,6 @@ import (
 	"github.com/jorgebay/soda/internal/types"
 )
 
-// TODO: Inter-broker communication should be versioned
 // TODO: Pass Context
 
 // Gossiper is responsible for communicating with other peers.
@@ -29,7 +28,7 @@ type Gossiper interface {
 
 type Replicator interface {
 	// Sends a message to be stored as replica of current broker's datalog
-	SendToFollowers(replicationInfo types.ReplicationInfo, topic string, body []byte) error
+	SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId int64, body []byte) error
 }
 
 func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Gossiper {
@@ -57,7 +56,7 @@ func (g *gossiper) OnTopologyChange() {
 	// TODO: Create new connections, refresh existing
 }
 
-func (g *gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic string, body []byte) error {
+func (g *gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId int64, body []byte) error {
 	return nil
 }
 

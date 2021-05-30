@@ -26,4 +26,13 @@ type ReplicationInfo struct {
 	Token     Token
 }
 
+// TopicDataId contains information to locate a certain piece of data.
+//
+// Specifies a topic, for a token, for a defined gen id.
+type TopicDataId struct {
+	Name  string
+	Token Token
+	GenId uint16
+}
+
 type TopologyChangeHandler func()

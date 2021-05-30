@@ -2,6 +2,7 @@ package interbroker
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"io"
 
@@ -100,6 +101,12 @@ func writeHeader(w io.Writer, header *header) error {
 	return binary.Write(w, conf.Endianness, header)
 }
 
+func readHeader(buffer []byte) (*header, error) {
+	header := &header{}
+	err := binary.Read(bytes.NewReader(buffer), conf.Endianness, header)
+	return header, err
+}
+
 type emptyResponse struct {
 	streamId streamId
 	op       opcode
@@ -112,4 +119,14 @@ func (r *emptyResponse) Marshal(w io.Writer) error {
 		Op:         r.op,
 		BodyLength: 0,
 	})
+}
+
+func unmarshallResponse(header *header, body []byte) dataResponse {
+	if header.Op == errorOp {
+		return newErrorResponse(string(body), header)
+	}
+	return &emptyResponse{
+		streamId: header.StreamId,
+		op:       header.Op,
+	}
 }

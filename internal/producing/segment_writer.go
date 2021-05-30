@@ -9,6 +9,7 @@ import (
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/data"
+	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/rs/zerolog/log"
 )
@@ -20,6 +21,7 @@ const alignmentSize = 512
 
 var alignmentBuffer = createAlignmentBuffer()
 
+// segmentWriter contains the logic to write a segment on disk and replicate it.
 type segmentWriter struct {
 	items         chan *dataItem
 	segmentId     int64
@@ -29,15 +31,16 @@ type segmentWriter struct {
 	segmentFile   *os.File
 	segmentLength int
 	basePath      string
+	topic         types.TopicDataId
+	gossiper      interbroker.Replicator
 }
 
 func newSegmentWriter(
-	topic string,
-	token types.Token,
-	genId string,
+	topic types.TopicDataId,
+	gossiper interbroker.Replicator,
 	config conf.ProducerConfig,
 ) (*segmentWriter, error) {
-	basePath := config.DatalogPath(topic, token, genId)
+	basePath := config.DatalogPath(topic.Name, topic.Token, fmt.Sprint(topic.GenId))
 
 	s := &segmentWriter{
 		// Limit's to 1 outstanding write (the current one)
@@ -47,6 +50,8 @@ func newSegmentWriter(
 		config:      config,
 		segmentFile: nil,
 		basePath:    basePath,
+		topic:       topic,
+		gossiper:    gossiper,
 	}
 
 	if err := os.MkdirAll(basePath, data.DirectoryPermissions); err != nil {
@@ -75,7 +80,7 @@ func (s *segmentWriter) appendAndSend() {
 		response := make(chan error, 1)
 
 		// Start sending in the background while flushing is occurring
-		go s.send(s.segmentId, item.data, item.group, response)
+		go s.send(item.data, item.group, response)
 
 		s.maybeFlushSegment()
 		sendResponse(item.group, <-response)
@@ -161,14 +166,11 @@ func (s *segmentWriter) alignBuffer() {
 	s.buffer.Write(alignmentBuffer[0:toAlign])
 }
 
-func (c *segmentWriter) send(segmentId int64, block []byte, group []record, response chan error) {
-
-	//TODO: Implement
-
-	// if err := p.gossiper.SendToFollowers(replicationInfo, topic, body); err != nil {
-	// 	return err
-	// }
-	response <- nil
+func (s *segmentWriter) send(block []byte, group []record, response chan error) {
+	// TODO: Maybe simplify, 1 replication info per generation
+	replicationInfo := group[0].replication
+	err := s.gossiper.SendToFollowers(replicationInfo, s.topic, s.segmentId, block)
+	response <- err
 }
 
 func createAlignmentBuffer() []byte {

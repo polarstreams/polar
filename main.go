@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,11 +16,20 @@ import (
 	"github.com/jorgebay/soda/internal/producing"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
 func main() {
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	log.Info().Msg("Starting Soda")
+
+	debug := flag.Bool("debug", false, "sets log level to debug")
+	flag.Parse()
+	if *debug {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+
 	config := conf.NewConfig()
 	log.Info().Msgf("Using home dir as %s", config.HomePath())
 	config.CreateAllDirs()
