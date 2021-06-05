@@ -26,11 +26,6 @@ type Gossiper interface {
 	SendToLeader(replicationInfo types.ReplicationInfo, topic string, body []byte) error
 }
 
-type Replicator interface {
-	// Sends a message to be stored as replica of current broker's datalog
-	SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId int64, body []byte) error
-}
-
 func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Gossiper {
 	return &gossiper{
 		config:           config,
@@ -54,10 +49,6 @@ func (g *gossiper) Init() error {
 
 func (g *gossiper) OnTopologyChange() {
 	// TODO: Create new connections, refresh existing
-}
-
-func (g *gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId int64, body []byte) error {
-	return nil
 }
 
 func (g *gossiper) SendToLeader(replicationInfo types.ReplicationInfo, topic string, body []byte) error {

@@ -66,7 +66,12 @@ func (g *gossiper) OpenConnections() error {
 func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 	var connection atomic.Value
 
-	clientInfo := &clientInfo{connection: &connection, dataConn: &atomic.Value{}, hostName: broker.HostName}
+	clientInfo := &clientInfo{
+		connection:   &connection,
+		dataConn:     &atomic.Value{},
+		hostName:     broker.HostName,
+		dataMessages: make(chan *dataRequest, 256),
+	}
 
 	clientInfo.client = &http.Client{
 		Transport: &http2.Transport{

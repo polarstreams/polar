@@ -13,6 +13,7 @@ import (
 
 const maxStreamIds = 512
 
+// dataConnection represents a client TCP data connection
 type dataConnection struct {
 	closed    chan bool
 	streamIds chan streamId

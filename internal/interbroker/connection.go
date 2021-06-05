@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// connectionWrapper represents a http client connection
 type connectionWrapper struct {
 	conn         net.Conn
 	isOpen       bool
