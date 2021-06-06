@@ -10,6 +10,8 @@ import (
 	"net/http"
 
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/metrics"
+	"github.com/jorgebay/soda/internal/utils"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
@@ -36,7 +38,7 @@ func (g *gossiper) acceptHttpConnections() error {
 		MaxConcurrentStreams: 2048,
 	}
 	port := g.config.GossipPort()
-	address := g.address(port)
+	address := utils.GetServiceAddress(port, g.discoverer, g.config)
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -83,7 +85,7 @@ func (g *gossiper) acceptHttpConnections() error {
 // acceptDataConnections starts listening to TCP connections for data
 func (g *gossiper) acceptDataConnections() error {
 	port := g.config.GossipDataPort()
-	address := g.address(port)
+	address := utils.GetServiceAddress(port, g.discoverer, g.config)
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -111,18 +113,6 @@ func (g *gossiper) acceptDataConnections() error {
 	log.Info().Msgf("Start listening to peers for data streams on port %d", port)
 
 	return nil
-}
-
-func (g *gossiper) address(port int) string {
-	address := fmt.Sprintf(":%d", port)
-
-	if !g.config.ListenOnAllAddresses() {
-		info := g.discoverer.GetBrokerInfo()
-		// Use the provided name / address
-		address = fmt.Sprintf("%s:%d", info.HostName, port)
-	}
-
-	return address
 }
 
 func (g *gossiper) handleData(conn net.Conn) {
@@ -199,6 +189,7 @@ func (s *peerDataServer) serve() {
 }
 
 func (s *peerDataServer) append(*dataRequest) error {
+	metrics.InterbrokerReceivedMessages.Inc()
 	// TODO Implement
 	return nil
 }

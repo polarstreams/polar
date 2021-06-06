@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
@@ -28,4 +30,17 @@ func ToHandle(he HandleWithError) httprouter.Handle {
 			fmt.Fprintf(w, err.Error())
 		}
 	}
+}
+
+// GetServiceAddress determines whether it should be bind to all interfaces or it should use a single host name
+func GetServiceAddress(port int, discoverer discovery.LeaderGetter, config conf.BasicConfig) string {
+	address := fmt.Sprintf(":%d", port)
+
+	if !config.ListenOnAllAddresses() {
+		info := discoverer.GetBrokerInfo()
+		// Use the provided name / address
+		address = fmt.Sprintf("%s:%d", info.HostName, port)
+	}
+
+	return address
 }

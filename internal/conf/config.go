@@ -30,8 +30,13 @@ type Config interface {
 	DiscovererConfig
 	ConsumerPort() int
 	AdminPort() int
+	MetricsPort() int
 	HomePath() string
 	CreateAllDirs() error
+}
+
+type BasicConfig interface {
+	ListenOnAllAddresses() bool
 }
 
 type LocalDbConfig interface {
@@ -51,6 +56,7 @@ type DiscovererConfig interface {
 }
 
 type ProducerConfig interface {
+	BasicConfig
 	DatalogConfig
 	ProducerPort() int
 	FlowController() FlowController
@@ -60,11 +66,11 @@ type ProducerConfig interface {
 }
 
 type GossipConfig interface {
+	BasicConfig
 	GossipPort() int
 	GossipDataPort() int
 	// MaxDataBodyLength is the maximum size of an interbroker data body
 	MaxDataBodyLength() int
-	ListenOnAllAddresses() bool
 }
 
 func NewConfig() Config {
@@ -109,6 +115,10 @@ func (c *config) ConsumerPort() int {
 
 func (c *config) AdminPort() int {
 	return 8083
+}
+
+func (c *config) MetricsPort() int {
+	return 9902
 }
 
 func (c *config) GossipPort() int {

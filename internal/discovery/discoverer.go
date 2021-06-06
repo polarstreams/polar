@@ -22,8 +22,6 @@ type Discoverer interface {
 	LeaderGetter
 	Peers() []types.BrokerInfo
 	RegisterListener(l types.TopologyChangeHandler)
-	// GetBrokerInfo returns the information of the current broker (self)
-	GetBrokerInfo() *types.BrokerInfo
 	Shutdown()
 }
 
@@ -32,6 +30,9 @@ type LeaderGetter interface {
 	//
 	// In case partitionKey is empty, the current node is provided
 	GetLeader(partitionKey string) types.ReplicationInfo
+
+	// GetBrokerInfo returns the information of the current broker (self)
+	GetBrokerInfo() *types.BrokerInfo
 }
 
 func NewDiscoverer(config conf.DiscovererConfig) Discoverer {

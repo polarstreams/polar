@@ -60,7 +60,7 @@ func (p *producer) Init() error {
 
 func (p *producer) AcceptConnections() error {
 	port := p.config.ProducerPort()
-	address := fmt.Sprintf(":%d", port)
+	address := utils.GetServiceAddress(port, p.leaderGetter, p.config)
 	router := httprouter.New()
 
 	router.POST(conf.TopicMessageUrl, utils.ToHandle(p.postMessage))

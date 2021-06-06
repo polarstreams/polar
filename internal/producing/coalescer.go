@@ -7,10 +7,9 @@ import (
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/interbroker"
+	"github.com/jorgebay/soda/internal/metrics"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/klauspost/compress/zstd"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog/log"
 )
 
@@ -19,19 +18,6 @@ import (
 const writeConcurrencyLevel = 2
 
 var lengthBuffer []byte = []byte{0, 0, 0, 0}
-
-var (
-	messagesProcessed = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "soda_coalescer_messages_total",
-		Help: "The total number of processed messages",
-	})
-
-	messagesCoalesced = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "soda_coalescer_messages_coalesced",
-		Help:    "Number of messages coalesced into compressed buffers",
-		Buckets: prometheus.ExponentialBuckets(1, 4, 9), // buckets from 1 to 262144
-	})
-)
 
 type coalescer struct {
 	items    chan *record
@@ -105,7 +91,7 @@ func (c *coalescer) add(group []record, item *record, length *int64) ([]record, 
 	*length += item.length
 	item.offset = c.offset
 	c.offset++
-	messagesProcessed.Inc()
+	metrics.CoalescerMessagesProcessed.Inc()
 	group = append(group, *item)
 	return group, nil
 }
@@ -153,7 +139,7 @@ func (c *coalescer) receive() {
 			continue
 		}
 
-		messagesCoalesced.Observe(float64(len(group)))
+		metrics.CoalescerMessagesPerGroup.Observe(float64(len(group)))
 
 		// Send in the background while the next block is generated in the foreground
 		c.segment.items <- &dataItem{
