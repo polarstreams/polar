@@ -225,9 +225,10 @@ func (s *peerDataServer) append(d *dataRequest, requestHeader *header) dataRespo
 
 func (s *peerDataServer) segmentWriter(d *dataRequest) (*data.SegmentWriter, error) {
 	topic := d.topicId()
-	key := getReplicaWriterKey(&topic, d.meta.SegmentId)
+	segmentId := d.meta.SegmentId
+	key := getReplicaWriterKey(&topic, segmentId)
 	writer, loaded, err := s.replicaWriters.LoadOrStore(key, func() (interface{}, error) {
-		return data.NewSegmentWriter(topic, nil, s.config)
+		return data.NewSegmentWriter(topic, nil, s.config, segmentId)
 	})
 
 	if err != nil {

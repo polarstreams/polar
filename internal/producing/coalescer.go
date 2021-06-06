@@ -63,7 +63,7 @@ func newCoalescer(
 	config conf.ProducerConfig,
 	replicator types.Replicator,
 ) (*coalescer, error) {
-	s, err := data.NewSegmentWriter(topic, replicator, config)
+	s, err := data.NewSegmentWriter(topic, replicator, config, 0)
 
 	if err != nil {
 		return nil, err

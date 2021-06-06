@@ -37,6 +37,7 @@ func NewSegmentWriter(
 	topic types.TopicDataId,
 	gossiper types.Replicator,
 	config conf.DatalogConfig,
+	segmentId int64,
 ) (*SegmentWriter, error) {
 	basePath := config.DatalogPath(topic.Name, topic.Token, fmt.Sprint(topic.GenId))
 
@@ -50,10 +51,15 @@ func NewSegmentWriter(
 		basePath:    basePath,
 		topic:       topic,
 		replicator:  gossiper,
+		segmentId:   segmentId,
 	}
 
 	if err := os.MkdirAll(basePath, DirectoryPermissions); err != nil {
 		return nil, err
+	}
+
+	if segmentId == 0 {
+		s.segmentId = time.Now().UnixNano()
 	}
 
 	go s.flushTimer()
@@ -74,15 +80,20 @@ func (s *SegmentWriter) appendAndSend() {
 			// It was only a signal to flush the segment, no data, move on
 			continue
 		}
+
 		s.writeToSegmentBuffer(item.DataBlock())
+
 		// Response channel should be buffered in case the response is discarded
 		response := make(chan error, 1)
 
 		if replication := item.Replication(); replication != nil {
 			// Start sending in the background while flushing is occurring
 			go s.send(item.DataBlock(), *replication, response)
+		} else {
+			response <- nil
 		}
 
+		// Check whether to flush before blocking again in the for loop
 		s.maybeFlushSegment()
 
 		item.SetResult(<-response)
@@ -117,6 +128,9 @@ func (s *SegmentWriter) maybeFlushSegment() {
 	}
 
 	s.alignBuffer()
+
+	log.Debug().Msgf("Flushing segment file %d for topic '%s' and token %d", s.segmentId, s.topic.Name, s.topic.Token)
+
 	// Sync copy the buffer to the file
 	s.segmentFile.Write(s.buffer.Bytes())
 	if _, err := s.buffer.WriteTo(s.segmentFile); err != nil {
@@ -142,9 +156,6 @@ func (s *SegmentWriter) maybeFlushSegment() {
 func (s *SegmentWriter) writeToSegmentBuffer(data []byte) {
 	if s.lastFlush.IsZero() {
 		s.lastFlush = time.Now()
-	}
-	if s.segmentId == 0 {
-		s.segmentId = time.Now().UnixNano()
 	}
 	s.buffer.Write(data)
 }

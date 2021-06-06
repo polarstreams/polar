@@ -13,4 +13,5 @@
 
 /soda
 
-/home
+# Local tests with multiple instances
+/home*
