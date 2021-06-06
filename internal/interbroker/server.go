@@ -119,7 +119,7 @@ func (g *gossiper) handleData(conn net.Conn) {
 	s := &peerDataServer{
 		conn:      conn,
 		config:    g.config,
-		responses: make(chan dataResponse, 256),
+		responses: make(chan dataResponse, 512),
 	}
 	go s.serve()
 	go s.writeResponses()
@@ -134,22 +134,19 @@ type peerDataServer struct {
 
 func (s *peerDataServer) serve() {
 	headerBuf := make([]byte, headerSize)
+	reader := bufio.NewReaderSize(s.conn, receiveBufferSize)
 	largeBodyBuf := make([]byte, s.config.MaxDataBodyLength())
-	c := bufio.NewReaderSize(s.conn, receiveBufferSize)
+	canUseReusableBuffer := make(chan bool, 1)
+	canUseReusableBuffer <- true
 	for {
-		if n, err := io.ReadFull(c, headerBuf); err != nil {
+		reader.Reset(s.conn)
+		if n, err := io.ReadFull(reader, headerBuf); err != nil {
 			log.Warn().Err(err).Int("n", n).Msg("There was an error reading header from peer client")
 			break
 		}
 		header, err := readHeader(headerBuf)
 		if err != nil {
 			log.Warn().Msg("Invalid data header from peer, closing connection")
-			break
-		}
-
-		bodyBuf := largeBodyBuf[:header.BodyLength]
-		if _, err := io.ReadFull(c, bodyBuf); err != nil {
-			log.Warn().Msg("There was an error reading body from peer")
 			break
 		}
 
@@ -167,25 +164,39 @@ func (s *peerDataServer) serve() {
 			continue
 		}
 
+		<-canUseReusableBuffer
+		bodyBuf := largeBodyBuf[:header.BodyLength]
+
+		if _, err := io.ReadFull(reader, bodyBuf); err != nil {
+			log.Warn().Msg("There was an error reading body from peer")
+			break
+		}
+
 		if header.Op != dataOp {
 			s.responses <- newErrorResponse("Only data operations are supported", header)
 			break
 		}
 
-		request, err := s.parseDataRequest(bodyBuf)
-
-		if err != nil {
-			s.responses <- newErrorResponse("Parsing error", header)
-		} else {
-			if err = s.append(request); err == nil {
-				s.responses <- &emptyResponse{streamId: header.StreamId, op: dataResponseOp}
-			} else {
-				s.responses <- newErrorResponse(fmt.Sprintf("Append error: %s", err.Error()), header)
-			}
-		}
+		// Append in the background while the next message is received
+		go s.parseAndAppend(header, bodyBuf, canUseReusableBuffer)
 	}
 	log.Info().Msg("Data server reader closing connection")
 	_ = s.conn.Close()
+}
+
+func (s *peerDataServer) parseAndAppend(header *header, bodyBuf []byte, done chan bool) {
+	request, err := s.parseDataRequest(bodyBuf)
+
+	if err != nil {
+		s.responses <- newErrorResponse("Parsing error", header)
+	} else {
+		if err = s.append(request); err == nil {
+			s.responses <- &emptyResponse{streamId: header.StreamId, op: dataResponseOp}
+		} else {
+			s.responses <- newErrorResponse(fmt.Sprintf("Append error: %s", err.Error()), header)
+		}
+	}
+	done <- true
 }
 
 func (s *peerDataServer) append(*dataRequest) error {
