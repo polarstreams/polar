@@ -34,10 +34,10 @@ func (g *gossiper) SendToFollowers(
 		sent += 1
 		request := &dataRequest{
 			meta: dataRequestMeta{
-				segmentId:   segmentId,
-				token:       topic.Token,
-				genId:       topic.GenId,
-				topicLength: uint8(len(topic.Name)),
+				SegmentId:   segmentId,
+				Token:       topic.Token,
+				GenId:       topic.GenId,
+				TopicLength: uint8(len(topic.Name)),
 			},
 			topic: topic.Name,
 			// TODO: Copy the byte slice, otherwise is unsafe!

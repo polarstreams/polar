@@ -2,6 +2,7 @@ package interbroker
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -27,10 +28,20 @@ func newDataConnection(cli *clientInfo, config conf.GossipConfig) (*dataConnecti
 		return nil, err
 	}
 
+	log.Debug().Msgf("Sending startup data message to %s", conn.RemoteAddr())
+	if err = sendStartupMessage(conn); err != nil {
+		conn.Close()
+		log.Warn().Msgf("Startup message could not be sent to %s: %s", conn.RemoteAddr(), err.Error())
+		return nil, fmt.Errorf("Startup message could not be sent: %s", err.Error())
+	}
+
+	log.Debug().Msgf("Startup sent, data connection to peer %s is ready", conn.RemoteAddr())
+
 	var once sync.Once
 	closed := make(chan bool)
-	closeHandler := func() {
+	closeHandler := func(userType string) {
 		once.Do(func() {
+			log.Info().Msgf("Peer data client %s closing connection to %s", userType, conn.RemoteAddr())
 			conn.Close()
 			closed <- true
 			// TODO: Respond to all sent requests with connection error
@@ -55,14 +66,48 @@ func newDataConnection(cli *clientInfo, config conf.GossipConfig) (*dataConnecti
 	return c, nil
 }
 
-func (c *dataConnection) readDataResponses(conn net.Conn, config conf.GossipConfig, closeHandler func()) {
+func sendStartupMessage(conn net.Conn) error {
+	buffer := &bytes.Buffer{}
+	header := &header{
+		Version:    1,
+		StreamId:   0,
+		Op:         startupOp,
+		BodyLength: 0,
+	}
+	if err := writeHeader(buffer, header); err != nil {
+		return err
+	}
+
+	if n, err := conn.Write(buffer.Bytes()); err != nil {
+		return err
+	} else if n < buffer.Len() {
+		return fmt.Errorf("Write too short")
+	}
+
+	responseHeaderBuffer := make([]byte, headerSize)
+	if _, err := io.ReadFull(conn, responseHeaderBuffer); err != nil {
+		return err
+	}
+	responseHeader, err := readHeader(responseHeaderBuffer)
+
+	if err != nil {
+		return err
+	}
+
+	if responseHeader.Op != readyOp {
+		return fmt.Errorf("Expected ready message, obtained op %d", responseHeader.Op)
+	}
+
+	return nil
+}
+
+func (c *dataConnection) readDataResponses(conn net.Conn, config conf.GossipConfig, closeHandler func(string)) {
 	r := bufio.NewReaderSize(conn, receiveBufferSize)
 	headerBuffer := make([]byte, headerSize)
 	bodyBuffer := make([]byte, maxDataResponseSize)
 	for {
-
-		if _, err := io.ReadFull(r, headerBuffer); err != nil {
-			log.Warn().Msg("There was an error reading header from peer")
+		if n, err := io.ReadFull(r, headerBuffer); err != nil {
+			log.Warn().Err(err).Int("n", n).Msg("There was an error reading header from peer server")
 			break
 		}
 		header, err := readHeader(headerBuffer)
@@ -88,16 +133,16 @@ func (c *dataConnection) readDataResponses(conn net.Conn, config conf.GossipConf
 		handler(response)
 	}
 
-	closeHandler()
+	closeHandler("reader")
 }
 
-func (c *dataConnection) writeDataRequests(conn net.Conn, config conf.GossipConfig, closeHandler func()) {
-	w := bufio.NewWriterSize(conn, config.MaxDataBodyLength()+headerSize+dataRequestMetaSize+conf.MaxTopicLength)
+func (c *dataConnection) writeDataRequests(conn net.Conn, config conf.GossipConfig, closeHandler func(string)) {
+	w := bytes.NewBuffer(make([]byte, 0, config.MaxDataBodyLength()+headerSize+dataRequestMetaSize+conf.MaxTopicLength))
 	// TODO: Coalesce smaller messages with channel select
 	header := header{Version: 1, Op: dataOp}
 
 	for message := range c.cli.dataMessages {
-		w.Reset(w)
+		w.Reset()
 		streamId := <-c.streamIds
 		header.StreamId = streamId
 		header.BodyLength = message.BodyLength()
@@ -108,11 +153,15 @@ func (c *dataConnection) writeDataRequests(conn net.Conn, config conf.GossipConf
 			// Enqueue stream id for reuse
 			c.streamIds <- streamId
 		})
-		if err := w.Flush(); err != nil {
-			// Close connection
+
+		if n, err := conn.Write(w.Bytes()); err != nil {
+			log.Warn().Err(err).Msg("Peer data client flush resulted in error")
+			break
+		} else if n < w.Len() {
+			log.Warn().Msg("Peer data client write was not able to send all the data")
 			break
 		}
 	}
 
-	closeHandler()
+	closeHandler("writer")
 }

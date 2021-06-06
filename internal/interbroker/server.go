@@ -147,8 +147,8 @@ func (s *peerDataServer) serve() {
 	largeBodyBuf := make([]byte, s.config.MaxDataBodyLength())
 	c := bufio.NewReaderSize(s.conn, receiveBufferSize)
 	for {
-		if _, err := io.ReadFull(c, headerBuf); err != nil {
-			log.Warn().Msg("There was an error reading header from peer")
+		if n, err := io.ReadFull(c, headerBuf); err != nil {
+			log.Warn().Err(err).Int("n", n).Msg("There was an error reading header from peer client")
 			break
 		}
 		header, err := readHeader(headerBuf)
@@ -167,6 +167,7 @@ func (s *peerDataServer) serve() {
 			s.initialized = true
 			// It's the first message
 			if header.Op != startupOp {
+				log.Error().Msgf("Invalid first message %v", header.Op)
 				s.responses <- newErrorResponse("Invalid first message", header)
 				break
 			}
@@ -187,12 +188,13 @@ func (s *peerDataServer) serve() {
 			s.responses <- newErrorResponse("Parsing error", header)
 		} else {
 			if err = s.append(request); err == nil {
-				s.responses <- &emptyResponse{streamId: header.StreamId, op: dataOp}
+				s.responses <- &emptyResponse{streamId: header.StreamId, op: dataResponseOp}
 			} else {
 				s.responses <- newErrorResponse(fmt.Sprintf("Append error: %s", err.Error()), header)
 			}
 		}
 	}
+	log.Info().Msg("Data server reader closing connection")
 	_ = s.conn.Close()
 }
 
@@ -209,8 +211,8 @@ func (s *peerDataServer) parseDataRequest(body []byte) (*dataRequest, error) {
 	}
 
 	index := dataRequestMetaSize
-	topic := string(body[index : index+int(meta.topicLength)])
-	index += int(meta.topicLength)
+	topic := string(body[index : index+int(meta.TopicLength)])
+	index += int(meta.TopicLength)
 	request := &dataRequest{
 		meta:  meta,
 		topic: topic,
@@ -223,15 +225,22 @@ func (s *peerDataServer) parseDataRequest(body []byte) (*dataRequest, error) {
 func (s *peerDataServer) writeResponses() {
 	// TODO: Coalesce responses and disable Nagle
 
-	w := bufio.NewWriterSize(s.conn, maxDataResponseSize)
+	w := bytes.NewBuffer(make([]byte, 0, maxDataResponseSize))
 	for response := range s.responses {
-		w.Reset(w)
+		w.Reset()
 		if err := response.Marshal(w); err != nil {
-			log.Warn().Msg("There was an error while writing to peer, closing connection")
+			log.Warn().Err(err).Msg("There was an error while marshalling, closing connection")
 			break
 		}
-		w.Flush()
+		if n, err := s.conn.Write(w.Bytes()); err != nil {
+			log.Warn().Err(err).Msg("There was an error while writing to peer, closing connection")
+			break
+		} else if n < w.Len() {
+			log.Warn().Msg("Peer data server write was not able to send all the data")
+			break
+		}
 	}
 
+	log.Info().Msgf("Data server writer closing connection to %s", s.conn.RemoteAddr())
 	_ = s.conn.Close()
 }

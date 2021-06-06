@@ -132,7 +132,7 @@ type clientInfo struct {
 func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 	i := 0
 	for {
-		c, err := newDataConnection(c, config)
+		dataConn, err := newDataConnection(c, config)
 		if err != nil {
 			delay := math.Pow(2, float64(i)) * baseReconnectionDelay
 			if delay > maxReconnectionDelay {
@@ -140,6 +140,7 @@ func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 			} else {
 				i++
 			}
+			log.Info().Msgf("Client data connection to %s could not be opened, retrying", c.hostName)
 			// TODO: Add jitter
 			time.Sleep(time.Duration(delay) * time.Millisecond)
 			continue
@@ -149,7 +150,7 @@ func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 		i = 0
 
 		// Wait for connection to be closed
-		<-c.closed
+		<-dataConn.closed
 	}
 }
 

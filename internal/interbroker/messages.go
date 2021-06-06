@@ -1,7 +1,6 @@
 package interbroker
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"io"
@@ -23,7 +22,7 @@ const (
 
 // header is the interbroker message header
 type header struct {
-	// Strict ordering
+	// Strict ordering, exported fields
 	Version    uint8
 	StreamId   streamId
 	Op         opcode
@@ -37,12 +36,12 @@ const headerSize = 1 + // version
 	4 // length
 
 type dataRequestMeta struct {
-	// Strict ordering
-	segmentId int64
-	token     types.Token
-	genId     uint16
-	// topicLength is the size in bytes of the topic name
-	topicLength uint8
+	// Strict ordering, exported fields
+	SegmentId int64
+	Token     types.Token
+	GenId     uint16
+	// TopicLength is the size in bytes of the topic name
+	TopicLength uint8
 }
 
 const dataRequestMetaSize = 8 + // segment id
@@ -58,10 +57,10 @@ type dataRequest struct {
 }
 
 func (r *dataRequest) BodyLength() uint32 {
-	return uint32(dataRequestMetaSize) + uint32(r.meta.topicLength) + uint32(len(r.data))
+	return uint32(dataRequestMetaSize) + uint32(r.meta.TopicLength) + uint32(len(r.data))
 }
 
-func (r *dataRequest) Marshal(w *bufio.Writer, header *header) {
+func (r *dataRequest) Marshal(w types.StringWriter, header *header) {
 	writeHeader(w, header)
 	binary.Write(w, conf.Endianness, r.meta)
 	w.WriteString(r.topic)
