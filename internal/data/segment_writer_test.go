@@ -1,4 +1,4 @@
-package producing
+package data
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ var _ = Describe("segmentWriter", func() {
 	Describe("alignBuffer()", func() {
 		const alignment = 512
 		It("should complete the remaining length", func() {
-			s := &segmentWriter{
+			s := &SegmentWriter{
 				buffer: bytes.NewBuffer(make([]byte, 0)),
 			}
 

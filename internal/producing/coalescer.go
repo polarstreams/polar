@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/metrics"
 	"github.com/jorgebay/soda/internal/types"
@@ -26,7 +27,7 @@ type coalescer struct {
 	gossiper interbroker.Replicator
 	offset   uint64
 	buffers  buffers
-	segment  *segmentWriter
+	segment  *data.SegmentWriter
 }
 
 type record struct {
@@ -63,7 +64,7 @@ func newCoalescer(
 	config conf.ProducerConfig,
 	gossiper interbroker.Replicator,
 ) (*coalescer, error) {
-	s, err := newSegmentWriter(topic, gossiper, config)
+	s, err := data.NewSegmentWriter(topic, gossiper, config)
 
 	if err != nil {
 		return nil, err
@@ -142,10 +143,16 @@ func (c *coalescer) receive() {
 		metrics.CoalescerMessagesPerGroup.Observe(float64(len(group)))
 
 		// Send in the background while the next block is generated in the foreground
-		c.segment.items <- &dataItem{
+		c.segment.Items <- &localDataItem{
 			data:  data,
 			group: group,
 		}
+	}
+}
+
+func sendResponse(group []record, err error) {
+	for _, r := range group {
+		r.response <- err
 	}
 }
 
@@ -187,4 +194,24 @@ func (c *coalescer) append(replication types.ReplicationInfo, length int64, body
 	}
 	c.items <- record
 	return <-record.response
+}
+
+type localDataItem struct {
+	data  []byte
+	group []record
+}
+
+func (d *localDataItem) DataBlock() []byte {
+	return d.data
+}
+
+func (d *localDataItem) Replication() *types.ReplicationInfo {
+	// TODO: Maybe simplify, 1 replication info per generation
+	return &d.group[0].replication
+}
+
+func (d *localDataItem) SendResponse(err error) {
+	for _, r := range d.group {
+		r.response <- err
+	}
 }

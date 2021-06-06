@@ -1,4 +1,4 @@
-package producing
+package data
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/rs/zerolog/log"
@@ -21,40 +20,40 @@ const alignmentSize = 512
 
 var alignmentBuffer = createAlignmentBuffer()
 
-// segmentWriter contains the logic to write a segment on disk and replicate it.
-type segmentWriter struct {
-	items         chan *dataItem
+// SegmentWriter contains the logic to write a segment on disk and replicate it.
+type SegmentWriter struct {
+	Items         chan DataItem
 	segmentId     int64
 	buffer        *bytes.Buffer
 	lastFlush     time.Time
-	config        conf.ProducerConfig
+	config        conf.DatalogConfig
 	segmentFile   *os.File
 	segmentLength int
 	basePath      string
 	topic         types.TopicDataId
-	gossiper      interbroker.Replicator
+	replicator    interbroker.Replicator
 }
 
-func newSegmentWriter(
+func NewSegmentWriter(
 	topic types.TopicDataId,
 	gossiper interbroker.Replicator,
-	config conf.ProducerConfig,
-) (*segmentWriter, error) {
+	config conf.DatalogConfig,
+) (*SegmentWriter, error) {
 	basePath := config.DatalogPath(topic.Name, topic.Token, fmt.Sprint(topic.GenId))
 
-	s := &segmentWriter{
+	s := &SegmentWriter{
 		// Limit's to 1 outstanding write (the current one)
 		// The next group can be generated while the previous is being flushed and sent
-		items:       make(chan *dataItem, 0),
+		Items:       make(chan DataItem, 0),
 		buffer:      bytes.NewBuffer(make([]byte, 0, segmentMaxBufferSize)),
 		config:      config,
 		segmentFile: nil,
 		basePath:    basePath,
 		topic:       topic,
-		gossiper:    gossiper,
+		replicator:  gossiper,
 	}
 
-	if err := os.MkdirAll(basePath, data.DirectoryPermissions); err != nil {
+	if err := os.MkdirAll(basePath, DirectoryPermissions); err != nil {
 		return nil, err
 	}
 
@@ -63,33 +62,37 @@ func newSegmentWriter(
 	return s, nil
 }
 
-type dataItem struct {
-	data  []byte
-	group []record
+type DataItem interface {
+	DataBlock() []byte
+	Replication() *types.ReplicationInfo
+	SendResponse(error)
 }
 
-func (s *segmentWriter) appendAndSend() {
-	for item := range s.items {
+func (s *SegmentWriter) appendAndSend() {
+	for item := range s.Items {
 		s.maybeFlushSegment()
 		if item == nil {
 			// It was only a signal to flush the segment, no data, move on
 			continue
 		}
-		s.writeToSegmentBuffer(item.data)
+		s.writeToSegmentBuffer(item.DataBlock())
 		// Response channel should be buffered in case the response is discarded
 		response := make(chan error, 1)
 
-		// Start sending in the background while flushing is occurring
-		go s.send(item.data, item.group, response)
+		if replication := item.Replication(); replication != nil {
+			// Start sending in the background while flushing is occurring
+			go s.send(item.DataBlock(), *replication, response)
+		}
 
 		s.maybeFlushSegment()
-		sendResponse(item.group, <-response)
+
+		item.SendResponse(<-response)
 	}
 }
 
 // maybeFlushSegment will write to the file when the next group doesn't fit in memory
 // or time has passed since last flush
-func (s *segmentWriter) maybeFlushSegment() {
+func (s *SegmentWriter) maybeFlushSegment() {
 	if s.buffer.Len() == 0 {
 		// No data to flush yet
 		return
@@ -105,7 +108,7 @@ func (s *segmentWriter) maybeFlushSegment() {
 	if s.segmentFile == nil {
 		// Create new file
 		name := fmt.Sprintf("%20d.dlog", s.segmentId)
-		f, err := os.OpenFile(filepath.Join(s.basePath, name), conf.WriteFlags, data.FilePermissions)
+		f, err := os.OpenFile(filepath.Join(s.basePath, name), conf.WriteFlags, FilePermissions)
 		if err != nil {
 			// Can't create segment
 			log.Err(err).Msgf("Failed to create segment file at %s", s.basePath)
@@ -137,7 +140,7 @@ func (s *segmentWriter) maybeFlushSegment() {
 	return
 }
 
-func (s *segmentWriter) writeToSegmentBuffer(data []byte) {
+func (s *SegmentWriter) writeToSegmentBuffer(data []byte) {
 	if s.lastFlush.IsZero() {
 		s.lastFlush = time.Now()
 	}
@@ -147,15 +150,15 @@ func (s *segmentWriter) writeToSegmentBuffer(data []byte) {
 	s.buffer.Write(data)
 }
 
-func (c *segmentWriter) flushTimer() {
+func (c *SegmentWriter) flushTimer() {
 	for {
 		time.Sleep(flushResolution)
 		// Send a nil data item as an indication of a flush message
-		c.items <- nil
+		c.Items <- nil
 	}
 }
 
-func (s *segmentWriter) alignBuffer() {
+func (s *SegmentWriter) alignBuffer() {
 	rem := s.buffer.Len() % alignmentSize
 	if rem == 0 {
 		return
@@ -166,10 +169,8 @@ func (s *segmentWriter) alignBuffer() {
 	s.buffer.Write(alignmentBuffer[0:toAlign])
 }
 
-func (s *segmentWriter) send(block []byte, group []record, response chan error) {
-	// TODO: Maybe simplify, 1 replication info per generation
-	replicationInfo := group[0].replication
-	err := s.gossiper.SendToFollowers(replicationInfo, s.topic, s.segmentId, block)
+func (s *SegmentWriter) send(block []byte, replicationInfo types.ReplicationInfo, response chan error) {
+	err := s.replicator.SendToFollowers(replicationInfo, s.topic, s.segmentId, block)
 	response <- err
 }
 
@@ -179,10 +180,4 @@ func createAlignmentBuffer() []byte {
 		b[i] = 0xff
 	}
 	return b
-}
-
-func sendResponse(group []record, err error) {
-	for _, r := range group {
-		r.response <- err
-	}
 }

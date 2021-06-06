@@ -46,6 +46,9 @@ type LocalDbConfig interface {
 type DatalogConfig interface {
 	DatalogPath(topic string, token types.Token, genId string) string
 	MaxSegmentSize() int
+	MaxMessageSize() int
+	// MaxGroupSize is the maximum size of an uncompressed group of messages
+	MaxGroupSize() int
 }
 
 type DiscovererConfig interface {
@@ -60,9 +63,6 @@ type ProducerConfig interface {
 	DatalogConfig
 	ProducerPort() int
 	FlowController() FlowController
-	MaxMessageSize() int
-	// MaxGroupSize is the maximum size of an uncompressed group of messages
-	MaxGroupSize() int
 }
 
 type GossipConfig interface {

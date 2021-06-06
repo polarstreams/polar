@@ -3,7 +3,6 @@ package interbroker
 import (
 	"bufio"
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
@@ -185,7 +184,7 @@ func (s *peerDataServer) serve() {
 }
 
 func (s *peerDataServer) parseAndAppend(header *header, bodyBuf []byte, done chan bool) {
-	request, err := s.parseDataRequest(bodyBuf)
+	request, err := unmarshalDataRequest(bodyBuf)
 
 	if err != nil {
 		s.responses <- newErrorResponse("Parsing error", header)
@@ -199,29 +198,10 @@ func (s *peerDataServer) parseAndAppend(header *header, bodyBuf []byte, done cha
 	done <- true
 }
 
-func (s *peerDataServer) append(*dataRequest) error {
+func (s *peerDataServer) append(d *dataRequest) error {
 	metrics.InterbrokerReceivedMessages.Inc()
 	// TODO Implement
 	return nil
-}
-
-func (s *peerDataServer) parseDataRequest(body []byte) (*dataRequest, error) {
-	meta := dataRequestMeta{}
-	reader := bytes.NewReader(body)
-	if err := binary.Read(reader, conf.Endianness, &meta); err != nil {
-		return nil, err
-	}
-
-	index := dataRequestMetaSize
-	topic := string(body[index : index+int(meta.TopicLength)])
-	index += int(meta.TopicLength)
-	request := &dataRequest{
-		meta:  meta,
-		topic: topic,
-		data:  body[index:],
-	}
-
-	return request, nil
 }
 
 func (s *peerDataServer) writeResponses() {

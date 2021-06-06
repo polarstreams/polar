@@ -129,3 +129,22 @@ func unmarshallResponse(header *header, body []byte) dataResponse {
 		op:       header.Op,
 	}
 }
+
+func unmarshalDataRequest(body []byte) (*dataRequest, error) {
+	meta := dataRequestMeta{}
+	reader := bytes.NewReader(body)
+	if err := binary.Read(reader, conf.Endianness, &meta); err != nil {
+		return nil, err
+	}
+
+	index := dataRequestMetaSize
+	topic := string(body[index : index+int(meta.TopicLength)])
+	index += int(meta.TopicLength)
+	request := &dataRequest{
+		meta:  meta,
+		topic: topic,
+		data:  body[index:],
+	}
+
+	return request, nil
+}
