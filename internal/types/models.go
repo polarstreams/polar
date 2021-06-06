@@ -35,4 +35,10 @@ type TopicDataId struct {
 	GenId uint16
 }
 
+// Replicator contains logic to send data to replicas
+type Replicator interface {
+	// Sends a message to be stored as replica of current broker's datalog
+	SendToFollowers(replicationInfo ReplicationInfo, topic TopicDataId, segmentId int64, body []byte) error
+}
+
 type TopologyChangeHandler func()

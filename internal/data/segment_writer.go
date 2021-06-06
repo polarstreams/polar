@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/rs/zerolog/log"
 )
@@ -31,12 +30,12 @@ type SegmentWriter struct {
 	segmentLength int
 	basePath      string
 	topic         types.TopicDataId
-	replicator    interbroker.Replicator
+	replicator    types.Replicator
 }
 
 func NewSegmentWriter(
 	topic types.TopicDataId,
-	gossiper interbroker.Replicator,
+	gossiper types.Replicator,
 	config conf.DatalogConfig,
 ) (*SegmentWriter, error) {
 	basePath := config.DatalogPath(topic.Name, topic.Token, fmt.Sprint(topic.GenId))
@@ -65,7 +64,7 @@ func NewSegmentWriter(
 type DataItem interface {
 	DataBlock() []byte
 	Replication() *types.ReplicationInfo
-	SendResponse(error)
+	SetResult(error)
 }
 
 func (s *SegmentWriter) appendAndSend() {
@@ -86,7 +85,7 @@ func (s *SegmentWriter) appendAndSend() {
 
 		s.maybeFlushSegment()
 
-		item.SendResponse(<-response)
+		item.SetResult(<-response)
 	}
 }
 

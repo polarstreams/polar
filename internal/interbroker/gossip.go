@@ -7,6 +7,7 @@ import (
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/types"
+	"github.com/jorgebay/soda/internal/utils"
 )
 
 // TODO: Pass Context
@@ -14,7 +15,7 @@ import (
 // Gossiper is responsible for communicating with other peers.
 type Gossiper interface {
 	types.Initializer
-	Replicator
+	types.Replicator
 
 	// Starts accepting connections from peers.
 	AcceptConnections() error
@@ -32,6 +33,7 @@ func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Goss
 		discoverer:       discoverer,
 		connectionsMutex: sync.Mutex{},
 		connections:      atomic.Value{},
+		replicaWriters:   utils.NewCopyOnWriteMap(),
 	}
 }
 
@@ -39,7 +41,10 @@ type gossiper struct {
 	config           conf.GossipConfig
 	discoverer       discovery.Discoverer
 	connectionsMutex sync.Mutex
-	connections      atomic.Value // Map of connections
+	// Map of connections
+	connections atomic.Value
+	// Map of SegmentWriter to be use for replicating data as a replica
+	replicaWriters *utils.CopyOnWriteMap
 }
 
 func (g *gossiper) Init() error {

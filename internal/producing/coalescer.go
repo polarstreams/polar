@@ -7,7 +7,6 @@ import (
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/data"
-	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/metrics"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/klauspost/compress/zstd"
@@ -21,13 +20,13 @@ const writeConcurrencyLevel = 2
 var lengthBuffer []byte = []byte{0, 0, 0, 0}
 
 type coalescer struct {
-	items    chan *record
-	topic    types.TopicDataId
-	config   conf.ProducerConfig
-	gossiper interbroker.Replicator
-	offset   uint64
-	buffers  buffers
-	segment  *data.SegmentWriter
+	items      chan *record
+	topic      types.TopicDataId
+	config     conf.ProducerConfig
+	replicator types.Replicator
+	offset     uint64
+	buffers    buffers
+	segment    *data.SegmentWriter
 }
 
 type record struct {
@@ -62,22 +61,22 @@ func newBuffers(config conf.ProducerConfig) buffers {
 func newCoalescer(
 	topic types.TopicDataId,
 	config conf.ProducerConfig,
-	gossiper interbroker.Replicator,
+	replicator types.Replicator,
 ) (*coalescer, error) {
-	s, err := data.NewSegmentWriter(topic, gossiper, config)
+	s, err := data.NewSegmentWriter(topic, replicator, config)
 
 	if err != nil {
 		return nil, err
 	}
 
 	c := &coalescer{
-		items:    make(chan *record, 0),
-		topic:    topic,
-		config:   config,
-		gossiper: gossiper,
-		offset:   0, // TODO: Set the initial offset
-		buffers:  newBuffers(config),
-		segment:  s,
+		items:      make(chan *record, 0),
+		topic:      topic,
+		config:     config,
+		replicator: replicator,
+		offset:     0, // TODO: Set the initial offset
+		buffers:    newBuffers(config),
+		segment:    s,
 	}
 	// Start receiving in the background
 	go c.receive()
@@ -210,7 +209,7 @@ func (d *localDataItem) Replication() *types.ReplicationInfo {
 	return &d.group[0].replication
 }
 
-func (d *localDataItem) SendResponse(err error) {
+func (d *localDataItem) SetResult(err error) {
 	for _, r := range d.group {
 		r.response <- err
 	}

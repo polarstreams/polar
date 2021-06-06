@@ -9,7 +9,9 @@ import (
 	"net/http"
 
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/metrics"
+	"github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
@@ -116,19 +118,23 @@ func (g *gossiper) acceptDataConnections() error {
 
 func (g *gossiper) handleData(conn net.Conn) {
 	s := &peerDataServer{
-		conn:      conn,
-		config:    g.config,
-		responses: make(chan dataResponse, 512),
+		conn:           conn,
+		config:         g.config,
+		replicaWriters: g.replicaWriters,
+		responses:      make(chan dataResponse, 512),
 	}
 	go s.serve()
 	go s.writeResponses()
 }
 
+// peerDataServer represents a handler for individual connections initiated
+// by a peer client
 type peerDataServer struct {
-	conn        net.Conn
-	initialized bool
-	config      conf.GossipConfig
-	responses   chan dataResponse
+	conn           net.Conn
+	initialized    bool
+	config         conf.GossipConfig
+	replicaWriters *utils.CopyOnWriteMap
+	responses      chan dataResponse
 }
 
 func (s *peerDataServer) serve() {
@@ -189,19 +195,55 @@ func (s *peerDataServer) parseAndAppend(header *header, bodyBuf []byte, done cha
 	if err != nil {
 		s.responses <- newErrorResponse("Parsing error", header)
 	} else {
-		if err = s.append(request); err == nil {
-			s.responses <- &emptyResponse{streamId: header.StreamId, op: dataResponseOp}
-		} else {
-			s.responses <- newErrorResponse(fmt.Sprintf("Append error: %s", err.Error()), header)
-		}
+		s.responses <- s.append(request, header)
 	}
 	done <- true
 }
 
-func (s *peerDataServer) append(d *dataRequest) error {
-	metrics.InterbrokerReceivedMessages.Inc()
-	// TODO Implement
-	return nil
+// append stores data as a replica
+func (s *peerDataServer) append(d *dataRequest, requestHeader *header) dataResponse {
+	metrics.InterbrokerReceivedGroups.Inc()
+	writer, err := s.segmentWriter(d)
+
+	if err != nil {
+		return nil
+	}
+
+	// Use a channel for the result
+	d.appendResult = make(chan error, 1)
+
+	// Send it to the writer
+	writer.Items <- d
+
+	// Wait for the result
+	if err = <-d.appendResult; err != nil {
+		return newErrorResponse(fmt.Sprintf("Append error: %s", err.Error()), requestHeader)
+	}
+
+	return &emptyResponse{streamId: requestHeader.StreamId, op: dataResponseOp}
+}
+
+func (s *peerDataServer) segmentWriter(d *dataRequest) (*data.SegmentWriter, error) {
+	topic := d.topicId()
+	key := getReplicaWriterKey(&topic, d.meta.SegmentId)
+	writer, loaded, err := s.replicaWriters.LoadOrStore(key, func() (interface{}, error) {
+		return data.NewSegmentWriter(topic, nil, s.config)
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !loaded {
+		log.Debug().Msgf("Created segment writer for topic '%s' and token %d", topic.Name, topic.Token)
+	}
+
+	return writer.(*data.SegmentWriter), nil
+}
+
+func getReplicaWriterKey(topic *types.TopicDataId, segmentId int64) string {
+	// TODO: We need an internal map per token/genId to allow new segment ids
+	return fmt.Sprintf("%s|%d|%d|%d", topic.Name, topic.Token, topic.GenId, segmentId)
 }
 
 func (s *peerDataServer) writeResponses() {

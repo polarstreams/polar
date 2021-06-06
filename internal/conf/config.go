@@ -67,6 +67,7 @@ type ProducerConfig interface {
 
 type GossipConfig interface {
 	BasicConfig
+	DatalogConfig
 	GossipPort() int
 	GossipDataPort() int
 	// MaxDataBodyLength is the maximum size of an interbroker data body

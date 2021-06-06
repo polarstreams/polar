@@ -24,9 +24,9 @@ var (
 		Buckets: prometheus.ExponentialBuckets(1, 4, 9), // buckets from 1 to 262144
 	})
 
-	InterbrokerReceivedMessages = promauto.NewCounter(prometheus.CounterOpts{
+	InterbrokerReceivedGroups = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "soda_interbroker_received_coalesced_total",
-		Help: "The total number of received message by the interbroker data server",
+		Help: "The total number of coalesced group messages received by the interbroker data server",
 	})
 )
 

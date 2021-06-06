@@ -50,14 +50,29 @@ const dataRequestMetaSize = 8 + // segment id
 	1 // topicLength
 
 type dataRequest struct {
-	meta     dataRequestMeta
-	topic    string
-	data     []byte
+	meta  dataRequestMeta
+	topic string
+	data  []byte
+	// response from replica
 	response chan dataResponse
+	// result from append as a replica
+	appendResult chan error
 }
 
 func (r *dataRequest) BodyLength() uint32 {
 	return uint32(dataRequestMetaSize) + uint32(r.meta.TopicLength) + uint32(len(r.data))
+}
+
+func (r *dataRequest) DataBlock() []byte {
+	return r.data
+}
+
+func (r *dataRequest) Replication() *types.ReplicationInfo {
+	return nil
+}
+
+func (r *dataRequest) SetResult(err error) {
+	r.appendResult <- err
 }
 
 func (r *dataRequest) Marshal(w types.StringWriter, header *header) {
@@ -65,6 +80,14 @@ func (r *dataRequest) Marshal(w types.StringWriter, header *header) {
 	binary.Write(w, conf.Endianness, r.meta)
 	w.WriteString(r.topic)
 	w.Write(r.data)
+}
+
+func (r *dataRequest) topicId() types.TopicDataId {
+	return types.TopicDataId{
+		Name:  r.topic,
+		Token: r.meta.Token,
+		GenId: r.meta.GenId,
+	}
 }
 
 type dataResponse interface {
@@ -130,6 +153,7 @@ func unmarshallResponse(header *header, body []byte) dataResponse {
 	}
 }
 
+// decodes into a data request (without response channel)
 func unmarshalDataRequest(body []byte) (*dataRequest, error) {
 	meta := dataRequestMeta{}
 	reader := bytes.NewReader(body)

@@ -7,11 +7,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type Replicator interface {
-	// Sends a message to be stored as replica of current broker's datalog
-	SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId int64, body []byte) error
-}
-
 func (g *gossiper) SendToFollowers(
 	replicationInfo types.ReplicationInfo,
 	topic types.TopicDataId,
