@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/metrics"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/rs/zerolog/log"
 )
@@ -177,17 +178,19 @@ func (s *SegmentWriter) flush(reason string) {
 		Str("reason", reason).
 		Msgf("Flushing segment file %d for topic '%s' and token %d", s.segmentId, s.topic.Name, s.topic.Token)
 
+	length := s.buffer.Len()
+
 	// Sync copy the buffer to the file
-	s.segmentFile.Write(s.buffer.Bytes())
-	if _, err := s.buffer.WriteTo(s.segmentFile); err != nil {
+	if _, err := s.segmentFile.Write(s.buffer.Bytes()); err != nil {
 		// Data loss, we should panic
 		log.Err(err).Msgf("Failed to write to segment file %d at %s", s.segmentId, s.basePath)
 		panic(err)
 	}
 
-	s.segmentLength += s.buffer.Len()
+	s.segmentLength += length
 	s.buffer.Reset()
 	s.lastFlush = time.Now()
+	metrics.SegmentFlushKib.Observe(float64(length) / 1024)
 }
 
 // maybeCloseSegment determines whether the segment file should be closed.
@@ -213,6 +216,7 @@ func (s *SegmentWriter) closeFile(newSegmentId int64) {
 
 	s.segmentFile = nil
 	s.segmentId = newSegmentId
+	s.segmentLength = 0
 }
 
 func (s *SegmentWriter) writeToBuffer(data []byte) {
