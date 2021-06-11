@@ -149,6 +149,7 @@ func (p *producer) getCoalescer(topicName string, token types.Token) (*coalescer
 		// TODO: Define genId (i.e: v1)
 		GenId: 0,
 	}
+	// TODO: Use TopicDataId as coalescer key (per generation)
 	c, loaded, err := p.coalescerMap.LoadOrStore(topicName, func() (interface{}, error) {
 		// Creating the appender is a blocking call
 		return newCoalescer(topic, p.config, p.gossiper)

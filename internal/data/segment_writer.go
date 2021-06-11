@@ -13,7 +13,7 @@ import (
 )
 
 const flushResolution = 200 * time.Millisecond
-const flushInterval = 2 * time.Second
+const flushInterval = 5 * time.Second
 const segmentMaxBufferSize = 32 * conf.Mib
 const alignmentSize = 512
 
@@ -59,60 +59,93 @@ func NewSegmentWriter(
 	}
 
 	if segmentId == 0 {
+		log.Debug().Msgf("Creating segment writer for token %d and topic '%s' as leader", topic.Token, topic.Name)
 		s.segmentId = time.Now().UnixNano()
+		go s.appendAsLeader()
+	} else {
+		log.Debug().Msgf("Creating segment writer for token %d and topic '%s' as replica", topic.Token, topic.Name)
+		go s.appendAsReplica()
 	}
 
 	go s.flushTimer()
-	go s.appendAndSend()
 	return s, nil
 }
 
 type DataItem interface {
 	DataBlock() []byte
 	Replication() *types.ReplicationInfo
+	SegmentId() int64
 	SetResult(error)
 }
 
-func (s *SegmentWriter) appendAndSend() {
+// appendAsLeader appends to the local file and sends to replicas
+func (s *SegmentWriter) appendAsLeader() {
 	for item := range s.Items {
-		s.maybeFlushSegment()
+		if s.maybeFlush() {
+			s.maybeCloseSegment()
+		}
+
 		if item == nil {
 			// It was only a signal to flush the segment, no data, move on
 			continue
 		}
 
-		s.writeToSegmentBuffer(item.DataBlock())
+		s.writeToBuffer(item.DataBlock())
 
 		// Response channel should be buffered in case the response is discarded
 		response := make(chan error, 1)
 
-		if replication := item.Replication(); replication != nil {
-			// Start sending in the background while flushing is occurring
-			go s.send(item.DataBlock(), *replication, response)
-		} else {
-			response <- nil
-		}
+		// Start sending in the background while flushing is occurring
+		go s.send(item.DataBlock(), *item.Replication(), s.segmentId, response)
 
 		// Check whether to flush before blocking again in the for loop
-		s.maybeFlushSegment()
+		if s.maybeFlush() {
+			// Check whether the file has to be closed
+			s.maybeCloseSegment()
+		}
 
 		item.SetResult(<-response)
 	}
 }
 
-// maybeFlushSegment will write to the file when the next group doesn't fit in memory
+// appendAsReplica appends to local file as replica
+func (s *SegmentWriter) appendAsReplica() {
+	for item := range s.Items {
+		s.maybeFlush()
+		if item == nil {
+			// It was only a signal to flush the segment, no data, move on
+			continue
+		}
+
+		if s.segmentId != item.SegmentId() {
+			if s.buffer.Len() > 0 {
+				s.flush("closing")
+			}
+			s.closeFile(item.SegmentId())
+		}
+
+		s.writeToBuffer(item.DataBlock())
+
+		// Check whether to flush before blocking again in the for loop
+		s.maybeFlush()
+
+		item.SetResult(nil)
+	}
+}
+
+// maybeFlush will write to the file when the next group doesn't fit in memory
 // or time has passed since last flush
-func (s *SegmentWriter) maybeFlushSegment() {
+func (s *SegmentWriter) maybeFlush() bool {
 	if s.buffer.Len() == 0 {
 		// No data to flush yet
-		return
+		return false
 	}
 
 	canBufferNextGroup := s.buffer.Len()+s.config.MaxGroupSize() < segmentMaxBufferSize
 	if canBufferNextGroup && time.Now().Sub(s.lastFlush) < flushInterval {
 		// Time has not passed and there's enough capacity
 		// in the buffer for the next group
-		return
+		return false
 	}
 
 	if s.segmentFile == nil {
@@ -127,9 +160,22 @@ func (s *SegmentWriter) maybeFlushSegment() {
 		s.segmentFile = f
 	}
 
+	reason := "timer"
+	if !canBufferNextGroup {
+		reason = "buffer size"
+	}
+
+	s.flush(reason)
+
+	return true
+}
+
+func (s *SegmentWriter) flush(reason string) {
 	s.alignBuffer()
 
-	log.Debug().Msgf("Flushing segment file %d for topic '%s' and token %d", s.segmentId, s.topic.Name, s.topic.Token)
+	log.Debug().
+		Str("reason", reason).
+		Msgf("Flushing segment file %d for topic '%s' and token %d", s.segmentId, s.topic.Name, s.topic.Token)
 
 	// Sync copy the buffer to the file
 	s.segmentFile.Write(s.buffer.Bytes())
@@ -140,21 +186,38 @@ func (s *SegmentWriter) maybeFlushSegment() {
 	}
 
 	s.segmentLength += s.buffer.Len()
-
-	if s.segmentLength+segmentMaxBufferSize > s.config.MaxSegmentSize() {
-		// Close the file
-		log.Err(s.segmentFile.Close()).Msgf("Segment file %d closed", s.segmentId)
-		s.segmentFile = nil
-	}
-
 	s.buffer.Reset()
 	s.lastFlush = time.Now()
-
-	return
 }
 
-func (s *SegmentWriter) writeToSegmentBuffer(data []byte) {
-	if s.lastFlush.IsZero() {
+// maybeCloseSegment determines whether the segment file should be closed.
+func (s *SegmentWriter) maybeCloseSegment() {
+	if s.segmentLength+segmentMaxBufferSize > s.config.MaxSegmentSize() {
+		s.closeFile(time.Now().UnixNano())
+	}
+}
+
+func (s *SegmentWriter) closeFile(newSegmentId int64) {
+	previousSegmentId := s.segmentId
+	previousFile := s.segmentFile
+	log.Debug().
+		Msgf("Closing segment file %d for topic '%s' and token %d", previousSegmentId, s.topic.Name, s.topic.Token)
+
+	// Close the file in the background
+	go func() {
+		log.
+			Err(previousFile.Close()).
+			Msgf("Segment file %d closed for topic '%s' and token %d",
+				previousSegmentId, s.topic.Name, s.topic.Token)
+	}()
+
+	s.segmentFile = nil
+	s.segmentId = newSegmentId
+}
+
+func (s *SegmentWriter) writeToBuffer(data []byte) {
+	if s.lastFlush.IsZero() || s.buffer.Len() == 0 {
+		// When the buffer was previously empty, we should reset the flush check logic
 		s.lastFlush = time.Now()
 	}
 	s.buffer.Write(data)
@@ -179,8 +242,13 @@ func (s *SegmentWriter) alignBuffer() {
 	s.buffer.Write(alignmentBuffer[0:toAlign])
 }
 
-func (s *SegmentWriter) send(block []byte, replicationInfo types.ReplicationInfo, response chan error) {
-	err := s.replicator.SendToFollowers(replicationInfo, s.topic, s.segmentId, block)
+func (s *SegmentWriter) send(
+	block []byte,
+	replicationInfo types.ReplicationInfo,
+	segmentId int64,
+	response chan error,
+) {
+	err := s.replicator.SendToFollowers(replicationInfo, s.topic, segmentId, block)
 	response <- err
 }
 

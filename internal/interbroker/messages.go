@@ -71,6 +71,10 @@ func (r *dataRequest) Replication() *types.ReplicationInfo {
 	return nil
 }
 
+func (r *dataRequest) SegmentId() int64 {
+	return r.meta.SegmentId
+}
+
 func (r *dataRequest) SetResult(err error) {
 	r.appendResult <- err
 }

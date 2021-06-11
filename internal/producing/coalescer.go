@@ -209,6 +209,10 @@ func (d *localDataItem) Replication() *types.ReplicationInfo {
 	return &d.group[0].replication
 }
 
+func (d *localDataItem) SegmentId() int64 {
+	return 0
+}
+
 func (d *localDataItem) SetResult(err error) {
 	for _, r := range d.group {
 		r.response <- err
