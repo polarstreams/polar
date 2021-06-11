@@ -12,7 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const maxStreamIds = 512
+const maxStreamIds = 1024
 
 // dataConnection represents a client TCP data connection
 type dataConnection struct {
@@ -147,6 +147,17 @@ func (c *dataConnection) writeDataRequests(conn net.Conn, config conf.GossipConf
 		header.StreamId = streamId
 		header.BodyLength = message.BodyLength()
 		message.Marshal(w, &header)
+
+		if message.ctxt.Err() != nil {
+			// I can't use the message as it reached the deadline/was cancelled
+			// The message slice is out of date
+			c.streamIds <- streamId
+			//TODO: Use a better error
+			//TODO: Add metrics by data connection host: replicatedMissedWrites
+			message.response <- newErrorResponse(message.ctxt.Err().Error(), &header)
+			continue
+		}
+
 		// Create the func that will be invoked on response
 		c.handlers.Store(header.StreamId, func(res dataResponse) {
 			message.response <- res

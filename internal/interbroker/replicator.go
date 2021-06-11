@@ -2,10 +2,14 @@ package interbroker
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/net/context"
 )
+
+const replicationTimeout = 1 * time.Second
 
 func (g *gossiper) SendToFollowers(
 	replicationInfo types.ReplicationInfo,
@@ -20,6 +24,9 @@ func (g *gossiper) SendToFollowers(
 	}
 	sent := 0
 	response := make(chan dataResponse, 1)
+	//TODO: Use deadline for the parent request itself
+	ctxt, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	defer cancel()
 	for _, broker := range replicationInfo.Followers {
 		c, ok := peers[broker.Ordinal]
 		if !ok {
@@ -35,6 +42,7 @@ func (g *gossiper) SendToFollowers(
 				TopicLength: uint8(len(topic.Name)),
 			},
 			topic: topic.Name,
+			ctxt:  ctxt,
 			// TODO: Copy the byte slice, otherwise is unsafe!
 			data:     body,
 			response: response,
@@ -50,7 +58,13 @@ func (g *gossiper) SendToFollowers(
 
 	// Return as soon there's a successful response
 	for i := 0; i < sent; i++ {
-		r := <-response
+		var r dataResponse
+		select {
+		case <-ctxt.Done():
+			return ctxt.Err()
+		case r = <-response:
+			break
+		}
 
 		if eResponse, ok := r.(*errorResponse); ok {
 			if i < sent-1 {

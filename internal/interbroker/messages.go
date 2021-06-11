@@ -2,6 +2,7 @@ package interbroker
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"io"
 
@@ -57,6 +58,7 @@ type dataRequest struct {
 	response chan dataResponse
 	// result from append as a replica
 	appendResult chan error
+	ctxt         context.Context
 }
 
 func (r *dataRequest) BodyLength() uint32 {
