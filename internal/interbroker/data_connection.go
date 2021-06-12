@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -137,8 +138,7 @@ func (c *dataConnection) readDataResponses(conn net.Conn, config conf.GossipConf
 }
 
 func (c *dataConnection) writeDataRequests(conn net.Conn, config conf.GossipConfig, closeHandler func(string)) {
-	w := bytes.NewBuffer(make([]byte, 0, config.MaxDataBodyLength()+headerSize+dataRequestMetaSize+conf.MaxTopicLength))
-	// TODO: Coalesce smaller messages with channel select
+	w := utils.NewBufferCap(config.MaxDataBodyLength() + headerSize + dataRequestMetaSize + conf.MaxTopicLength)
 	header := header{Version: 1, Op: dataOp}
 
 	for message := range c.cli.dataMessages {
@@ -146,8 +146,10 @@ func (c *dataConnection) writeDataRequests(conn net.Conn, config conf.GossipConf
 		streamId := <-c.streamIds
 		header.StreamId = streamId
 		header.BodyLength = message.BodyLength()
+		// Each message represents a group of messages
 		message.Marshal(w, &header)
 
+		// After copying to the underlying buffer, we check whether we can use it
 		if message.ctxt.Err() != nil {
 			// I can't use the message as it reached the deadline/was cancelled
 			// The message slice is out of date

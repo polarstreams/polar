@@ -9,6 +9,7 @@ import (
 	"github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/metrics"
 	"github.com/jorgebay/soda/internal/types"
+	"github.com/jorgebay/soda/internal/utils"
 	"github.com/klauspost/compress/zstd"
 	"github.com/rs/zerolog/log"
 )
@@ -50,7 +51,7 @@ func newBuffers(config conf.ProducerConfig) buffers {
 		compressor: [writeConcurrencyLevel]*zstd.Encoder{},
 	}
 	for i := 0; i < writeConcurrencyLevel; i++ {
-		b := bytes.NewBuffer(make([]byte, 0, initCapacity))
+		b := utils.NewBufferCap(initCapacity)
 		compressor, _ := zstd.NewWriter(b, zstd.WithEncoderCRC(true), zstd.WithEncoderLevel(zstd.SpeedDefault))
 		result.group[i] = b
 		result.compressor[i] = compressor

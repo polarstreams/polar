@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 
@@ -30,6 +31,11 @@ func ToHandle(he HandleWithError) httprouter.Handle {
 			fmt.Fprintf(w, err.Error())
 		}
 	}
+}
+
+// NewBufferCap returns a buffer with the initial provided initial capacity
+func NewBufferCap(initialCap int) *bytes.Buffer {
+	return bytes.NewBuffer(make([]byte, 0, initialCap))
 }
 
 // GetServiceAddress determines whether it should be bind to all interfaces or it should use a single host name

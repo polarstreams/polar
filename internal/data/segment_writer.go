@@ -10,6 +10,7 @@ import (
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/metrics"
 	"github.com/jorgebay/soda/internal/types"
+	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -46,7 +47,7 @@ func NewSegmentWriter(
 		// Limit's to 1 outstanding write (the current one)
 		// The next group can be generated while the previous is being flushed and sent
 		Items:       make(chan DataItem, 0),
-		buffer:      bytes.NewBuffer(make([]byte, 0, segmentMaxBufferSize)),
+		buffer:      utils.NewBufferCap(segmentMaxBufferSize),
 		config:      config,
 		segmentFile: nil,
 		basePath:    basePath,

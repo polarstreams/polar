@@ -12,7 +12,7 @@ var _ = Describe("segmentWriter", func() {
 		const alignment = 512
 		It("should complete the remaining length", func() {
 			s := &SegmentWriter{
-				buffer: bytes.NewBuffer(make([]byte, 0)),
+				buffer: new(bytes.Buffer),
 			}
 
 			s.alignBuffer()

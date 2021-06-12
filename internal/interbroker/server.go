@@ -2,7 +2,6 @@ package interbroker
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -245,7 +244,7 @@ func getReplicaWriterKey(topic *types.TopicDataId) string {
 func (s *peerDataServer) writeResponses() {
 	// TODO: Coalesce responses and disable Nagle
 
-	w := bytes.NewBuffer(make([]byte, 0, maxDataResponseSize))
+	w := utils.NewBufferCap(maxDataResponseSize)
 	for response := range s.responses {
 		w.Reset()
 		if err := response.Marshal(w); err != nil {

@@ -18,7 +18,7 @@ func Test(t *testing.T) {
 
 var _ = Describe("errorResponse", func() {
 	It("should be marshal into bytes", func() {
-		buffer := bytes.NewBuffer(make([]byte, 0))
+		buffer := new(bytes.Buffer)
 		for i := 0; i < 20; i++ {
 			buffer.Reset()
 			message := fmt.Sprintf("Hello world %d", i)

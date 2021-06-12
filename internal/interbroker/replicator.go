@@ -24,9 +24,26 @@ func (g *gossiper) SendToFollowers(
 	}
 	sent := 0
 	response := make(chan dataResponse, 1)
-	//TODO: Use deadline for the parent request itself
+
+	// The provided body is only valid for the lifetime of this call
+	// By using a context, we make sure the client doesn't use the
+	// body after this function returned (e.g. timed out or one of the replicas responded with success)
 	ctxt, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
+
+	request := &dataRequest{
+		meta: dataRequestMeta{
+			SegmentId:   segmentId,
+			Token:       topic.Token,
+			GenId:       topic.GenId,
+			TopicLength: uint8(len(topic.Name)),
+		},
+		topic:    topic.Name,
+		ctxt:     ctxt,
+		data:     body,
+		response: response,
+	}
+
 	for _, broker := range replicationInfo.Followers {
 		c, ok := peers[broker.Ordinal]
 		if !ok {
@@ -34,19 +51,6 @@ func (g *gossiper) SendToFollowers(
 			continue
 		}
 		sent += 1
-		request := &dataRequest{
-			meta: dataRequestMeta{
-				SegmentId:   segmentId,
-				Token:       topic.Token,
-				GenId:       topic.GenId,
-				TopicLength: uint8(len(topic.Name)),
-			},
-			topic: topic.Name,
-			ctxt:  ctxt,
-			// TODO: Copy the byte slice, otherwise is unsafe!
-			data:     body,
-			response: response,
-		}
 		go func() {
 			c.dataMessages <- request
 		}()
