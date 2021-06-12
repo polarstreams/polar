@@ -42,3 +42,9 @@ type Replicator interface {
 }
 
 type TopologyChangeHandler func()
+
+type Generation struct {
+	Token     Token
+	Leader    int
+	Followers []int
+}

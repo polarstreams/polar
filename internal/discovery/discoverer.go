@@ -17,11 +17,14 @@ const (
 )
 
 // Discoverer provides the cluster topology information.
+//
+// It emits events that others like Gossipper listens to.
 type Discoverer interface {
 	types.Initializer
 	LeaderGetter
 	Peers() []types.BrokerInfo
 	RegisterListener(l types.TopologyChangeHandler)
+	TokenByOrdinal(ordinal int) types.Token
 	Shutdown()
 }
 
@@ -110,6 +113,10 @@ func parseFixedBrokers(ordinal int) []types.BrokerInfo {
 
 func (d *discoverer) GetBrokerInfo() *types.BrokerInfo {
 	return &d.brokers[d.ordinal]
+}
+
+func (d *discoverer) TokenByOrdinal(ordinal int) types.Token {
+	return d.ring[ordinal]
 }
 
 func (d *discoverer) GetLeader(partitionKey string) types.ReplicationInfo {

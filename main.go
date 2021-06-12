@@ -2,9 +2,11 @@ package main
 
 import (
 	"flag"
+	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/data"
@@ -13,6 +15,7 @@ import (
 	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/localdb"
 	"github.com/jorgebay/soda/internal/metrics"
+	"github.com/jorgebay/soda/internal/ownership"
 	"github.com/jorgebay/soda/internal/producing"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/rs/zerolog"
@@ -22,6 +25,7 @@ import (
 func main() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	log.Info().Msg("Starting Soda")
+	rand.Seed(time.Now().UTC().UnixNano())
 
 	debug := flag.Bool("debug", false, "sets log level to debug")
 	flag.Parse()
@@ -38,9 +42,10 @@ func main() {
 	discoverer := discovery.NewDiscoverer(config)
 	datalog := data.NewDatalog(config)
 	gossiper := interbroker.NewGossiper(config, discoverer)
+	generator := ownership.NewGenerator(discoverer)
 	producer := producing.NewProducer(config, topicHandler, discoverer, datalog, gossiper)
 
-	toInit := []types.Initializer{localDbClient, topicHandler, discoverer, gossiper, producer}
+	toInit := []types.Initializer{localDbClient, topicHandler, discoverer, gossiper, generator, producer}
 
 	for _, item := range toInit {
 		if err := item.Init(); err != nil {
