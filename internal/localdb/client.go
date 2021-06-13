@@ -23,6 +23,7 @@ func NewClient(config conf.LocalDbConfig) Client {
 	return &client{
 		config:  config,
 		dbIsNew: false,
+		queries: queries{},
 	}
 }
 
@@ -30,6 +31,7 @@ type client struct {
 	config  conf.LocalDbConfig
 	dbIsNew bool
 	db      *sql.DB
+	queries queries
 }
 
 func (c *client) Init() error {
@@ -47,6 +49,23 @@ func (c *client) Init() error {
 		return err
 	}
 
+	existing, err := c.hasLocalInfo()
+	if err != nil {
+		return err
+	}
+
+	if existing {
+		if err := c.setCurrentSchemaVersion(); err != nil {
+			return err
+		}
+	} else {
+		c.dbIsNew = true
+		if err := c.createLocalInfo(); err != nil {
+			return nil
+		}
+	}
+
+	c.prepareQueries()
 	return nil
 }
 
@@ -55,5 +74,6 @@ func (c *client) DbWasNewlyCreated() bool {
 }
 
 func (c *client) Close() {
+	_ = c.queries.selectGenerations.Close()
 	log.Err(c.db.Close()).Msg("Local db closed")
 }

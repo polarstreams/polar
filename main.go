@@ -60,11 +60,15 @@ func main() {
 		log.Fatal().Err(err).Msg("Exiting")
 	}
 
-	if err := producer.AcceptConnections(); err != nil {
+	if err := gossiper.OpenConnections(); err != nil {
 		log.Fatal().Err(err).Msg("Exiting")
 	}
 
-	if err := gossiper.OpenConnections(); err != nil {
+	gossiper.WaitForPeersUp()
+
+	generator.StartGenerations()
+
+	if err := producer.AcceptConnections(); err != nil {
 		log.Fatal().Err(err).Msg("Exiting")
 	}
 

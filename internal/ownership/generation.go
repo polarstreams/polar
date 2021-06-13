@@ -2,6 +2,7 @@ package ownership
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"sync/atomic"
 	"time"
@@ -17,6 +18,7 @@ const maxInitElapsed = 10 * time.Second
 
 type Generator interface {
 	types.Initializer
+	StartGenerations()
 }
 
 type generator struct {
@@ -41,16 +43,31 @@ func NewGenerator(discoverer discovery.Discoverer) Generator {
 }
 
 func (o *generator) Init() error {
-	// At this point in time, the cluster has been discovered
-	return o.startNew(maxInitElapsed)
+	// At this point in time, the cluster has been discovered but no connection to peers have been made
+	return nil
+}
+
+func (o *generator) StartGenerations() {
+	started := make(chan bool, 1)
+	go func() {
+		started <- true
+		if err := o.startNew(maxInitElapsed); err != nil {
+			log.Warn().Msgf("Initial generation could not be created after %.0fs", maxInitElapsed.Seconds())
+
+			// TODO: Retry
+		}
+	}()
+	<-started
 }
 
 func (o *generator) startNew(maxElapsed time.Duration) error {
 	self := o.discoverer.GetBrokerInfo()
 	peers := o.discoverer.Peers()
-	peerOrdinals := make([]int, len(peers))
-	for i, p := range peers {
-		peerOrdinals[i] = p.Ordinal
+	followers := make([]int, int(math.Min(float64(len(peers)), 2)))
+
+	// Get the next peers in the ring as followers
+	for i := range followers {
+		followers[i] = peers[(self.Ordinal+1+i)%len(followers)].Ordinal
 	}
 
 	// initial delay
@@ -67,8 +84,10 @@ func (o *generator) startNew(maxElapsed time.Duration) error {
 		newGeneration := types.Generation{
 			Token:     o.discoverer.TokenByOrdinal(self.Ordinal),
 			Leader:    self.Ordinal,
-			Followers: peerOrdinals,
+			Followers: followers,
 		}
+
+		log.Debug().Msgf("Starting new generation %v", newGeneration)
 
 		message := genMessage{
 			generation: newGeneration,
@@ -98,24 +117,36 @@ func (o *generator) process() {
 	// Friendly rejecting concurrency prevents deadlocks (and longer timed out requests), with the
 	// addition of delayed retries, results in a less "racy" end result.
 	processingFlag := new(int32)
-	for range o.items {
+	for message := range o.items {
 		canProcess := atomic.CompareAndSwapInt32(processingFlag, 0, 1)
 		if !canProcess {
-			//TODO: REJECT
-			// item.result <- err
+			// Fast reject
+			message.result <- fmt.Errorf("Concurrent generation creation rejected")
 			continue
 		}
 
 		// Process it in the background
+		message := message
 		go func() {
-			o.processItem()
+			o.processMessage(message)
 			atomic.StoreInt32(processingFlag, 0)
 		}()
 	}
 }
 
-func (o *generator) processItem() {
+func (o *generator) processMessage(message genMessage) {
 	// Consider a channel if state is needed across multiple items, i.e. "serialItems"
+	if message.generation.Leader == o.discoverer.GetBrokerInfo().Ordinal {
+		o.processLocalGeneration(message)
+	} else {
+		log.Debug().Msg("Processing a generation item started remotely")
+	}
+}
+
+func (o *generator) processLocalGeneration(message genMessage) {
+	log.Debug().Msg("Processing a generation started locally")
+
+	// Create to followers
 }
 
 func getDelay() time.Duration {

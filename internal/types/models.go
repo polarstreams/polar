@@ -45,6 +45,9 @@ type TopologyChangeHandler func()
 
 type Generation struct {
 	Token     Token
+	Version   int
 	Leader    int
+	Tx        []byte
+	Status    int
 	Followers []int
 }

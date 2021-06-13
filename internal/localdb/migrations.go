@@ -14,8 +14,8 @@ const ddl01 = `
 		version INT,
 		tx BLOB,
 		status INT,
-		leader TEXT,
-		followers TEXT, -- JSON array
+		leader INT,
+		followers TEXT, -- comma separated values
 		PRIMARY KEY (token, version)
 	);
 
