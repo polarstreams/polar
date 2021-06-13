@@ -62,6 +62,7 @@ func (g *gossiper) acceptHttpConnections() error {
 				fmt.Fprintf(w, "Peer listening on %d\n", port)
 			})
 			router.GET(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), utils.ToHandle(g.getGenHandler))
+			router.GET(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), utils.ToHandle(g.postGenHandler))
 
 			//TODO: routes to propose/accept new generation
 
@@ -96,4 +97,22 @@ func (g *gossiper) getGenHandler(w http.ResponseWriter, r *http.Request, ps http
 	}
 
 	return nil
+}
+
+func (g *gossiper) postGenHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	token, err := strconv.ParseInt(strings.TrimSpace(ps.ByName("token")), 10, 64)
+	if err != nil {
+		return err
+	}
+	var gens []*types.Generation
+	err = json.NewDecoder(r.Body).Decode(&gens)
+	if err != nil {
+		return err
+	}
+
+	if len(gens) != 2 || gens[1] == nil {
+		return types.NewHttpError(http.StatusBadRequest, "Generations were not provided")
+	}
+
+	return g.localDb.UpsertGeneration(types.Token(token), gens[0], gens[1])
 }

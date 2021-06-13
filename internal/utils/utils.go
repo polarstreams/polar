@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
@@ -49,4 +50,16 @@ func GetServiceAddress(port int, discoverer discovery.LeaderGetter, config conf.
 	}
 
 	return address
+}
+
+func ToCsv(values []int) string {
+	result := ""
+	for _, v := range values {
+		if len(result) > 0 {
+			result += ","
+		}
+		result += strconv.Itoa(v)
+	}
+
+	return result
 }

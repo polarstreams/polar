@@ -44,10 +44,19 @@ type Replicator interface {
 type TopologyChangeHandler func()
 
 type Generation struct {
-	Token     Token  `json:"token"`
-	Version   int    `json:"version"`
-	Leader    int    `json:"leader"`
-	Tx        []byte `json:"tx"`
-	Status    int    `json:"status"`
-	Followers []int  `json:"followers"`
+	Start     Token     `json:"start"`
+	End       Token     `json:"end"`
+	Version   int       `json:"version"`
+	Leader    int       `json:"leader"`
+	Tx        []byte    `json:"tx"`
+	Status    GenStatus `json:"status"`
+	Followers []int     `json:"followers"`
 }
+
+type GenStatus int
+
+const (
+	StatusCancelled GenStatus = iota
+	StatusProposed
+	StatusAccepted
+)

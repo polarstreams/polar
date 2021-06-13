@@ -1,6 +1,7 @@
 package interbroker
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,7 +13,7 @@ import (
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/localdb"
-	"github.com/jorgebay/soda/internal/types"
+	. "github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
 )
@@ -24,8 +25,8 @@ const waitForUpMaxWait = 10 * time.Minute
 
 // Gossiper is responsible for communicating with other peers.
 type Gossiper interface {
-	types.Initializer
-	types.Replicator
+	Initializer
+	Replicator
 	GenerationGossiper
 
 	// Starts accepting connections from peers.
@@ -35,7 +36,7 @@ type Gossiper interface {
 	OpenConnections() error
 
 	// Sends a message to be handled as a leader of a token
-	SendToLeader(replicationInfo types.ReplicationInfo, topic string, body []byte) error
+	SendToLeader(replicationInfo ReplicationInfo, topic string, body []byte) error
 
 	// WaitForPeersUp blocks until at least one peer is UP
 	WaitForPeersUp()
@@ -44,7 +45,13 @@ type Gossiper interface {
 //  GenerationGossiper is responsible for communicating actions related to generations.
 type GenerationGossiper interface {
 	// GetGenerations gets the generations for a given token on a peer
-	GetGenerations(ordinal int, token types.Token) ([]types.Generation, error)
+	GetGenerations(ordinal int, token Token) ([]Generation, error)
+
+	// UpsertGeneration sends a request to a peer to update/insert a generation
+	//
+	// When existing is defined, it tries to update it the unaccepted generation,
+	// otherwise it will insert a new one.
+	UpsertGeneration(ordinal int, existing *Generation, newGeneration Generation) error
 }
 
 func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Gossiper {
@@ -77,7 +84,7 @@ func (g *gossiper) OnTopologyChange() {
 	// TODO: Create new connections, refresh existing
 }
 
-func (g *gossiper) SendToLeader(replicationInfo types.ReplicationInfo, topic string, body []byte) error {
+func (g *gossiper) SendToLeader(replicationInfo ReplicationInfo, topic string, body []byte) error {
 	return nil
 }
 
@@ -129,13 +136,44 @@ func (g *gossiper) requestGet(ordinal int, baseUrl string) (*http.Response, erro
 	return resp, err
 }
 
-func (g *gossiper) GetGenerations(ordinal int, token types.Token) ([]types.Generation, error) {
+func (g *gossiper) requestPost(ordinal int, baseUrl string, body []byte) (*http.Response, error) {
+	c := g.getClientInfo(ordinal)
+	if c == nil {
+		return nil, fmt.Errorf("No connection to broker %d", ordinal)
+	}
+
+	brokers := g.discoverer.Brokers()
+	if len(brokers) <= ordinal {
+		return nil, fmt.Errorf("No broker %d obtained", ordinal)
+	}
+
+	resp, err := c.client.Post(g.getPeerUrl(&brokers[ordinal], baseUrl), "application/json", bytes.NewReader(body))
+
+	if err == nil && resp.StatusCode != http.StatusOK {
+		return nil, errors.New(resp.Status)
+	}
+
+	return resp, err
+}
+
+func (g *gossiper) GetGenerations(ordinal int, token Token) ([]Generation, error) {
 	r, err := g.requestGet(ordinal, fmt.Sprintf(conf.GossipGenerationUrl, token.String()))
 	if err != nil {
 		return nil, err
 	}
 	defer r.Body.Close()
-	var result []types.Generation
+	var result []Generation
 	err = json.NewDecoder(r.Body).Decode(&result)
 	return result, err
+}
+
+func (g *gossiper) UpsertGeneration(ordinal int, existing *Generation, newGeneration Generation) error {
+	jsonBody, err := json.Marshal([]*Generation{existing, &newGeneration})
+	if err != nil {
+		panic(err)
+	}
+
+	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationUrl, newGeneration.Start.String()), jsonBody)
+	defer r.Body.Close()
+	return err
 }

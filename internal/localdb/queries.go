@@ -2,20 +2,37 @@ package localdb
 
 import (
 	"database/sql"
+	"errors"
 	"strconv"
 	"strings"
 
 	"github.com/jorgebay/soda/internal/types"
+	"github.com/jorgebay/soda/internal/utils"
 )
 
 type queries struct {
 	selectGenerations *sql.Stmt
+	updateGeneration  *sql.Stmt
+	insertGeneration  *sql.Stmt
 }
 
 func (c *client) prepareQueries() {
 	c.queries.selectGenerations = c.prepare(`
-		SELECT token, version, tx, status, leader, followers FROM
-		generations WHERE token = ? ORDER BY token, version DESC LIMIT 2`)
+		SELECT start_token, end_token, version, tx, status, leader, followers FROM
+		generations WHERE start_token = ? ORDER BY start_token, version DESC LIMIT 2`)
+
+	c.queries.insertGeneration = c.prepare(`
+		INSERT INTO generations (start_token, end_token, version, tx, status, leader, followers)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+
+	c.queries.updateGeneration = c.prepare(`
+		UPDATE generations
+		SET
+			end_token = ?, tx = ?, status = ?, leader = ?, followers = ?
+		WHERE
+			start_token = ? AND version = ?
+			AND
+			end_token = ? AND tx = ? AND status = ? AND leader = ? AND followers = ?`)
 }
 
 func (c *client) prepare(query string) *sql.Stmt {
@@ -66,7 +83,7 @@ func (c *client) GetGenerationsByToken(token types.Token) ([]types.Generation, e
 	for rows.Next() {
 		item := types.Generation{}
 		var followers string
-		if err = rows.Scan(&item.Token, &item.Version, &item.Tx, &item.Status, &item.Leader, &followers); err != nil {
+		if err = rows.Scan(&item.Start, &item.End, &item.Version, &item.Tx, &item.Status, &item.Leader, &followers); err != nil {
 			return result, err
 		}
 		if followers != "" {
@@ -83,4 +100,32 @@ func (c *client) GetGenerationsByToken(token types.Token) ([]types.Generation, e
 		result = append(result, item)
 	}
 	return result, nil
+}
+
+func (c *client) UpsertGeneration(token types.Token, existing *types.Generation, newGen *types.Generation) error {
+	newFollowers := utils.ToCsv(newGen.Followers)
+	if existing == nil {
+		_, err := c.queries.insertGeneration.Exec(
+			newGen.Start, newGen.End, newGen.Version, newGen.Tx, newGen.Status, newGen.Leader, newFollowers)
+		return err
+	}
+
+	r, err := c.queries.updateGeneration.Exec(
+		// SET
+		newGen.End, newGen.Tx, newGen.Status, newGen.Leader, newFollowers,
+		// WHERE
+		newGen.Start, newGen.Version,
+		// WHERE existing gen
+		existing.End, existing.Tx, existing.Status, existing.Leader, utils.ToCsv(existing.Followers),
+	)
+
+	if err != nil {
+		return err
+	}
+
+	if n, _ := r.RowsAffected(); n == 0 {
+		return errors.New("No generation was updated")
+	}
+
+	return nil
 }

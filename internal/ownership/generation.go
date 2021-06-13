@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/localdb"
@@ -19,15 +20,7 @@ const baseDelayMs = 150
 const maxDuration time.Duration = 1<<63 - 1
 const maxInitElapsed = 10 * time.Second
 
-type status int
-
-var emptyGeneration = Generation{Token: math.MaxInt64, Version: -1, Status: int(statusCancelled)}
-
-const (
-	statusCancelled status = iota
-	statusProposed
-	statusAccepted
-)
+var emptyGeneration = Generation{Start: math.MaxInt64, Version: -1, Status: StatusCancelled}
 
 type Generator interface {
 	Initializer
@@ -99,7 +92,7 @@ func (o *generator) startNew(maxElapsed time.Duration) error {
 		}
 
 		newGeneration := Generation{
-			Token:     o.discoverer.TokenByOrdinal(self.Ordinal),
+			Start:     o.discoverer.TokenByOrdinal(self.Ordinal),
 			Leader:    self.Ordinal,
 			Followers: followers,
 		}
@@ -119,7 +112,7 @@ func (o *generator) startNew(maxElapsed time.Duration) error {
 
 		if i > 0 && (i+1)%3 == 0 {
 			log.Warn().
-				Msgf("New generation for token %d could not be created after %d attempts", newGeneration.Token, i+1)
+				Msgf("New generation for token %d could not be created after %d attempts", newGeneration.Start, i+1)
 		}
 
 		time.Sleep(getDelay())
@@ -169,15 +162,17 @@ func (o *generator) processLocalGeneration(gen Generation) error {
 	proposed := &emptyGeneration
 
 	// Retrieve locally
-	if gens, err := o.localDb.GetGenerationsByToken(gen.Token); err != nil {
+	if gens, err := o.localDb.GetGenerationsByToken(gen.Start); err != nil {
 		log.Fatal().Err(err).Msg("Generations could not be retrieved")
 	} else {
 		accepted, proposed = checkState(gens, accepted, proposed)
 	}
 
+	genByFollower := make([][]Generation, len(gen.Followers))
+
 	// Retrieve from followers
-	for _, follower := range gen.Followers {
-		gens, err := o.gossiper.GetGenerations(follower, gen.Token)
+	for i, follower := range gen.Followers {
+		gens, err := o.gossiper.GetGenerations(follower, gen.Start)
 		if err != nil {
 			log.Debug().Msgf("Error when trying to retrieve generations from broker %d: %s", follower, err.Error())
 			continue
@@ -185,6 +180,7 @@ func (o *generator) processLocalGeneration(gen Generation) error {
 
 		log.Debug().Msgf("Obtained generations %v from broker %d", gens, follower)
 		accepted, proposed = checkState(gens, accepted, proposed)
+		genByFollower[i] = gens
 	}
 
 	if proposed != &emptyGeneration {
@@ -193,18 +189,32 @@ func (o *generator) processLocalGeneration(gen Generation) error {
 		return errors.New("There's already a proposed generation for this token")
 	}
 
-	//TODO: Continue
+	gen.Version = accepted.Version + 1
+	gen.Tx, _ = uuid.New().MarshalBinary()
+	gen.Status = StatusProposed
+
+	// Start by trying to propose the generation on the followers
+	for i, follower := range gen.Followers {
+		gens := genByFollower[i]
+		var previousGeneration *Generation = nil
+		if len(gens) > 0 && gens[0].Status == StatusProposed {
+			previousGeneration = &gens[0]
+		}
+
+		//TODO: DO Something with error
+		_ = o.gossiper.UpsertGeneration(follower, previousGeneration, gen)
+	}
 
 	return nil
 }
 
 func checkState(gens []Generation, accepted, proposed *Generation) (*Generation, *Generation) {
 	for _, gen := range gens {
-		if status(gen.Status) == statusAccepted {
+		if gen.Status == StatusAccepted {
 			if gen.Version > accepted.Version {
 				accepted = &gen
 			}
-		} else if status(gen.Status) == statusProposed {
+		} else if gen.Status == StatusProposed {
 			if gen.Version > proposed.Version {
 				proposed = &gen
 			}

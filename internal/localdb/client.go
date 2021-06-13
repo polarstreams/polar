@@ -18,6 +18,8 @@ type Client interface {
 	DbWasNewlyCreated() bool
 
 	GetGenerationsByToken(token types.Token) ([]types.Generation, error)
+
+	UpsertGeneration(token types.Token, existing *types.Generation, newGen *types.Generation) error
 }
 
 // NewClient creates a new instance of Client.
