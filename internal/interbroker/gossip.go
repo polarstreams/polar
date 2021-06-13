@@ -1,12 +1,17 @@
 package interbroker
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
+	"github.com/jorgebay/soda/internal/localdb"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
@@ -21,6 +26,7 @@ const waitForUpMaxWait = 10 * time.Minute
 type Gossiper interface {
 	types.Initializer
 	types.Replicator
+	GenerationGossiper
 
 	// Starts accepting connections from peers.
 	AcceptConnections() error
@@ -33,8 +39,12 @@ type Gossiper interface {
 
 	// WaitForPeersUp blocks until at least one peer is UP
 	WaitForPeersUp()
+}
 
-	//ProposeGeneration(follower types.BrokerInfo) err
+//  GenerationGossiper is responsible for communicating actions related to generations.
+type GenerationGossiper interface {
+	// GetGenerations gets the generations for a given token on a peer
+	GetGenerations(ordinal int, token types.Token) ([]types.Generation, error)
 }
 
 func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Gossiper {
@@ -50,6 +60,7 @@ func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Goss
 type gossiper struct {
 	config           conf.GossipConfig
 	discoverer       discovery.Discoverer
+	localDb          localdb.Client
 	connectionsMutex sync.Mutex
 	// Map of connections
 	connections atomic.Value
@@ -80,7 +91,7 @@ func (g *gossiper) WaitForPeersUp() {
 	lastWarn := 0
 	for {
 		for _, peer := range g.discoverer.Peers() {
-			if client := g.getClientInfo(&peer); client != nil && client.isHostUp() {
+			if client := g.getClientInfo(peer.Ordinal); client != nil && client.isHostUp() {
 				return
 			}
 		}
@@ -96,4 +107,35 @@ func (g *gossiper) WaitForPeersUp() {
 
 		time.Sleep(waitForUpDelay)
 	}
+}
+
+func (g *gossiper) requestGet(ordinal int, baseUrl string) (*http.Response, error) {
+	c := g.getClientInfo(ordinal)
+	if c == nil {
+		return nil, fmt.Errorf("No connection to broker %d", ordinal)
+	}
+
+	brokers := g.discoverer.Brokers()
+	if len(brokers) <= ordinal {
+		return nil, fmt.Errorf("No broker %d obtained", ordinal)
+	}
+
+	resp, err := c.client.Get(g.getPeerUrl(&brokers[ordinal], baseUrl))
+
+	if err == nil && resp.StatusCode != http.StatusOK {
+		return nil, errors.New(resp.Status)
+	}
+
+	return resp, err
+}
+
+func (g *gossiper) GetGenerations(ordinal int, token types.Token) ([]types.Generation, error) {
+	r, err := g.requestGet(ordinal, fmt.Sprintf(conf.GossipGenerationUrl, token.String()))
+	if err != nil {
+		return nil, err
+	}
+	defer r.Body.Close()
+	var result []types.Generation
+	err = json.NewDecoder(r.Body).Decode(&result)
+	return result, err
 }

@@ -22,7 +22,7 @@ var _ = Describe("Client", func() {
 			err := client.Init()
 			Expect(err).NotTo(HaveOccurred())
 
-			result, err := client.getGenerationPerToken(1000)
+			result, err := client.GetGenerationByToken(1000)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(BeEmpty())
 		})
@@ -40,7 +40,7 @@ var _ = Describe("Client", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 
-			result, err := client.getGenerationPerToken(types.Token(token))
+			result, err := client.GetGenerationByToken(types.Token(token))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(HaveLen(2))
 			Expect([]int{result[0].Version, result[1].Version}).To(Equal([]int{10, 9}))

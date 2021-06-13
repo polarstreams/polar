@@ -110,9 +110,9 @@ func (g *gossiper) getPeerUrl(b *types.BrokerInfo, path string) string {
 	return fmt.Sprintf("http://%s:%d%s", b.HostName, g.config.GossipPort(), path)
 }
 
-func (g *gossiper) getClientInfo(broker *types.BrokerInfo) *clientInfo {
+func (g *gossiper) getClientInfo(ordinal int) *clientInfo {
 	if m, ok := g.connections.Load().(clientMap); ok {
-		if clientInfo, ok := m[broker.Ordinal]; ok {
+		if clientInfo, ok := m[ordinal]; ok {
 			return clientInfo
 		}
 	}
@@ -181,15 +181,15 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
 			// TODO: Add jitter
 			time.Sleep(time.Duration(delay) * time.Millisecond)
 
-			if c := g.getClientInfo(broker); c == nil || c.hostName != broker.HostName {
+			if c := g.getClientInfo(broker.Ordinal); c == nil || c.hostName != broker.HostName {
 				// Topology changed, stop reconnecting
 				break
 			}
 
 			log.Debug().Msgf("Attempting to reconnect to %s after %v ms", broker, delay)
 
-			_, err := c.client.Get(g.getPeerUrl(broker, conf.StatusUrl))
-			if err == nil {
+			response, err := c.client.Get(g.getPeerUrl(broker, conf.StatusUrl))
+			if err == nil && response.StatusCode == http.StatusOK {
 				// Succeeded
 				break
 			}

@@ -22,7 +22,10 @@ const (
 type Discoverer interface {
 	types.Initializer
 	LeaderGetter
+	// Returns a point-in-time list of all brokers except itself
 	Peers() []types.BrokerInfo
+	// Returns a point-in-time list of all brokers
+	Brokers() []types.BrokerInfo
 	RegisterListener(l types.TopologyChangeHandler)
 	TokenByOrdinal(ordinal int) types.Token
 	Shutdown()
@@ -89,6 +92,10 @@ func (d *discoverer) Init() error {
 
 func (d *discoverer) Peers() []types.BrokerInfo {
 	return d.brokersExcept(d.ordinal)
+}
+
+func (d *discoverer) Brokers() []types.BrokerInfo {
+	return d.brokers
 }
 
 func parseFixedBrokers(ordinal int) []types.BrokerInfo {

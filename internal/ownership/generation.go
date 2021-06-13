@@ -1,6 +1,7 @@
 package ownership
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -8,7 +9,9 @@ import (
 	"time"
 
 	"github.com/jorgebay/soda/internal/discovery"
-	"github.com/jorgebay/soda/internal/types"
+	"github.com/jorgebay/soda/internal/interbroker"
+	"github.com/jorgebay/soda/internal/localdb"
+	. "github.com/jorgebay/soda/internal/types"
 	"github.com/rs/zerolog/log"
 )
 
@@ -16,8 +19,18 @@ const baseDelayMs = 150
 const maxDuration time.Duration = 1<<63 - 1
 const maxInitElapsed = 10 * time.Second
 
+type status int
+
+var emptyGeneration = Generation{Token: math.MaxInt64, Version: -1, Status: int(statusCancelled)}
+
+const (
+	statusCancelled status = iota
+	statusProposed
+	statusAccepted
+)
+
 type Generator interface {
-	types.Initializer
+	Initializer
 	StartGenerations()
 }
 
@@ -25,16 +38,20 @@ type generator struct {
 	// items can be a local or remote
 	items      chan genMessage
 	discoverer discovery.Discoverer
+	gossiper   interbroker.GenerationGossiper
+	localDb    localdb.Client
 }
 
 type genMessage struct {
-	generation types.Generation
+	generation Generation
 	result     chan error
 }
 
-func NewGenerator(discoverer discovery.Discoverer) Generator {
+func NewGenerator(discoverer discovery.Discoverer, gossiper interbroker.GenerationGossiper, localDb localdb.Client) Generator {
 	o := &generator{
 		discoverer: discoverer,
+		gossiper:   gossiper,
+		localDb:    localDb,
 		items:      make(chan genMessage),
 	}
 
@@ -81,7 +98,7 @@ func (o *generator) startNew(maxElapsed time.Duration) error {
 				i, time.Since(start).Seconds())
 		}
 
-		newGeneration := types.Generation{
+		newGeneration := Generation{
 			Token:     o.discoverer.TokenByOrdinal(self.Ordinal),
 			Leader:    self.Ordinal,
 			Followers: followers,
@@ -128,25 +145,72 @@ func (o *generator) process() {
 		// Process it in the background
 		message := message
 		go func() {
-			o.processMessage(message)
+			message.result <- o.processGeneration(message.generation)
 			atomic.StoreInt32(processingFlag, 0)
 		}()
 	}
 }
 
-func (o *generator) processMessage(message genMessage) {
+// processGeneration() returns nil when the generation was created, otherwise an error.
+func (o *generator) processGeneration(gen Generation) error {
 	// Consider a channel if state is needed across multiple items, i.e. "serialItems"
-	if message.generation.Leader == o.discoverer.GetBrokerInfo().Ordinal {
-		o.processLocalGeneration(message)
+	if gen.Leader == o.discoverer.GetBrokerInfo().Ordinal {
+		return o.processLocalGeneration(gen)
 	} else {
 		log.Debug().Msg("Processing a generation item started remotely")
+		return nil
 	}
 }
 
-func (o *generator) processLocalGeneration(message genMessage) {
+func (o *generator) processLocalGeneration(gen Generation) error {
 	log.Debug().Msg("Processing a generation started locally")
 
-	// Create to followers
+	accepted := &emptyGeneration
+	proposed := &emptyGeneration
+
+	// Retrieve locally
+	if gens, err := o.localDb.GetGenerationsByToken(gen.Token); err != nil {
+		log.Fatal().Err(err).Msg("Generations could not be retrieved")
+	} else {
+		accepted, proposed = checkState(gens, accepted, proposed)
+	}
+
+	// Retrieve from followers
+	for _, follower := range gen.Followers {
+		gens, err := o.gossiper.GetGenerations(follower, gen.Token)
+		if err != nil {
+			log.Debug().Msgf("Error when trying to retrieve generations from broker %d: %s", follower, err.Error())
+			continue
+		}
+
+		log.Debug().Msgf("Obtained generations %v from broker %d", gens, follower)
+		accepted, proposed = checkState(gens, accepted, proposed)
+	}
+
+	if proposed != &emptyGeneration {
+		// TODO: Check whether it's old, cancel and override
+		log.Info().Msgf("There's already a previous proposed generation TODO FIX")
+		return errors.New("There's already a proposed generation for this token")
+	}
+
+	//TODO: Continue
+
+	return nil
+}
+
+func checkState(gens []Generation, accepted, proposed *Generation) (*Generation, *Generation) {
+	for _, gen := range gens {
+		if status(gen.Status) == statusAccepted {
+			if gen.Version > accepted.Version {
+				accepted = &gen
+			}
+		} else if status(gen.Status) == statusProposed {
+			if gen.Version > proposed.Version {
+				proposed = &gen
+			}
+		}
+	}
+	return accepted, proposed
 }
 
 func getDelay() time.Duration {

@@ -10,12 +10,12 @@ const ddl01 = `
 	);
 
 	CREATE TABLE IF NOT EXISTS generations (
-		token BIGINT,
-		version INT,
-		tx BLOB,
-		status INT,
-		leader INT,
-		followers TEXT, -- comma separated values
+		token BIGINT NOT NULL,
+		version INT NOT NULL,
+		tx BLOB NOT NULL,
+		status INT NOT NULL,
+		leader INT NOT NULL,
+		followers TEXT NOT NULL, -- comma separated values
 		PRIMARY KEY (token, version)
 	);
 

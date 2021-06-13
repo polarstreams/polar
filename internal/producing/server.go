@@ -64,7 +64,7 @@ func (p *producer) AcceptConnections() error {
 	router := httprouter.New()
 
 	router.POST(conf.TopicMessageUrl, utils.ToHandle(p.postMessage))
-	router.GET("/status", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	router.GET(conf.StatusUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		fmt.Fprintf(w, "Producer server listening on %d\n", port)
 	})
 	router.GET(conf.TopicMessageUrl, func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {

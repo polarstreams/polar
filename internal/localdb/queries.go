@@ -55,7 +55,7 @@ func (c *client) setCurrentSchemaVersion() error {
 	return err
 }
 
-func (c *client) getGenerationPerToken(token types.Token) ([]types.Generation, error) {
+func (c *client) GetGenerationsByToken(token types.Token) ([]types.Generation, error) {
 	rows, err := c.queries.selectGenerations.Query(int64(token))
 	if err != nil {
 		return nil, err

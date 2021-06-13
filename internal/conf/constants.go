@@ -3,10 +3,16 @@ package conf
 import "encoding/binary"
 
 const (
+	StatusUrl = "/status"
+	// Producer Urls
+
 	// Url for posting and consuming messages
 	TopicMessageUrl = "/v1/topic/:topic/messages"
 
-	StatusUrl = "/status"
+	// Gossip Urls
+
+	// Url for getting/setting the generation by token
+	GossipGenerationUrl = "/v1/generation/%s"
 )
 
 const MaxTopicLength = 255
