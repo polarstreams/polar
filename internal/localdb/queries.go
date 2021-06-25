@@ -102,7 +102,7 @@ func (c *client) GetGenerationsByToken(token types.Token) ([]types.Generation, e
 	return result, nil
 }
 
-func (c *client) UpsertGeneration(token types.Token, existing *types.Generation, newGen *types.Generation) error {
+func (c *client) UpsertGeneration(existing *types.Generation, newGen *types.Generation) error {
 	newFollowers := utils.ToCsv(newGen.Followers)
 	if existing == nil {
 		_, err := c.queries.insertGeneration.Exec(

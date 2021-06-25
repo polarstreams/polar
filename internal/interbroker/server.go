@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/types"
-	"github.com/jorgebay/soda/internal/utils"
+	. "github.com/jorgebay/soda/internal/types"
+	. "github.com/jorgebay/soda/internal/utils"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
@@ -37,7 +37,7 @@ func (g *gossiper) acceptHttpConnections() error {
 		MaxConcurrentStreams: 2048,
 	}
 	port := g.config.GossipPort()
-	address := utils.GetServiceAddress(port, g.discoverer, g.config)
+	address := GetServiceAddress(port, g.discoverer, g.config)
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -61,8 +61,8 @@ func (g *gossiper) acceptHttpConnections() error {
 			router.GET(conf.StatusUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 				fmt.Fprintf(w, "Peer listening on %d\n", port)
 			})
-			router.GET(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), utils.ToHandle(g.getGenHandler))
-			router.GET(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), utils.ToHandle(g.postGenHandler))
+			router.GET(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), ToHandle(g.getGenHandler))
+			router.POST(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), ToPostHandle(g.postGenHandler))
 
 			//TODO: routes to propose/accept new generation
 
@@ -89,7 +89,7 @@ func (g *gossiper) getGenHandler(w http.ResponseWriter, r *http.Request, ps http
 		return err
 	}
 
-	if result, err := g.localDb.GetGenerationsByToken(types.Token(token)); err == nil {
+	if result, err := g.localDb.GetGenerationsByToken(Token(token)); err == nil {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)
 	} else {
@@ -100,19 +100,22 @@ func (g *gossiper) getGenHandler(w http.ResponseWriter, r *http.Request, ps http
 }
 
 func (g *gossiper) postGenHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
-	token, err := strconv.ParseInt(strings.TrimSpace(ps.ByName("token")), 10, 64)
-	if err != nil {
+	if _, err := strconv.ParseInt(strings.TrimSpace(ps.ByName("token")), 10, 64); err != nil {
 		return err
 	}
-	var gens []*types.Generation
-	err = json.NewDecoder(r.Body).Decode(&gens)
-	if err != nil {
+	var gens []*Generation
+	if err := json.NewDecoder(r.Body).Decode(&gens); err != nil {
 		return err
 	}
 
 	if len(gens) != 2 || gens[1] == nil {
-		return types.NewHttpError(http.StatusBadRequest, "Generations were not provided")
+		return NewHttpError(http.StatusBadRequest, "Generations were not provided")
 	}
 
-	return g.localDb.UpsertGeneration(types.Token(token), gens[0], gens[1])
+	if g.genListener == nil {
+		panic("Generation listener was not registered")
+	}
+
+	// Use the registered listener
+	return g.genListener(gens[0], gens[1])
 }

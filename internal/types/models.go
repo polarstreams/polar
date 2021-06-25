@@ -41,8 +41,6 @@ type Replicator interface {
 	SendToFollowers(replicationInfo ReplicationInfo, topic TopicDataId, segmentId int64, body []byte) error
 }
 
-type TopologyChangeHandler func()
-
 type Generation struct {
 	Start     Token     `json:"start"`
 	End       Token     `json:"end"`

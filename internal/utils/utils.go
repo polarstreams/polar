@@ -19,17 +19,33 @@ type HandleWithError func(http.ResponseWriter, *http.Request, httprouter.Params)
 func ToHandle(he HandleWithError) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		if err := he(w, r, ps); err != nil {
-			httpErr, ok := err.(types.HttpError)
+			adaptHttpErr(err, w)
+		}
+	}
+}
 
-			if !ok {
-				log.Err(err).Msg("Unexpected error when producing")
-				http.Error(w, "Internal server error", 500)
-				return
-			}
+func adaptHttpErr(err error, w http.ResponseWriter) {
+	httpErr, ok := err.(types.HttpError)
 
-			w.WriteHeader(httpErr.StatusCode())
-			// The message is supposed to be user friendly
-			fmt.Fprintf(w, err.Error())
+	if !ok {
+		log.Err(err).Msg("Unexpected error when producing")
+		http.Error(w, "Internal server error", 500)
+		return
+	}
+
+	w.WriteHeader(httpErr.StatusCode())
+	// The message is supposed to be user friendly
+	fmt.Fprintf(w, err.Error())
+}
+
+// ToPostHandle wraps a handle func with error, returns plain text "OK" and converts it to a `httprouter.Handle`
+func ToPostHandle(he HandleWithError) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+		if err := he(w, r, ps); err != nil {
+			adaptHttpErr(err, w)
+		} else {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write([]byte("OK"))
 		}
 	}
 }

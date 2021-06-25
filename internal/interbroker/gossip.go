@@ -13,6 +13,7 @@ import (
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/localdb"
+	"github.com/jorgebay/soda/internal/types"
 	. "github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
@@ -52,7 +53,12 @@ type GenerationGossiper interface {
 	// When existing is defined, it tries to update it the unaccepted generation,
 	// otherwise it will insert a new one.
 	UpsertGeneration(ordinal int, existing *Generation, newGeneration Generation) error
+
+	// RegisterGenListener adds a listener for new generations received by the gossipper
+	RegisterGenListener(listener GenListener)
 }
+
+type GenListener func(existing *Generation, new *Generation) error
 
 func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Gossiper {
 	return &gossiper{
@@ -68,6 +74,7 @@ type gossiper struct {
 	config           conf.GossipConfig
 	discoverer       discovery.Discoverer
 	localDb          localdb.Client
+	genListener      GenListener
 	connectionsMutex sync.Mutex
 	// Map of connections
 	connections atomic.Value
@@ -82,6 +89,13 @@ func (g *gossiper) Init() error {
 
 func (g *gossiper) OnTopologyChange() {
 	// TODO: Create new connections, refresh existing
+}
+
+func (g *gossiper) RegisterGenListener(listener GenListener) {
+	if g.genListener != nil {
+		panic("Listener registered multiple times")
+	}
+	g.genListener = listener
 }
 
 func (g *gossiper) SendToLeader(replicationInfo ReplicationInfo, topic string, body []byte) error {
@@ -150,7 +164,7 @@ func (g *gossiper) requestPost(ordinal int, baseUrl string, body []byte) (*http.
 	resp, err := c.client.Post(g.getPeerUrl(&brokers[ordinal], baseUrl), "application/json", bytes.NewReader(body))
 
 	if err == nil && resp.StatusCode != http.StatusOK {
-		return nil, errors.New(resp.Status)
+		return nil, types.NewHttpError(resp.StatusCode, resp.Status)
 	}
 
 	return resp, err

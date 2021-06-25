@@ -78,7 +78,7 @@ var _ = Describe("Client", func() {
 				Leader:    0,
 				Followers: []int{1, 2},
 			}
-			err = client.UpsertGeneration(gen.Start, nil, &gen)
+			err = client.UpsertGeneration(nil, &gen)
 			Expect(err).NotTo(HaveOccurred())
 
 			obtained, err := client.GetGenerationsByToken(gen.Start)
@@ -108,7 +108,7 @@ var _ = Describe("Client", func() {
 			newGen.Followers = []int{2, 0}
 			newGen.Tx = []byte{0, 1, 2, 3}
 
-			err = client.UpsertGeneration(Token(0), &gen, &newGen)
+			err = client.UpsertGeneration(&gen, &newGen)
 			Expect(err).NotTo(HaveOccurred())
 
 			obtained, err := client.GetGenerationsByToken(gen.Start)
@@ -131,7 +131,7 @@ var _ = Describe("Client", func() {
 				Followers: []int{1, 2},
 			}
 
-			err = client.UpsertGeneration(Token(0), &gen, &gen)
+			err = client.UpsertGeneration(&gen, &gen)
 			Expect(err).To(MatchError("No generation was updated"))
 		})
 	})

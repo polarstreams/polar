@@ -35,11 +35,6 @@ type generator struct {
 	localDb    localdb.Client
 }
 
-type genMessage struct {
-	generation Generation
-	result     chan error
-}
-
 func NewGenerator(discoverer discovery.Discoverer, gossiper interbroker.GenerationGossiper, localDb localdb.Client) Generator {
 	o := &generator{
 		discoverer: discoverer,
@@ -54,6 +49,12 @@ func NewGenerator(discoverer discovery.Discoverer, gossiper interbroker.Generati
 
 func (o *generator) Init() error {
 	// At this point in time, the cluster has been discovered but no connection to peers have been made
+	o.gossiper.RegisterGenListener(o.onNewRemoteGeneration)
+	return nil
+}
+
+func (o *generator) onNewRemoteGeneration(existing *Generation, new *Generation) error {
+	//TODO: Create message
 	return nil
 }
 
@@ -99,12 +100,12 @@ func (o *generator) startNew(maxElapsed time.Duration) error {
 
 		log.Debug().Msgf("Starting new generation %v", newGeneration)
 
-		message := genMessage{
+		message := localGenMessage{
 			generation: newGeneration,
 			result:     make(chan error, 1),
 		}
 
-		o.items <- message
+		o.items <- &message
 		if err := <-message.result; err == nil {
 			log.Info().Msg("New generation for token %d was created")
 			break
@@ -131,48 +132,49 @@ func (o *generator) process() {
 		canProcess := atomic.CompareAndSwapInt32(processingFlag, 0, 1)
 		if !canProcess {
 			// Fast reject
-			message.result <- fmt.Errorf("Concurrent generation creation rejected")
+			message.setResult(fmt.Errorf("Concurrent generation creation rejected"))
 			continue
 		}
 
 		// Process it in the background
 		message := message
 		go func() {
-			message.result <- o.processGeneration(message.generation)
+			message.setResult(o.processGeneration(message))
 			atomic.StoreInt32(processingFlag, 0)
 		}()
 	}
 }
 
 // processGeneration() returns nil when the generation was created, otherwise an error.
-func (o *generator) processGeneration(gen Generation) error {
+func (o *generator) processGeneration(message genMessage) error {
 	// Consider a channel if state is needed across multiple items, i.e. "serialItems"
-	if gen.Leader == o.discoverer.GetBrokerInfo().Ordinal {
-		return o.processLocalGeneration(gen)
+	if localGen, ok := message.(*localGenMessage); ok {
+		return o.processLocal(localGen.generation)
 	} else {
-		log.Debug().Msg("Processing a generation item started remotely")
-		return nil
+		m := message.(*remoteGenMessage)
+		return o.processRemote(m.existing, m.new)
 	}
 }
 
-func (o *generator) processLocalGeneration(gen Generation) error {
+func (o *generator) processLocal(newGen Generation) error {
 	log.Debug().Msg("Processing a generation started locally")
 
 	accepted := &emptyGeneration
 	proposed := &emptyGeneration
 
 	// Retrieve locally
-	if gens, err := o.localDb.GetGenerationsByToken(gen.Start); err != nil {
+	if gens, err := o.localDb.GetGenerationsByToken(newGen.Start); err != nil {
 		log.Fatal().Err(err).Msg("Generations could not be retrieved")
 	} else {
 		accepted, proposed = checkState(gens, accepted, proposed)
 	}
+	localAccepted, localProposed := accepted, proposed
 
-	genByFollower := make([][]Generation, len(gen.Followers))
+	genByFollower := make([][]Generation, len(newGen.Followers))
 
 	// Retrieve from followers
-	for i, follower := range gen.Followers {
-		gens, err := o.gossiper.GetGenerations(follower, gen.Start)
+	for i, follower := range newGen.Followers {
+		gens, err := o.gossiper.GetGenerations(follower, newGen.Start)
 		if err != nil {
 			log.Debug().Msgf("Error when trying to retrieve generations from broker %d: %s", follower, err.Error())
 			continue
@@ -189,23 +191,37 @@ func (o *generator) processLocalGeneration(gen Generation) error {
 		return errors.New("There's already a proposed generation for this token")
 	}
 
-	gen.Version = accepted.Version + 1
-	gen.Tx, _ = uuid.New().MarshalBinary()
-	gen.Status = StatusProposed
+	newGen.Version = accepted.Version + 1
+	newGen.Tx, _ = uuid.New().MarshalBinary()
+	newGen.Status = StatusProposed
+
+	failedFollowers := make([]int, 0)
 
 	// Start by trying to propose the generation on the followers
-	for i, follower := range gen.Followers {
+	for i, follower := range newGen.Followers {
 		gens := genByFollower[i]
-		var previousGeneration *Generation = nil
+		var existingGen *Generation = nil
 		if len(gens) > 0 && gens[0].Status == StatusProposed {
-			previousGeneration = &gens[0]
+			existingGen = &gens[0]
 		}
 
-		//TODO: DO Something with error
-		_ = o.gossiper.UpsertGeneration(follower, previousGeneration, gen)
+		if err := o.gossiper.UpsertGeneration(follower, existingGen, newGen); err != nil {
+			log.Warn().Err(err).Msgf("Upsert generation failed in peer %d", follower)
+			failedFollowers = append(failedFollowers, follower)
+		}
 	}
 
-	return nil
+	if float32(len(failedFollowers)) >= float32(len(o.discoverer.Brokers()))/2.0 {
+		return fmt.Errorf("Generation creation was rejected by proposed followers")
+	}
+
+	return o.localDb.UpsertGeneration(localProposed, localAccepted)
+}
+
+func (o *generator) processRemote(existing *Generation, new *Generation) error {
+	log.Debug().Msg("Processing a generation item started remotely")
+
+	return o.localDb.UpsertGeneration(existing, new)
 }
 
 func checkState(gens []Generation, accepted, proposed *Generation) (*Generation, *Generation) {

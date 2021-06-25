@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/types"
+	. "github.com/jorgebay/soda/internal/types"
 	"github.com/rs/zerolog/log"
 )
 
@@ -20,14 +20,14 @@ const (
 //
 // It emits events that others like Gossipper listens to.
 type Discoverer interface {
-	types.Initializer
+	Initializer
 	LeaderGetter
 	// Returns a point-in-time list of all brokers except itself
-	Peers() []types.BrokerInfo
+	Peers() []BrokerInfo
 	// Returns a point-in-time list of all brokers
-	Brokers() []types.BrokerInfo
-	RegisterListener(l types.TopologyChangeHandler)
-	TokenByOrdinal(ordinal int) types.Token
+	Brokers() []BrokerInfo
+	RegisterListener(l TopologyChangeHandler)
+	TokenByOrdinal(ordinal int) Token
 	Shutdown()
 }
 
@@ -35,24 +35,26 @@ type LeaderGetter interface {
 	// GetLeader gets the current leader and followers of a given partition key.
 	//
 	// In case partitionKey is empty, the current node is provided
-	GetLeader(partitionKey string) types.ReplicationInfo
+	GetLeader(partitionKey string) ReplicationInfo
 
 	// GetBrokerInfo returns the information of the current broker (self)
-	GetBrokerInfo() *types.BrokerInfo
+	GetBrokerInfo() *BrokerInfo
 }
+
+type TopologyChangeHandler func()
 
 func NewDiscoverer(config conf.DiscovererConfig) Discoverer {
 	return &discoverer{
 		config:    config,
-		listeners: make([]types.TopologyChangeHandler, 0),
+		listeners: make([]TopologyChangeHandler, 0),
 	}
 }
 
 type discoverer struct {
 	config    conf.DiscovererConfig
-	listeners []types.TopologyChangeHandler
-	brokers   []types.BrokerInfo
-	ring      []types.Token
+	listeners []TopologyChangeHandler
+	brokers   []BrokerInfo
+	ring      []Token
 	ordinal   int
 }
 
@@ -66,11 +68,11 @@ func (d *discoverer) Init() error {
 		if replicas == 0 {
 			replicas = 1
 		}
-		brokers := make([]types.BrokerInfo, 0, replicas)
+		brokers := make([]BrokerInfo, 0, replicas)
 		baseHostName := d.config.BaseHostName()
 		d.ordinal = d.config.Ordinal()
 		for i := 0; i < replicas; i++ {
-			brokers = append(brokers, types.BrokerInfo{
+			brokers = append(brokers, BrokerInfo{
 				IsSelf:   i == d.ordinal,
 				Ordinal:  i,
 				HostName: baseHostName + strconv.Itoa(i),
@@ -82,33 +84,33 @@ func (d *discoverer) Init() error {
 
 	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.brokers))
 
-	d.ring = make([]types.Token, len(d.brokers))
+	d.ring = make([]Token, len(d.brokers))
 	for i := range d.brokers {
-		d.ring[i] = types.GetTokenAtIndex(len(d.brokers), i)
+		d.ring[i] = GetTokenAtIndex(len(d.brokers), i)
 	}
 
 	return nil
 }
 
-func (d *discoverer) Peers() []types.BrokerInfo {
+func (d *discoverer) Peers() []BrokerInfo {
 	return d.brokersExcept(d.ordinal)
 }
 
-func (d *discoverer) Brokers() []types.BrokerInfo {
+func (d *discoverer) Brokers() []BrokerInfo {
 	return d.brokers
 }
 
-func parseFixedBrokers(ordinal int) []types.BrokerInfo {
+func parseFixedBrokers(ordinal int) []BrokerInfo {
 	names := os.Getenv(envBrokerNames)
 	if names == "" {
-		return []types.BrokerInfo{}
+		return []BrokerInfo{}
 	}
 
 	parts := strings.Split(names, ",")
-	brokers := make([]types.BrokerInfo, 0, len(parts))
+	brokers := make([]BrokerInfo, 0, len(parts))
 
 	for i, hostName := range parts {
-		brokers = append(brokers, types.BrokerInfo{
+		brokers = append(brokers, BrokerInfo{
 			IsSelf:   i == ordinal,
 			Ordinal:  i,
 			HostName: hostName,
@@ -118,36 +120,36 @@ func parseFixedBrokers(ordinal int) []types.BrokerInfo {
 	return brokers
 }
 
-func (d *discoverer) GetBrokerInfo() *types.BrokerInfo {
+func (d *discoverer) GetBrokerInfo() *BrokerInfo {
 	return &d.brokers[d.ordinal]
 }
 
-func (d *discoverer) TokenByOrdinal(ordinal int) types.Token {
+func (d *discoverer) TokenByOrdinal(ordinal int) Token {
 	return d.ring[ordinal]
 }
 
-func (d *discoverer) GetLeader(partitionKey string) types.ReplicationInfo {
+func (d *discoverer) GetLeader(partitionKey string) ReplicationInfo {
 	if partitionKey == "" {
-		return types.ReplicationInfo{
+		return ReplicationInfo{
 			Leader:    d.GetBrokerInfo(),
 			Followers: d.Peers(),
 			Token:     0,
 		}
 	}
 
-	token := types.GetToken(partitionKey)
-	leaderIndex := types.GetPrimaryTokenIndex(token, d.ring)
+	token := GetToken(partitionKey)
+	leaderIndex := GetPrimaryTokenIndex(token, d.ring)
 
 	// TODO: Use generation logic
-	return types.ReplicationInfo{
+	return ReplicationInfo{
 		Leader:    &d.brokers[leaderIndex],
 		Followers: d.brokersExcept(leaderIndex),
 		Token:     d.ring[leaderIndex],
 	}
 }
 
-func (d *discoverer) brokersExcept(index int) []types.BrokerInfo {
-	result := make([]types.BrokerInfo, 0, len(d.brokers)-1)
+func (d *discoverer) brokersExcept(index int) []BrokerInfo {
+	result := make([]BrokerInfo, 0, len(d.brokers)-1)
 	for i, broker := range d.brokers {
 		if i != index {
 			result = append(result, broker)
@@ -156,7 +158,7 @@ func (d *discoverer) brokersExcept(index int) []types.BrokerInfo {
 	return result
 }
 
-func (d *discoverer) RegisterListener(l types.TopologyChangeHandler) {
+func (d *discoverer) RegisterListener(l TopologyChangeHandler) {
 	d.listeners = append(d.listeners, l)
 }
 
