@@ -14,25 +14,26 @@ type queries struct {
 	selectGenerations *sql.Stmt
 	updateGeneration  *sql.Stmt
 	insertGeneration  *sql.Stmt
+	acceptGeneration  *sql.Stmt
 }
 
 func (c *client) prepareQueries() {
 	c.queries.selectGenerations = c.prepare(`
-		SELECT start_token, end_token, version, tx, status, leader, followers FROM
+		SELECT start_token, end_token, version, timestamp, tx, status, leader, followers FROM
 		generations WHERE start_token = ? ORDER BY start_token, version DESC LIMIT 2`)
 
 	c.queries.insertGeneration = c.prepare(`
-		INSERT INTO generations (start_token, end_token, version, tx, status, leader, followers)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		INSERT INTO generations (start_token, end_token, version, timestamp, tx, status, leader, followers)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	c.queries.updateGeneration = c.prepare(`
 		UPDATE generations
 		SET
-			end_token = ?, tx = ?, status = ?, leader = ?, followers = ?
+			end_token = ?, timestamp = ?, tx = ?, status = ?, leader = ?, followers = ?
 		WHERE
-			start_token = ? AND version = ?
-			AND
-			end_token = ? AND tx = ? AND status = ? AND leader = ? AND followers = ?`)
+			start_token = ? AND version = ? AND
+			end_token = ? AND tx = ? AND status = ? AND
+			leader = ? AND followers = ?`)
 }
 
 func (c *client) prepare(query string) *sql.Stmt {
@@ -83,7 +84,9 @@ func (c *client) GetGenerationsByToken(token types.Token) ([]types.Generation, e
 	for rows.Next() {
 		item := types.Generation{}
 		var followers string
-		if err = rows.Scan(&item.Start, &item.End, &item.Version, &item.Tx, &item.Status, &item.Leader, &followers); err != nil {
+		err = rows.Scan(
+			&item.Start, &item.End, &item.Version, &item.Timestamp, &item.Tx, &item.Status, &item.Leader, &followers)
+		if err != nil {
 			return result, err
 		}
 		if followers != "" {
@@ -106,13 +109,13 @@ func (c *client) UpsertGeneration(existing *types.Generation, newGen *types.Gene
 	newFollowers := utils.ToCsv(newGen.Followers)
 	if existing == nil {
 		_, err := c.queries.insertGeneration.Exec(
-			newGen.Start, newGen.End, newGen.Version, newGen.Tx, newGen.Status, newGen.Leader, newFollowers)
+			newGen.Start, newGen.End, newGen.Version, newGen.Timestamp, newGen.Tx, newGen.Status, newGen.Leader, newFollowers)
 		return err
 	}
 
 	r, err := c.queries.updateGeneration.Exec(
 		// SET
-		newGen.End, newGen.Tx, newGen.Status, newGen.Leader, newFollowers,
+		newGen.End, newGen.Timestamp, newGen.Tx, newGen.Status, newGen.Leader, newFollowers,
 		// WHERE
 		newGen.Start, newGen.Version,
 		// WHERE existing gen
@@ -127,5 +130,25 @@ func (c *client) UpsertGeneration(existing *types.Generation, newGen *types.Gene
 		return errors.New("No generation was updated")
 	}
 
+	return nil
+}
+
+func (c *client) SetGenerationAsAccepted(newGen *types.Generation) error {
+	followers := utils.ToCsv(newGen.Followers)
+	r, err := c.queries.updateGeneration.Exec(
+		// SET
+		newGen.End, newGen.Timestamp, newGen.Tx, types.StatusAccepted, newGen.Leader, followers,
+		// WHERE
+		newGen.Start, newGen.Version,
+		newGen.End, newGen.Tx, types.StatusProposed, newGen.Leader, followers,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	if n, _ := r.RowsAffected(); n == 0 {
+		return errors.New("No generation was updated")
+	}
 	return nil
 }

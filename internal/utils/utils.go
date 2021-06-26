@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
@@ -78,4 +79,12 @@ func ToCsv(values []int) string {
 	}
 
 	return result
+}
+
+func ToUnixMillis(t time.Time) int64 {
+	return t.UnixNano() / int64(time.Millisecond)
+}
+
+func FromUnixMillis(millis int64) time.Time {
+	return time.Unix(0, millis*int64(time.Millisecond))
 }

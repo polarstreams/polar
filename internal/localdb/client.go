@@ -21,6 +21,8 @@ type Client interface {
 	GetGenerationsByToken(token types.Token) ([]types.Generation, error)
 
 	UpsertGeneration(existing *types.Generation, newGen *types.Generation) error
+
+	SetGenerationAsAccepted(newGen *types.Generation) error
 }
 
 // NewClient creates a new instance of Client.

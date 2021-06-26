@@ -1,6 +1,8 @@
 package types
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // BrokerInfo contains information about a broker
 type BrokerInfo struct {
@@ -45,6 +47,7 @@ type Generation struct {
 	Start     Token     `json:"start"`
 	End       Token     `json:"end"`
 	Version   int       `json:"version"`
+	Timestamp int64     `json:"timestamp"`
 	Leader    int       `json:"leader"`
 	Followers []int     `json:"followers"`
 	Tx        []byte    `json:"tx"`

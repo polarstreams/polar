@@ -68,6 +68,20 @@ func (_m *Client) Init() error {
 	return r0
 }
 
+// SetGenerationAsAccepted provides a mock function with given fields: newGen
+func (_m *Client) SetGenerationAsAccepted(newGen *types.Generation) error {
+	ret := _m.Called(newGen)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*types.Generation) error); ok {
+		r0 = rf(newGen)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // UpsertGeneration provides a mock function with given fields: existing, newGen
 func (_m *Client) UpsertGeneration(existing *types.Generation, newGen *types.Generation) error {
 	ret := _m.Called(existing, newGen)

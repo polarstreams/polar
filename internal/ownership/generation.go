@@ -17,10 +17,10 @@ import (
 )
 
 const (
-	baseDelayMs = 150
-	maxDuration time.Duration = 1<<63 - 1
-	maxInitElapsed = 10 * time.Second
-	replicationFactor = 3
+	baseDelayMs                     = 150
+	maxDuration       time.Duration = 1<<63 - 1
+	maxInitElapsed                  = 10 * time.Second
+	replicationFactor               = 3
 )
 
 var emptyGeneration = Generation{Start: math.MaxInt64, Version: 0, Status: StatusCancelled}
@@ -104,7 +104,7 @@ func (o *generator) startNew(maxElapsed time.Duration) error {
 
 		newGeneration := Generation{
 			Start:     o.discoverer.TokenByOrdinal(self.Ordinal),
-			End:       o.discoverer.TokenByOrdinal((self.Ordinal + 1)%len(brokers)),
+			End:       o.discoverer.TokenByOrdinal((self.Ordinal + 1) % len(brokers)),
 			Leader:    self.Ordinal,
 			Followers: followers,
 		}

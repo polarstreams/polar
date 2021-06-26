@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
@@ -20,8 +21,6 @@ var _ = Describe("Client", func() {
 	Describe("GetGenerationPerToken()", func() {
 		It("Should retrieve an empty generations when no info is found", func() {
 			client := newTestClient()
-			err := client.Init()
-			Expect(err).NotTo(HaveOccurred())
 
 			result, err := client.GetGenerationsByToken(1000)
 			Expect(err).NotTo(HaveOccurred())
@@ -32,8 +31,6 @@ var _ = Describe("Client", func() {
 			start := Token(1001)
 			end := Token(2001)
 			client := newTestClient()
-			err := client.Init()
-			Expect(err).NotTo(HaveOccurred())
 
 			// Insert test data
 			for i := 1; i <= 10; i++ {
@@ -41,6 +38,7 @@ var _ = Describe("Client", func() {
 					Start:     start,
 					End:       end,
 					Version:   i,
+					Timestamp: utils.ToUnixMillis(time.Now()),
 					Tx:        []byte{0, 1},
 					Status:    StatusAccepted,
 					Leader:    2,
@@ -56,6 +54,7 @@ var _ = Describe("Client", func() {
 				Expect(result[i].Start).To(Equal(Token(start)))
 				Expect(result[i].End).To(Equal(Token(end)))
 				Expect(result[i].Tx).To(Equal([]byte{0, 1}))
+				Expect(result[i].Timestamp).To(BeNumerically(">", 1624977183000))
 				Expect(result[i].Status).To(Equal(StatusAccepted))
 				Expect(result[i].Leader).To(Equal(2))
 				Expect(result[i].Followers).To(Equal([]int{0, 1}))
@@ -66,19 +65,18 @@ var _ = Describe("Client", func() {
 	Describe("UpsertGeneration()", func() {
 		It("Should insert generation when existing is not provided", func() {
 			client := newTestClient()
-			err := client.Init()
-			Expect(err).NotTo(HaveOccurred())
 
 			gen := Generation{
 				Start:     1010,
 				End:       2010,
 				Version:   1,
 				Tx:        []byte{0, 1, 2, 3},
+				Timestamp: utils.ToUnixMillis(time.Now()),
 				Status:    StatusProposed,
 				Leader:    0,
 				Followers: []int{1, 2},
 			}
-			err = client.UpsertGeneration(nil, &gen)
+			err := client.UpsertGeneration(nil, &gen)
 			Expect(err).NotTo(HaveOccurred())
 
 			obtained, err := client.GetGenerationsByToken(gen.Start)
@@ -88,14 +86,13 @@ var _ = Describe("Client", func() {
 
 		It("Should update when existing is provided", func() {
 			client := newTestClient()
-			err := client.Init()
-			Expect(err).NotTo(HaveOccurred())
 
 			gen := Generation{
 				Start:     1021,
 				End:       2021,
 				Version:   2,
 				Tx:        []byte{0, 1, 2, 3},
+				Timestamp: utils.ToUnixMillis(time.Now()),
 				Status:    StatusProposed,
 				Leader:    0,
 				Followers: []int{1, 2},
@@ -108,7 +105,7 @@ var _ = Describe("Client", func() {
 			newGen.Followers = []int{2, 0}
 			newGen.Tx = []byte{0, 1, 2, 3}
 
-			err = client.UpsertGeneration(&gen, &newGen)
+			err := client.UpsertGeneration(&gen, &newGen)
 			Expect(err).NotTo(HaveOccurred())
 
 			obtained, err := client.GetGenerationsByToken(gen.Start)
@@ -118,8 +115,6 @@ var _ = Describe("Client", func() {
 
 		It("Should return an error when no row is affected", func() {
 			client := newTestClient()
-			err := client.Init()
-			Expect(err).NotTo(HaveOccurred())
 
 			gen := Generation{
 				Start:     1030,
@@ -127,18 +122,67 @@ var _ = Describe("Client", func() {
 				Version:   1,
 				Tx:        []byte{0, 1, 2, 3},
 				Status:    StatusProposed,
+				Timestamp: utils.ToUnixMillis(time.Now()),
 				Leader:    0,
 				Followers: []int{1, 2},
 			}
 
-			err = client.UpsertGeneration(&gen, &gen)
+			err := client.UpsertGeneration(&gen, &gen)
+			Expect(err).To(MatchError("No generation was updated"))
+		})
+	})
+
+	Describe("SetAsAccepted()", func() {
+		It("Should update the status to accepted when's a match", func() {
+			client := newTestClient()
+
+			gen := Generation{
+				Start:     1040,
+				End:       2040,
+				Version:   2,
+				Tx:        []byte{0, 1, 2, 3},
+				Status:    StatusProposed,
+				Timestamp: utils.ToUnixMillis(time.Now()),
+				Leader:    2,
+				Followers: []int{0, 1},
+			}
+
+			insertGeneration(client, gen)
+
+			gen.Status = StatusAccepted
+
+			err := client.SetGenerationAsAccepted(&gen)
+			Expect(err).ToNot(HaveOccurred())
+
+			obtained, err := client.GetGenerationsByToken(gen.Start)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(gen).To(Equal(obtained[0]))
+		})
+
+		It("Should error when no row was affected", func() {
+			client := newTestClient()
+			gen := Generation{
+				Start:     1050, // Does not exist
+				End:       2050,
+				Version:   2,
+				Tx:        []byte{0, 1, 2, 3},
+				Status:    StatusAccepted,
+				Timestamp: utils.ToUnixMillis(time.Now()),
+				Leader:    2,
+				Followers: []int{0, 1},
+			}
+
+			err := client.SetGenerationAsAccepted(&gen)
 			Expect(err).To(MatchError("No generation was updated"))
 		})
 	})
 })
 
 func newTestClient() *client {
-	return NewClient(&testConfig{}).(*client)
+	client := NewClient(&testConfig{}).(*client)
+	err := client.Init()
+	Expect(err).NotTo(HaveOccurred())
+	return client
 }
 
 type testConfig struct{}
@@ -151,9 +195,10 @@ func (c *testConfig) LocalDbPath() string {
 
 func insertGeneration(c *client, gen Generation) {
 	query := `
-		INSERT INTO generations (start_token, end_token, version, tx, status, leader, followers)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`
+		INSERT INTO generations (start_token, end_token, version, timestamp, tx, status, leader, followers)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := c.db.Exec(
-		query, gen.Start, gen.End, gen.Version, gen.Tx, gen.Status, gen.Leader, utils.ToCsv(gen.Followers))
+		query, gen.Start, gen.End, gen.Version, gen.Timestamp, gen.Tx,
+		gen.Status, gen.Leader, utils.ToCsv(gen.Followers))
 	Expect(err).NotTo(HaveOccurred())
 }

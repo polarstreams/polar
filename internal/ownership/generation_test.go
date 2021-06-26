@@ -88,12 +88,12 @@ func localInfo(ordinal int) *BrokerInfo {
 func brokers(self int, ordinals ...int) []BrokerInfo {
 	result := make([]BrokerInfo, 0)
 	for _, ordinal := range ordinals {
-        result = append(result, BrokerInfo{
+		result = append(result, BrokerInfo{
 			IsSelf:   self == ordinal,
 			Ordinal:  ordinal,
 			HostName: fmt.Sprintf("host-%d", ordinal),
 		})
-    }
+	}
 
 	return result
 }

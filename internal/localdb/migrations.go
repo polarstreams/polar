@@ -1,7 +1,5 @@
 package localdb
 
-// TODO: Proposed values
-
 const ddl01 = `
 	CREATE TABLE IF NOT EXISTS local_info (
 		key TEXT PRIMARY KEY,
@@ -13,6 +11,7 @@ const ddl01 = `
 		start_token BIGINT NOT NULL,
 		end_token BIGINT NOT NULL,
 		version INT NOT NULL,
+		timestamp BIGINT NOT NULL,
 		tx BLOB NOT NULL,
 		status INT NOT NULL,
 		leader INT NOT NULL,
@@ -20,6 +19,7 @@ const ddl01 = `
 		PRIMARY KEY (start_token, version) -- unique constraint for token and version
 	);
 
+	-- TODO: Define if needed
 	CREATE TABLE IF NOT EXISTS generations_tx (
 		tx BLOB PRIMARY KEY,
 		status INT
