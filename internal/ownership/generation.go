@@ -16,11 +16,14 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const baseDelayMs = 150
-const maxDuration time.Duration = 1<<63 - 1
-const maxInitElapsed = 10 * time.Second
+const (
+	baseDelayMs = 150
+	maxDuration time.Duration = 1<<63 - 1
+	maxInitElapsed = 10 * time.Second
+	replicationFactor = 3
+)
 
-var emptyGeneration = Generation{Start: math.MaxInt64, Version: -1, Status: StatusCancelled}
+var emptyGeneration = Generation{Start: math.MaxInt64, Version: 0, Status: StatusCancelled}
 
 type Generator interface {
 	Initializer
@@ -33,6 +36,7 @@ type generator struct {
 	discoverer discovery.TopologyGetter
 	gossiper   interbroker.GenerationGossiper
 	localDb    localdb.Client
+	nextUuid   func() []byte // allow injecting it from tests
 }
 
 func NewGenerator(discoverer discovery.TopologyGetter, gossiper interbroker.GenerationGossiper, localDb localdb.Client) Generator {
@@ -40,11 +44,17 @@ func NewGenerator(discoverer discovery.TopologyGetter, gossiper interbroker.Gene
 		discoverer: discoverer,
 		gossiper:   gossiper,
 		localDb:    localDb,
+		nextUuid:   nextUuid,
 		items:      make(chan genMessage),
 	}
 
 	go o.process()
 	return o
+}
+
+func nextUuid() []byte {
+	result, _ := uuid.New().MarshalBinary()
+	return result
 }
 
 func (o *generator) Init() error {
@@ -73,12 +83,12 @@ func (o *generator) StartGenerations() {
 
 func (o *generator) startNew(maxElapsed time.Duration) error {
 	self := o.discoverer.LocalInfo()
-	peers := o.discoverer.Peers()
-	followers := make([]int, int(math.Min(float64(len(peers)), 2)))
+	brokers := o.discoverer.Brokers()
+	followers := make([]int, int(math.Min(float64(len(brokers)), replicationFactor-1)))
 
 	// Get the next peers in the ring as followers
-	for i := range followers {
-		followers[i] = peers[(self.Ordinal+1+i)%len(followers)].Ordinal
+	for i := 0; i < len(followers); i++ {
+		followers[i] = brokers[(self.Ordinal+1+i)%len(brokers)].Ordinal
 	}
 
 	// initial delay
@@ -94,11 +104,12 @@ func (o *generator) startNew(maxElapsed time.Duration) error {
 
 		newGeneration := Generation{
 			Start:     o.discoverer.TokenByOrdinal(self.Ordinal),
+			End:       o.discoverer.TokenByOrdinal((self.Ordinal + 1)%len(brokers)),
 			Leader:    self.Ordinal,
 			Followers: followers,
 		}
 
-		log.Debug().Msgf("Starting new generation %v", newGeneration)
+		log.Debug().Msgf("Starting new generation for token %d with followers %v", newGeneration.Start, followers)
 
 		message := localGenMessage{
 			generation: newGeneration,
@@ -168,7 +179,9 @@ func (o *generator) processLocal(newGen Generation) error {
 	} else {
 		accepted, proposed = checkState(gens, accepted, proposed)
 	}
-	localAccepted, localProposed := accepted, proposed
+
+	//TODO: Local accepted and proposed
+	_, localProposed := accepted, proposed
 
 	genByFollower := make([][]Generation, len(newGen.Followers))
 
@@ -192,7 +205,7 @@ func (o *generator) processLocal(newGen Generation) error {
 	}
 
 	newGen.Version = accepted.Version + 1
-	newGen.Tx, _ = uuid.New().MarshalBinary()
+	newGen.Tx = o.nextUuid()
 	newGen.Status = StatusProposed
 
 	failedFollowers := make([]int, 0)
@@ -205,17 +218,36 @@ func (o *generator) processLocal(newGen Generation) error {
 			existingGen = &gens[0]
 		}
 
+		// TODO: In parallel!
 		if err := o.gossiper.UpsertGeneration(follower, existingGen, newGen); err != nil {
 			log.Warn().Err(err).Msgf("Upsert generation failed in peer %d", follower)
 			failedFollowers = append(failedFollowers, follower)
 		}
 	}
 
-	if float32(len(failedFollowers)) >= float32(len(o.discoverer.Brokers()))/2.0 {
+	if len(failedFollowers) >= len(newGen.Followers)/2 {
 		return fmt.Errorf("Generation creation was rejected by proposed followers")
 	}
 
-	return o.localDb.UpsertGeneration(localProposed, localAccepted)
+	//TODO: Heal failed followers
+
+	if localProposed == &emptyGeneration {
+		localProposed = nil
+	}
+
+	log.Debug().Msgf("Proposing locally new generation %+v", newGen)
+
+	if err := o.localDb.UpsertGeneration(localProposed, &newGen); err != nil {
+		log.Error().Msg("Generation could not be proposed locally")
+		return fmt.Errorf("Generation could not be proposed locally")
+	}
+
+	return o.setAsAccepted(&newGen)
+}
+
+func (o *generator) setAsAccepted(newGen *Generation) error {
+	//TODO: Implement
+	return nil
 }
 
 func (o *generator) processRemote(existing *Generation, new *Generation) error {

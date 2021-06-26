@@ -46,9 +46,9 @@ type Generation struct {
 	End       Token     `json:"end"`
 	Version   int       `json:"version"`
 	Leader    int       `json:"leader"`
+	Followers []int     `json:"followers"`
 	Tx        []byte    `json:"tx"`
 	Status    GenStatus `json:"status"`
-	Followers []int     `json:"followers"`
 }
 
 type GenStatus int
