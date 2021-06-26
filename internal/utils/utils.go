@@ -56,11 +56,11 @@ func NewBufferCap(initialCap int) *bytes.Buffer {
 }
 
 // GetServiceAddress determines whether it should be bind to all interfaces or it should use a single host name
-func GetServiceAddress(port int, discoverer discovery.LeaderGetter, config conf.BasicConfig) string {
+func GetServiceAddress(port int, discoverer discovery.TopologyGetter, config conf.BasicConfig) string {
 	address := fmt.Sprintf(":%d", port)
 
 	if !config.ListenOnAllAddresses() {
-		info := discoverer.GetBrokerInfo()
+		info := discoverer.LocalInfo()
 		// Use the provided name / address
 		address = fmt.Sprintf("%s:%d", info.HostName, port)
 	}

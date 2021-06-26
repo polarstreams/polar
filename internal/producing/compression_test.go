@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestCompression(t *testing.T) {
+func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Producing Suite")
 }

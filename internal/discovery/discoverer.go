@@ -21,24 +21,27 @@ const (
 // It emits events that others like Gossipper listens to.
 type Discoverer interface {
 	Initializer
-	LeaderGetter
-	// Returns a point-in-time list of all brokers except itself
-	Peers() []BrokerInfo
-	// Returns a point-in-time list of all brokers
-	Brokers() []BrokerInfo
+	TopologyGetter
 	RegisterListener(l TopologyChangeHandler)
-	TokenByOrdinal(ordinal int) Token
 	Shutdown()
 }
 
-type LeaderGetter interface {
-	// GetLeader gets the current leader and followers of a given partition key.
+type TopologyGetter interface {
+	// Leader gets the current leader and followers of a given partition key.
 	//
 	// In case partitionKey is empty, the current node is provided
-	GetLeader(partitionKey string) ReplicationInfo
+	Leader(partitionKey string) ReplicationInfo
 
-	// GetBrokerInfo returns the information of the current broker (self)
-	GetBrokerInfo() *BrokerInfo
+	// LocalInfo returns the information of the current broker (self)
+	LocalInfo() *BrokerInfo
+
+	// Returns a point-in-time list of all brokers except itself
+	Peers() []BrokerInfo
+
+	// Returns a point-in-time list of all brokers
+	Brokers() []BrokerInfo
+
+	TokenByOrdinal(ordinal int) Token
 }
 
 type TopologyChangeHandler func()
@@ -120,7 +123,7 @@ func parseFixedBrokers(ordinal int) []BrokerInfo {
 	return brokers
 }
 
-func (d *discoverer) GetBrokerInfo() *BrokerInfo {
+func (d *discoverer) LocalInfo() *BrokerInfo {
 	return &d.brokers[d.ordinal]
 }
 
@@ -128,10 +131,10 @@ func (d *discoverer) TokenByOrdinal(ordinal int) Token {
 	return d.ring[ordinal]
 }
 
-func (d *discoverer) GetLeader(partitionKey string) ReplicationInfo {
+func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 	if partitionKey == "" {
 		return ReplicationInfo{
-			Leader:    d.GetBrokerInfo(),
+			Leader:    d.LocalInfo(),
 			Followers: d.Peers(),
 			Token:     0,
 		}

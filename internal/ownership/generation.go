@@ -30,12 +30,12 @@ type Generator interface {
 type generator struct {
 	// items can be a local or remote
 	items      chan genMessage
-	discoverer discovery.Discoverer
+	discoverer discovery.TopologyGetter
 	gossiper   interbroker.GenerationGossiper
 	localDb    localdb.Client
 }
 
-func NewGenerator(discoverer discovery.Discoverer, gossiper interbroker.GenerationGossiper, localDb localdb.Client) Generator {
+func NewGenerator(discoverer discovery.TopologyGetter, gossiper interbroker.GenerationGossiper, localDb localdb.Client) Generator {
 	o := &generator{
 		discoverer: discoverer,
 		gossiper:   gossiper,
@@ -72,7 +72,7 @@ func (o *generator) StartGenerations() {
 }
 
 func (o *generator) startNew(maxElapsed time.Duration) error {
-	self := o.discoverer.GetBrokerInfo()
+	self := o.discoverer.LocalInfo()
 	peers := o.discoverer.Peers()
 	followers := make([]int, int(math.Min(float64(len(peers)), 2)))
 

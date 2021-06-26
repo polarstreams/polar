@@ -28,7 +28,7 @@ type Producer interface {
 func NewProducer(
 	config conf.ProducerConfig,
 	topicGetter topics.TopicGetter,
-	leaderGetter discovery.LeaderGetter,
+	leaderGetter discovery.TopologyGetter,
 	datalog data.Datalog,
 	gossiper interbroker.Gossiper,
 ) Producer {
@@ -49,7 +49,7 @@ type producer struct {
 	topicGetter  topics.TopicGetter
 	datalog      data.Datalog
 	gossiper     interbroker.Gossiper
-	leaderGetter discovery.LeaderGetter
+	leaderGetter discovery.TopologyGetter
 	// We use a single coalescer per topics
 	coalescerMap *utils.CopyOnWriteMap
 }
@@ -107,7 +107,7 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 	}
 
 	partitionKey := r.URL.Query().Get("partitionKey")
-	replicationInfo := p.leaderGetter.GetLeader(partitionKey)
+	replicationInfo := p.leaderGetter.Leader(partitionKey)
 	leader := replicationInfo.Leader
 
 	if leader == nil {

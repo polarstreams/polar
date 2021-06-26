@@ -4,13 +4,17 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jorgebay/soda/internal/test/discovery/mocks"
 	"github.com/jorgebay/soda/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("SendToFollowers()", func() {
-	g := &gossiper{connections: atomic.Value{}}
+	g := &gossiper{
+		discoverer:  new(mocks.Discoverer),
+		connections: atomic.Value{},
+	}
 	topic := types.TopicDataId{Name: "abc"}
 	body := make([]byte, 10)
 	replication := types.ReplicationInfo{
