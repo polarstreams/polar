@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	. "github.com/jorgebay/soda/internal/test/discovery/mocks"
 	. "github.com/jorgebay/soda/internal/test/interbroker/mocks"
 	. "github.com/jorgebay/soda/internal/test/localdb/mocks"
@@ -41,13 +42,13 @@ var _ = Describe("generator", func() {
 			gossiperMock.On("GetGenerations", mock.Anything, startToken).Return(nil, nil)
 			gossiperMock.On("UpsertGeneration", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-			txId := []byte{0, 1, 2, 3}
+			txId := uuid.New()
 
 			o := &generator{
 				discoverer: discovererMock,
 				gossiper:   gossiperMock,
 				localDb:    dbMock,
-				nextUuid:   func() []byte { return txId },
+				nextUuid:   func() uuid.UUID { return txId },
 				items:      make(chan genMessage),
 			}
 

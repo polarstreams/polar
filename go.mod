@@ -3,7 +3,7 @@ module github.com/jorgebay/soda
 go 1.15
 
 require (
-	github.com/google/uuid v1.2.0 // indirect
+	github.com/google/uuid v1.3.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/klauspost/compress v1.12.1
 	github.com/mattn/go-sqlite3 v1.14.7

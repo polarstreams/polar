@@ -2,6 +2,8 @@ package types
 
 import (
 	"fmt"
+
+	"github.com/google/uuid"
 )
 
 // BrokerInfo contains information about a broker
@@ -50,8 +52,10 @@ type Generation struct {
 	Timestamp int64     `json:"timestamp"`
 	Leader    int       `json:"leader"`
 	Followers []int     `json:"followers"`
-	Tx        []byte    `json:"tx"`
+	Tx        uuid.UUID `json:"tx"`
+	TxLeader  int       `json:"txLeader"`
 	Status    GenStatus `json:"status"`
+	ToDelete  bool      `json:"toDelete"`
 }
 
 type GenStatus int
@@ -60,4 +64,11 @@ const (
 	StatusCancelled GenStatus = iota
 	StatusProposed
 	StatusAccepted
+)
+
+type TransactionStatus int
+
+const (
+	TransactionStatusCancelled GenStatus = iota
+	TransactionStatusCommitted
 )

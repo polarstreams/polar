@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	. "github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
 	. "github.com/onsi/ginkgo"
@@ -31,6 +32,7 @@ var _ = Describe("Client", func() {
 			start := Token(1001)
 			end := Token(2001)
 			client := newTestClient()
+			tx := uuid.New()
 
 			// Insert test data
 			for i := 1; i <= 10; i++ {
@@ -39,7 +41,7 @@ var _ = Describe("Client", func() {
 					End:       end,
 					Version:   i,
 					Timestamp: utils.ToUnixMillis(time.Now()),
-					Tx:        []byte{0, 1},
+					Tx:        tx,
 					Status:    StatusAccepted,
 					Leader:    2,
 					Followers: []int{0, 1},
@@ -53,7 +55,7 @@ var _ = Describe("Client", func() {
 			for i := 0; i < 2; i++ {
 				Expect(result[i].Start).To(Equal(Token(start)))
 				Expect(result[i].End).To(Equal(Token(end)))
-				Expect(result[i].Tx).To(Equal([]byte{0, 1}))
+				Expect(result[i].Tx).To(Equal(tx))
 				Expect(result[i].Timestamp).To(BeNumerically(">", 1624977183000))
 				Expect(result[i].Status).To(Equal(StatusAccepted))
 				Expect(result[i].Leader).To(Equal(2))
@@ -70,7 +72,7 @@ var _ = Describe("Client", func() {
 				Start:     1010,
 				End:       2010,
 				Version:   1,
-				Tx:        []byte{0, 1, 2, 3},
+				Tx:        uuid.New(),
 				Timestamp: utils.ToUnixMillis(time.Now()),
 				Status:    StatusProposed,
 				Leader:    0,
@@ -91,7 +93,7 @@ var _ = Describe("Client", func() {
 				Start:     1021,
 				End:       2021,
 				Version:   2,
-				Tx:        []byte{0, 1, 2, 3},
+				Tx:        uuid.New(),
 				Timestamp: utils.ToUnixMillis(time.Now()),
 				Status:    StatusProposed,
 				Leader:    0,
@@ -103,7 +105,7 @@ var _ = Describe("Client", func() {
 			newGen := gen
 			newGen.Leader = 1
 			newGen.Followers = []int{2, 0}
-			newGen.Tx = []byte{0, 1, 2, 3}
+			newGen.Tx = uuid.New()
 
 			err := client.UpsertGeneration(&gen, &newGen)
 			Expect(err).NotTo(HaveOccurred())
@@ -120,7 +122,7 @@ var _ = Describe("Client", func() {
 				Start:     1030,
 				End:       2030,
 				Version:   1,
-				Tx:        []byte{0, 1, 2, 3},
+				Tx:        uuid.New(),
 				Status:    StatusProposed,
 				Timestamp: utils.ToUnixMillis(time.Now()),
 				Leader:    0,
@@ -140,7 +142,7 @@ var _ = Describe("Client", func() {
 				Start:     1040,
 				End:       2040,
 				Version:   2,
-				Tx:        []byte{0, 1, 2, 3},
+				Tx:        uuid.New(),
 				Status:    StatusProposed,
 				Timestamp: utils.ToUnixMillis(time.Now()),
 				Leader:    2,
@@ -165,7 +167,7 @@ var _ = Describe("Client", func() {
 				Start:     1050, // Does not exist
 				End:       2050,
 				Version:   2,
-				Tx:        []byte{0, 1, 2, 3},
+				Tx:        uuid.New(),
 				Status:    StatusAccepted,
 				Timestamp: utils.ToUnixMillis(time.Now()),
 				Leader:    2,

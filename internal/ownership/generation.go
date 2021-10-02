@@ -36,7 +36,7 @@ type generator struct {
 	discoverer discovery.TopologyGetter
 	gossiper   interbroker.GenerationGossiper
 	localDb    localdb.Client
-	nextUuid   func() []byte // allow injecting it from tests
+	nextUuid   func() uuid.UUID // allow injecting it from tests
 }
 
 func NewGenerator(discoverer discovery.TopologyGetter, gossiper interbroker.GenerationGossiper, localDb localdb.Client) Generator {
@@ -52,9 +52,8 @@ func NewGenerator(discoverer discovery.TopologyGetter, gossiper interbroker.Gene
 	return o
 }
 
-func nextUuid() []byte {
-	result, _ := uuid.New().MarshalBinary()
-	return result
+func nextUuid() uuid.UUID {
+	return uuid.New()
 }
 
 func (o *generator) Init() error {

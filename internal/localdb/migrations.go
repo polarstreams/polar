@@ -7,7 +7,7 @@ const ddl01 = `
 		schema_version_current TEXT
 	);
 
-	-- TODO: Historic record of committed generations
+	-- Historic record of committed generations
 	CREATE TABLE IF NOT EXISTS generations (
 		start_token BIGINT NOT NULL,
 		end_token BIGINT NOT NULL,
