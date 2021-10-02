@@ -4,20 +4,14 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
-	"testing"
 
 	"github.com/jorgebay/soda/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-func TestMap(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Map Suite")
-}
-
 var _ = Describe("CopyOnWriteMap()", func() {
-	It("support concurrent use", func() {
+	It("should support concurrent use", func() {
 		var wg sync.WaitGroup
 		m := utils.NewCopyOnWriteMap()
 		value1 := "value 1"
@@ -54,7 +48,7 @@ var _ = Describe("CopyOnWriteMap()", func() {
 		Expect(atomic.LoadInt32(&key2Counter)).To(Equal(int32(1)))
 	})
 
-	It("support allow creation errors", func() {
+	It("should allow creation errors", func() {
 		var wg sync.WaitGroup
 		m := utils.NewCopyOnWriteMap()
 		value2 := "value 2"

@@ -112,6 +112,20 @@ func (_m *Gossiper) SendToLeader(replicationInfo types.ReplicationInfo, topic st
 	return r0
 }
 
+// SetGenerationAsAccepted provides a mock function with given fields: ordinal, newGen
+func (_m *Gossiper) SetGenerationAsAccepted(ordinal int, newGen types.Generation) error {
+	ret := _m.Called(ordinal, newGen)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int, types.Generation) error); ok {
+		r0 = rf(ordinal, newGen)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // UpsertGeneration provides a mock function with given fields: ordinal, existing, newGeneration
 func (_m *Gossiper) UpsertGeneration(ordinal int, existing *types.Generation, newGeneration types.Generation) error {
 	ret := _m.Called(ordinal, existing, newGeneration)

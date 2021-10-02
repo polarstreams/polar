@@ -63,6 +63,7 @@ func (g *gossiper) acceptHttpConnections() error {
 			})
 			router.GET(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), ToHandle(g.getGenHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), ToPostHandle(g.postGenHandler))
+			router.POST(fmt.Sprintf(conf.GossipGenerationAcceptUrl, ":token"), ToPostHandle(g.postGenAcceptHandler))
 
 			//TODO: routes to propose/accept new generation
 
@@ -117,5 +118,17 @@ func (g *gossiper) postGenHandler(w http.ResponseWriter, r *http.Request, ps htt
 	}
 
 	// Use the registered listener
-	return g.genListener(gens[0], gens[1])
+	return g.genListener.OnNewRemoteGeneration(gens[0], gens[1])
+}
+
+func (g *gossiper) postGenAcceptHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	if _, err := strconv.ParseInt(strings.TrimSpace(ps.ByName("token")), 10, 64); err != nil {
+		return err
+	}
+	var gen Generation
+	if err := json.NewDecoder(r.Body).Decode(&gen); err != nil {
+		return err
+	}
+	// Use the registered listener
+	return g.genListener.OnRemoteSetAsAccepted(&gen)
 }

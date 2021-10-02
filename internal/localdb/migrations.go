@@ -7,6 +7,7 @@ const ddl01 = `
 		schema_version_current TEXT
 	);
 
+	-- TODO: Historic record of committed generations
 	CREATE TABLE IF NOT EXISTS generations (
 		start_token BIGINT NOT NULL,
 		end_token BIGINT NOT NULL,
@@ -19,9 +20,13 @@ const ddl01 = `
 		PRIMARY KEY (start_token, version) -- unique constraint for token and version
 	);
 
-	-- TODO: Define if needed
-	CREATE TABLE IF NOT EXISTS generations_tx (
+	-- Contains local information for the status of generations
+	-- for rollforward or rollback purposes
+	-- Acts like a local source of truth
+	CREATE TABLE IF NOT EXISTS transactions (
 		tx BLOB PRIMARY KEY,
-		status INT
+		origin INT NOT NULL,
+		timestamp BIGINT NOT NULL,
+		status INT NOT NULL
 	);
 `

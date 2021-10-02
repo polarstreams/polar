@@ -54,11 +54,17 @@ type GenerationGossiper interface {
 	// otherwise it will insert a new one.
 	UpsertGeneration(ordinal int, existing *Generation, newGeneration Generation) error
 
+	SetGenerationAsAccepted(ordinal int, newGen Generation) error
+
 	// RegisterGenListener adds a listener for new generations received by the gossipper
 	RegisterGenListener(listener GenListener)
 }
 
-type GenListener func(existing *Generation, new *Generation) error
+type GenListener interface {
+	OnNewRemoteGeneration(existing *Generation, new *Generation) error
+
+	OnRemoteSetAsAccepted(newGen *Generation) error
+}
 
 func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Gossiper {
 	return &gossiper{
@@ -184,10 +190,21 @@ func (g *gossiper) GetGenerations(ordinal int, token Token) ([]Generation, error
 func (g *gossiper) UpsertGeneration(ordinal int, existing *Generation, newGeneration Generation) error {
 	jsonBody, err := json.Marshal([]*Generation{existing, &newGeneration})
 	if err != nil {
-		panic(err)
+		log.Fatal().Err(err).Msgf("json marshalling failed when upserting generation")
 	}
 
 	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationUrl, newGeneration.Start.String()), jsonBody)
+	defer r.Body.Close()
+	return err
+}
+
+func (g *gossiper) SetGenerationAsAccepted(ordinal int, newGen Generation) error {
+	jsonBody, err := json.Marshal(newGen)
+	if err != nil {
+		log.Fatal().Err(err).Msgf("json marshalling failed when setting generation as accepted")
+	}
+
+	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationAcceptUrl, newGen.Start.String()), jsonBody)
 	defer r.Body.Close()
 	return err
 }

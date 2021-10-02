@@ -13,6 +13,8 @@ const (
 
 	// Url for getting/setting the generation by token
 	GossipGenerationUrl = "/v1/generation/%s"
+	// Url for setting the generation as accepted token
+	GossipGenerationAcceptUrl = "/v1/generation/%s/accept"
 )
 
 const MaxTopicLength = 255

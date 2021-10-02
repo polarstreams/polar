@@ -59,12 +59,17 @@ func nextUuid() []byte {
 
 func (o *generator) Init() error {
 	// At this point in time, the cluster has been discovered but no connection to peers have been made
-	o.gossiper.RegisterGenListener(o.onNewRemoteGeneration)
+	o.gossiper.RegisterGenListener(o)
 	return nil
 }
 
-func (o *generator) onNewRemoteGeneration(existing *Generation, new *Generation) error {
+func (o *generator) OnNewRemoteGeneration(existing *Generation, new *Generation) error {
 	//TODO: Create message
+	return nil
+}
+
+func (o *generator) OnRemoteSetAsAccepted(newGen *Generation) error {
+	//TODO: Create message to channel
 	return nil
 }
 
