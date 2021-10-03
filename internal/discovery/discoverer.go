@@ -4,6 +4,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/jorgebay/soda/internal/conf"
 	. "github.com/jorgebay/soda/internal/types"
@@ -22,6 +24,7 @@ const (
 type Discoverer interface {
 	Initializer
 	TopologyGetter
+	GenerationState
 	RegisterListener(l TopologyChangeHandler)
 	Shutdown()
 }
@@ -46,19 +49,29 @@ type TopologyGetter interface {
 
 type TopologyChangeHandler func()
 
+type genMap map[Token]Generation
+
 func NewDiscoverer(config conf.DiscovererConfig) Discoverer {
+	generations := atomic.Value{}
+	generations.Store(genMap{})
+
 	return &discoverer{
-		config:    config,
-		listeners: make([]TopologyChangeHandler, 0),
+		config:      config,
+		listeners:   make([]TopologyChangeHandler, 0),
+		generations: generations,
+		genProposed: genMap{},
 	}
 }
 
 type discoverer struct {
-	config    conf.DiscovererConfig
-	listeners []TopologyChangeHandler
-	brokers   []BrokerInfo
-	ring      []Token
-	ordinal   int
+	config      conf.DiscovererConfig
+	listeners   []TopologyChangeHandler
+	brokers     []BrokerInfo
+	ring        []Token
+	ordinal     int
+	genMutex    sync.Mutex
+	genProposed genMap
+	generations atomic.Value // copy on write semantics
 }
 
 func (d *discoverer) Init() error {

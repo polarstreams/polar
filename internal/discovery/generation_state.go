@@ -1,0 +1,133 @@
+package discovery
+
+import (
+	"fmt"
+	"sync/atomic"
+
+	. "github.com/google/uuid"
+	. "github.com/jorgebay/soda/internal/types"
+)
+
+type GenerationState interface {
+	// Generation gets a snapshot of the active generation by token.
+	// This is part of the hot path.
+	Generation(token Token) *Generation
+
+	// GenerationProposed reads a snapshot of the current committed and proposed generations
+	GenerationProposed(token Token) (committed *Generation, proposed *Generation)
+
+	// SetProposed compares and sets the proposed/accepted generation.
+	//
+	// Checks that the previous tx matches or is null.
+	// Also checks that provided gen.version is equal to committed plus one.
+	SetGenerationProposed(gen Generation, expectedTx *UUID) error
+
+	// SetAsCommitted sets the transaction as committed, storing the history and
+	// setting the proposed generation as committed
+	//
+	// Returns an error when transaction does not match
+	SetAsCommitted(token Token, tx UUID) error
+}
+
+func (d *discoverer) Generation(token Token) *Generation {
+	existingMap := d.generations.Load().(genMap)
+
+	if v, ok := existingMap[token]; ok {
+		return &v
+	}
+	return nil
+}
+
+func (d *discoverer) GenerationProposed(token Token) (committed *Generation, proposed *Generation) {
+	defer d.genMutex.Unlock()
+	// All access to gen proposed must be lock protected
+	d.genMutex.Lock()
+
+	proposed = nil
+	if v, ok := d.genProposed[token]; ok {
+		proposed = &v
+	}
+
+	committed = d.Generation(token)
+	return
+}
+
+func (d *discoverer) SetGenerationProposed(gen Generation, expectedTx *UUID) error {
+	defer d.genMutex.Unlock()
+	d.genMutex.Lock()
+
+	var currentTx *UUID = nil
+	if existingGen, ok := d.genProposed[gen.Start]; ok {
+		currentTx = &existingGen.Tx
+	}
+
+	if currentTx != nil && expectedTx == nil {
+		return fmt.Errorf("Existing transaction is not nil")
+	}
+
+	if currentTx == nil && expectedTx != nil {
+		return fmt.Errorf("Existing transaction is nil and expected not to be")
+	}
+
+	if expectedTx != nil && currentTx != nil && *currentTx != *expectedTx {
+		return fmt.Errorf("Existing proposed does not match: %s (expected %s)", currentTx, expectedTx)
+	}
+
+	// Get existing committed
+	committed := d.Generation(gen.Start)
+
+	if committed != nil && gen.Version <= committed.Version {
+		return fmt.Errorf(
+			"Proposed version is not the next version of committed: committed = %d, proposed = %d",
+			committed.Version,
+			gen.Version)
+	}
+
+	// Replace entire proposed value
+	d.genProposed[gen.Start] = gen
+
+	return nil
+}
+
+func (d *discoverer) SetAsCommitted(token Token, tx UUID) error {
+	defer d.genMutex.Unlock()
+	d.genMutex.Lock()
+
+	// Set the transaction and the generation value as committed
+	existingProposed, ok := d.genProposed[token]
+
+	if !ok {
+		return fmt.Errorf("No proposed value")
+	}
+
+	if existingProposed.Tx != tx {
+		return fmt.Errorf("Transaction does not match")
+	}
+
+	existingProposed.Status = StatusCommitted
+
+	copyAndStore(d.generations, existingProposed)
+
+	// Remove from proposed
+	delete(d.genProposed, token)
+
+	// TODO: store the history
+	return nil
+}
+
+func copyAndStore(generations atomic.Value, gen Generation) {
+	existingMap := generations.Load().(genMap)
+
+	// Shallow copy existing
+	newMap := make(genMap, len(existingMap))
+	for k, v := range existingMap {
+		newMap[k] = v
+	}
+
+	if !gen.ToDelete {
+		newMap[gen.Start] = gen
+	} else {
+		delete(newMap, gen.Start)
+	}
+	generations.Store(newMap)
+}

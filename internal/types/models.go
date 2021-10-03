@@ -64,6 +64,7 @@ const (
 	StatusCancelled GenStatus = iota
 	StatusProposed
 	StatusAccepted
+	StatusCommitted
 )
 
 type TransactionStatus int

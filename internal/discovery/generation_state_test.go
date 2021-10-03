@@ -1,0 +1,141 @@
+package discovery
+
+import (
+	"fmt"
+	"sync/atomic"
+
+	. "github.com/google/uuid"
+	. "github.com/jorgebay/soda/internal/types"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+)
+
+var _ = Describe("GenerationState", func() {
+	Describe("Generation()", func() {
+		It("should load existing", func() {
+			s := state()
+			gen := Generation{
+				Start: Token(123),
+				End:   Token(345),
+			}
+			storeCommitted(s, gen)
+			Expect(s.Generation(Token(123))).To(Equal(&gen))
+		})
+
+		It("should return nil when not found", func() {
+			s := state()
+			Expect(s.Generation(Token(123))).To(BeNil())
+		})
+	})
+
+	Describe("SetGenerationProposed()", func() {
+		It("should return error when previous transaction does not match", func() {
+			s := state()
+
+			gen := Generation{
+				Start:  Token(123),
+				End:    Token(345),
+				Tx:     Must(NewRandom()),
+				Status: StatusProposed,
+			}
+			s.genProposed[gen.Start] = gen
+
+			tx := Must(NewRandom())
+			err := s.SetGenerationProposed(gen, &tx)
+			Expect(err).To(MatchError(MatchRegexp(fmt.Sprintf(
+				"Existing proposed does not match.*expected %s", tx))))
+		})
+
+		It("should return error when existing transaction is nil and does not match", func() {
+			s := state()
+
+			gen := Generation{
+				Start:  Token(123),
+				End:    Token(345),
+				Tx:     Must(NewRandom()),
+				Status: StatusProposed,
+			}
+
+			tx := Must(NewRandom())
+			err := s.SetGenerationProposed(gen, &tx)
+			Expect(err).To(MatchError("Existing transaction is nil and expected not to be"))
+		})
+
+		It("should return error when tx match and version is not higher", func() {
+			s := state()
+
+			storeCommitted(s, Generation{
+				Start:   Token(123),
+				End:     Token(345),
+				Version: 1,
+			})
+
+			tx := Must(NewRandom())
+			existingProposed := Generation{
+				Start:   Token(123),
+				End:     Token(345),
+				Tx:      tx,
+				Version: 1,
+				Status:  StatusProposed,
+			}
+			s.genProposed[existingProposed.Start] = existingProposed
+
+			newGen := Generation{
+				Start:   existingProposed.Start,
+				End:     existingProposed.End,
+				Tx:      tx,
+				Version: 1,
+				Status:  StatusAccepted,
+			}
+
+			err := s.SetGenerationProposed(newGen, &tx)
+			Expect(err).To(MatchError(
+				"Proposed version is not the next version of committed: committed = 1, proposed = 1"))
+		})
+
+		It("should replace existing when tx match and version is higher", func() {
+			s := state()
+
+			storeCommitted(s, Generation{
+				Start:   Token(123),
+				End:     Token(345),
+				Version: 1,
+			})
+
+			tx := Must(NewRandom())
+			existingProposed := Generation{
+				Start:   Token(123),
+				End:     Token(345),
+				Tx:      tx,
+				Version: 2,
+				Status:  StatusProposed,
+			}
+			s.genProposed[existingProposed.Start] = existingProposed
+
+			newGen := Generation{
+				Start:   existingProposed.Start,
+				End:     existingProposed.End,
+				Tx:      tx,
+				Version: 2,
+				Status:  StatusAccepted,
+			}
+
+			err := s.SetGenerationProposed(newGen, &tx)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(s.genProposed[existingProposed.Start]).To(Equal(newGen))
+		})
+	})
+})
+
+func state() *discoverer {
+	return NewDiscoverer(nil).(*discoverer)
+}
+
+func storeCommitted(s *discoverer, gen Generation) {
+	m := genMap{}
+	m[gen.Start] = gen
+	v := atomic.Value{}
+	v.Store(m)
+	s.generations = v
+}
