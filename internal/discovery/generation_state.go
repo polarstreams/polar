@@ -6,6 +6,7 @@ import (
 
 	. "github.com/google/uuid"
 	. "github.com/jorgebay/soda/internal/types"
+	"github.com/rs/zerolog/log"
 )
 
 type GenerationState interface {
@@ -83,6 +84,10 @@ func (d *discoverer) SetGenerationProposed(gen Generation, expectedTx *UUID) err
 			gen.Version)
 	}
 
+	log.Info().Msgf(
+		"%s version %d with leader %d for range [%d, %d]",
+		gen.Status, gen.Version, gen.Leader, gen.Start, gen.End)
+
 	// Replace entire proposed value
 	d.genProposed[gen.Start] = gen
 
@@ -94,19 +99,21 @@ func (d *discoverer) SetAsCommitted(token Token, tx UUID) error {
 	d.genMutex.Lock()
 
 	// Set the transaction and the generation value as committed
-	existingProposed, ok := d.genProposed[token]
+	gen, ok := d.genProposed[token]
 
 	if !ok {
-		return fmt.Errorf("No proposed value")
+		return fmt.Errorf("No proposed value found")
 	}
 
-	if existingProposed.Tx != tx {
+	if gen.Tx != tx {
 		return fmt.Errorf("Transaction does not match")
 	}
 
-	existingProposed.Status = StatusCommitted
+	log.Info().Msgf(
+		"Setting committed version %d with leader %d for range [%d, %d]", gen.Version, gen.Leader, gen.Start, gen.End)
+	gen.Status = StatusCommitted
 
-	copyAndStore(d.generations, existingProposed)
+	copyAndStore(&d.generations, gen)
 
 	// Remove from proposed
 	delete(d.genProposed, token)
@@ -115,7 +122,7 @@ func (d *discoverer) SetAsCommitted(token Token, tx UUID) error {
 	return nil
 }
 
-func copyAndStore(generations atomic.Value, gen Generation) {
+func copyAndStore(generations *atomic.Value, gen Generation) {
 	existingMap := generations.Load().(genMap)
 
 	// Shallow copy existing

@@ -59,6 +59,11 @@ type Generation struct {
 }
 
 type GenStatus int
+var genStatusNames = [...]string{"Cancelled", "Proposed", "Accepted", "Committed"}
+
+func (s GenStatus) String() string {
+    return genStatusNames[s]
+}
 
 const (
 	StatusCancelled GenStatus = iota

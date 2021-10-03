@@ -126,6 +126,53 @@ var _ = Describe("GenerationState", func() {
 			Expect(s.genProposed[existingProposed.Start]).To(Equal(newGen))
 		})
 	})
+
+	Describe("SetAsCommitted()", func() {
+		It("should store committed and delete proposed", func() {
+			s := state()
+
+			gen := Generation{
+				Start:  Token(123),
+				End:    Token(345),
+				Tx:     Must(NewRandom()),
+				Status: StatusAccepted,
+			}
+			s.genProposed[gen.Start] = gen
+
+			err := s.SetAsCommitted(gen.Start, gen.Tx)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(s.genProposed).To(HaveLen(0))
+
+			committed := s.generations.Load().(genMap)
+			obtained, found := committed[gen.Start]
+			Expect(found).To(BeTrue())
+			gen.Status = StatusCommitted
+			Expect(obtained).To(Equal(gen))
+		})
+
+		It("should error when no proposed is found", func() {
+			s := state()
+			tx := Must(NewRandom())
+
+			err := s.SetAsCommitted(Token(123), tx)
+			Expect(err).To(MatchError("No proposed value found"))
+		})
+
+		It("should error when transaction does not match", func() {
+			s := state()
+
+			gen := Generation{
+				Start:  Token(123),
+				End:    Token(345),
+				Tx:     Must(NewRandom()),
+				Status: StatusAccepted,
+			}
+			s.genProposed[gen.Start] = gen
+
+			err := s.SetAsCommitted(gen.Start, Must(NewRandom()))
+			Expect(err).To(MatchError("Transaction does not match"))
+		})
+	})
 })
 
 func state() *discoverer {
