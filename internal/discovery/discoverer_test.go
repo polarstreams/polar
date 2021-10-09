@@ -84,8 +84,9 @@ var _ = Describe("discoverer", func() {
 
 			d.Init()
 
-			// 3 parts of 6148914691236517205 length each (math.MaxUint64 / 3)
-			Expect(d.ring).To(Equal([]types.Token{-9223372036854775808, -3074457345618258603, 3074457345618258602}))
+			// 3 parts of around 6148914691236517205 length each (math.MaxUint64 / 3).
+			// Rounded to avoid token movement on resizing.
+			Expect(d.ring).To(Equal([]types.Token{-9223372036854775808, -3074457345618259968, 3074457345618255872}))
 		})
 	})
 

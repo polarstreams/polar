@@ -10,6 +10,9 @@ const startToken = math.MinInt64
 
 type Token int64
 
+const maxRingSize = 12288 // 3*math.Pow(2, 12)
+const chunkSizeUnit = math.MaxUint64 / maxRingSize
+
 func (t Token) String() string {
 	return fmt.Sprintf("%d", t)
 }
@@ -33,6 +36,9 @@ func GetPrimaryTokenIndex(token Token, tokenRange []Token) int {
 }
 
 func GetTokenAtIndex(length int, index int) Token {
-	size := int64(math.MaxUint64 / uint64(length))
-	return Token(startToken + size*int64(index))
+	return startToken + Token(chunkSizeUnit*getRingFactor(length)*int64(index))
+}
+
+func getRingFactor(ringSize int) int64 {
+	return int64(maxRingSize / ringSize)
 }
