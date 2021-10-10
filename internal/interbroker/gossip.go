@@ -48,6 +48,13 @@ type GenerationGossiper interface {
 	// GetGenerations gets the generations for a given token on a peer
 	GetGenerations(ordinal int, token Token) ([]Generation, error)
 
+	// IsTokenRangeCovered sends a request to the peer to determine whether the broker
+	// has an active range containing (but not starting) the token
+	IsTokenRangeCovered(ordinal int, token Token) (bool, error)
+
+	// HasTokenHistoryForToken determines whether the broker has any history matching the token
+	HasTokenHistoryForToken(ordinal int, token Token) (bool, error)
+
 	// UpsertGeneration sends a request to a peer to update/insert a generation
 	//
 	// When existing is defined, it tries to update it the unaccepted generation,
@@ -95,6 +102,16 @@ func (g *gossiper) Init() error {
 
 func (g *gossiper) OnTopologyChange() {
 	// TODO: Create new connections, refresh existing
+}
+
+func (g *gossiper) IsTokenRangeCovered(ordinal int, token Token) (bool, error) {
+	// TODO: Implement
+	return false, nil
+}
+
+func (g *gossiper) HasTokenHistoryForToken(ordinal int, token Token) (bool, error) {
+	// TODO: Implement
+	return false, nil
 }
 
 func (g *gossiper) RegisterGenListener(listener GenListener) {

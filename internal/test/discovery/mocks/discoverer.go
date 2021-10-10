@@ -184,3 +184,17 @@ func (_m *Discoverer) TokenByOrdinal(ordinal int) types.Token {
 
 	return r0
 }
+
+// Topology provides a mock function with given fields:
+func (_m *Discoverer) Topology() types.TopologyInfo {
+	ret := _m.Called()
+
+	var r0 types.TopologyInfo
+	if rf, ok := ret.Get(0).(func() types.TopologyInfo); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(types.TopologyInfo)
+	}
+
+	return r0
+}

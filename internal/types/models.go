@@ -71,9 +71,34 @@ func (t *TopologyInfo) GetToken(index BrokerIndex) Token {
 	return GetTokenAtIndex(len(t.Brokers), int(index))
 }
 
+// GetToken gets the natural token by based on the current broker index.
+func (t *TopologyInfo) MyToken() Token {
+	return GetTokenAtIndex(len(t.Brokers), int(t.LocalIndex))
+}
+
 // GetIndex gets the position of the broker in the broker slice.
 func (t *TopologyInfo) GetIndex(ordinal int) BrokerIndex {
 	return t.indexByOrdinal[ordinal]
+}
+
+// PreviousBroker returns the broker in the position n-1
+func (t *TopologyInfo) PreviousBroker() *BrokerInfo {
+	index := len(t.Brokers) - 1
+	if t.LocalIndex > 0 {
+		index = int(t.LocalIndex) - 1
+	}
+
+	return &t.Brokers[index]
+}
+
+// NextBroker returns the broker in the position n+1
+func (t *TopologyInfo) NextBroker() *BrokerInfo {
+	index := 0
+	if int(t.LocalIndex) < len(t.Brokers)-1 {
+		index = int(t.LocalIndex) + 1
+	}
+
+	return &t.Brokers[index]
 }
 
 // TopicDataId contains information to locate a certain piece of data.
@@ -122,6 +147,6 @@ const (
 type TransactionStatus int
 
 const (
-	TransactionStatusCancelled GenStatus = iota
+	TransactionStatusCancelled TransactionStatus = iota
 	TransactionStatusCommitted
 )

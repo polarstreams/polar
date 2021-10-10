@@ -1,7 +1,6 @@
 package ownership
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -79,13 +78,15 @@ func (o *generator) StartGenerations() {
 		if err := o.startNew(maxInitElapsed); err != nil {
 			log.Warn().Msgf("Initial generation could not be created after %.0fs", maxInitElapsed.Seconds())
 
-			// TODO: Retry
+			// TODO: Retry or Panic
 		}
 	}()
 	<-started
 }
 
 func (o *generator) startNew(maxElapsed time.Duration) error {
+
+	//TODO: Rewrite everything
 	self := o.discoverer.LocalInfo()
 	brokers := o.discoverer.Brokers()
 	followers := make([]int, int(math.Min(float64(len(brokers)), replicationFactor-1)))
@@ -137,11 +138,12 @@ func (o *generator) startNew(maxElapsed time.Duration) error {
 	return nil
 }
 
+// process Processes events in order.
+//
+// Reject (not block) concurrent event processing to allow it to be retried quickly.
+// Friendly rejecting concurrency prevents deadlocks (and longer timed out requests), with the
+// addition of delayed retries, results in a less "racy" end result.
 func (o *generator) process() {
-	// Process events in order
-	// Reject (not block) concurrent event processing to allow it to be retried.
-	// Friendly rejecting concurrency prevents deadlocks (and longer timed out requests), with the
-	// addition of delayed retries, results in a less "racy" end result.
 	processingFlag := new(int32)
 	for message := range o.items {
 		canProcess := atomic.CompareAndSwapInt32(processingFlag, 0, 1)
@@ -169,84 +171,6 @@ func (o *generator) processGeneration(message genMessage) error {
 		m := message.(*remoteGenMessage)
 		return o.processRemote(m.existing, m.new)
 	}
-}
-
-func (o *generator) processLocal(newGen Generation) error {
-	log.Debug().Msg("Processing a generation started locally")
-
-	accepted := &emptyGeneration
-	proposed := &emptyGeneration
-
-	// Retrieve locally
-	if gens, err := o.localDb.GetGenerationsByToken(newGen.Start); err != nil {
-		log.Fatal().Err(err).Msg("Generations could not be retrieved")
-	} else {
-		accepted, proposed = checkState(gens, accepted, proposed)
-	}
-
-	//TODO: Local accepted and proposed
-	_, localProposed := accepted, proposed
-
-	genByFollower := make([][]Generation, len(newGen.Followers))
-
-	// Retrieve from followers
-	for i, follower := range newGen.Followers {
-		gens, err := o.gossiper.GetGenerations(follower, newGen.Start)
-		if err != nil {
-			log.Debug().Msgf("Error when trying to retrieve generations from broker %d: %s", follower, err.Error())
-			continue
-		}
-
-		log.Debug().Msgf("Obtained generations %v from broker %d", gens, follower)
-		accepted, proposed = checkState(gens, accepted, proposed)
-		genByFollower[i] = gens
-	}
-
-	if proposed != &emptyGeneration {
-		// TODO: Check whether it's old, cancel and override
-		log.Info().Msgf("There's already a previous proposed generation TODO FIX")
-		return errors.New("There's already a proposed generation for this token")
-	}
-
-	newGen.Version = accepted.Version + 1
-	newGen.Tx = o.nextUuid()
-	newGen.Status = StatusProposed
-
-	failedFollowers := make([]int, 0)
-
-	// Start by trying to propose the generation on the followers
-	for i, follower := range newGen.Followers {
-		gens := genByFollower[i]
-		var existingGen *Generation = nil
-		if len(gens) > 0 && gens[0].Status == StatusProposed {
-			existingGen = &gens[0]
-		}
-
-		// TODO: In parallel!
-		if err := o.gossiper.UpsertGeneration(follower, existingGen, newGen); err != nil {
-			log.Warn().Err(err).Msgf("Upsert generation failed in peer %d", follower)
-			failedFollowers = append(failedFollowers, follower)
-		}
-	}
-
-	if len(failedFollowers) >= len(newGen.Followers)/2 {
-		return fmt.Errorf("Generation creation was rejected by proposed followers")
-	}
-
-	//TODO: Heal failed followers
-
-	if localProposed == &emptyGeneration {
-		localProposed = nil
-	}
-
-	log.Debug().Msgf("Proposing locally new generation %+v", newGen)
-
-	if err := o.localDb.UpsertGeneration(localProposed, &newGen); err != nil {
-		log.Error().Msg("Generation could not be proposed locally")
-		return fmt.Errorf("Generation could not be proposed locally")
-	}
-
-	return o.setAsAccepted(&newGen)
 }
 
 func (o *generator) setAsAccepted(newGen *Generation) error {

@@ -51,6 +51,27 @@ func (_m *Gossiper) GetGenerations(ordinal int, token types.Token) ([]types.Gene
 	return r0, r1
 }
 
+// HasTokenHistoryForToken provides a mock function with given fields: ordinal, token
+func (_m *Gossiper) HasTokenHistoryForToken(ordinal int, token types.Token) (bool, error) {
+	ret := _m.Called(ordinal, token)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(int, types.Token) bool); ok {
+		r0 = rf(ordinal, token)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(int, types.Token) error); ok {
+		r1 = rf(ordinal, token)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Init provides a mock function with given fields:
 func (_m *Gossiper) Init() error {
 	ret := _m.Called()
@@ -63,6 +84,27 @@ func (_m *Gossiper) Init() error {
 	}
 
 	return r0
+}
+
+// IsTokenRangeCovered provides a mock function with given fields: ordinal, token
+func (_m *Gossiper) IsTokenRangeCovered(ordinal int, token types.Token) (bool, error) {
+	ret := _m.Called(ordinal, token)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(int, types.Token) bool); ok {
+		r0 = rf(ordinal, token)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(int, types.Token) error); ok {
+		r1 = rf(ordinal, token)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // OpenConnections provides a mock function with given fields:

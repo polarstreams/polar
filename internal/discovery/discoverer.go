@@ -42,6 +42,9 @@ type TopologyGetter interface {
 	// Returns a point-in-time list of all brokers except itself
 	Peers() []BrokerInfo
 
+	// Returns a point-in-time list of all brokers and local info.
+	Topology() TopologyInfo
+
 	// Returns a point-in-time list of all brokers.
 	//
 	// The slice is sorted in natural order (i.e. 0, 3, 1, 4, 2, 5)
@@ -88,6 +91,10 @@ func (d *discoverer) Init() error {
 	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.topology.Brokers))
 
 	return nil
+}
+
+func (d *discoverer) Topology() TopologyInfo {
+	return d.topology
 }
 
 func createTopology(totalBrokers int, config conf.DiscovererConfig) TopologyInfo {
