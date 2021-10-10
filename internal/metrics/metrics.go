@@ -39,7 +39,7 @@ var (
 // Serve starts the metrics endpoint
 func Serve(discoverer discovery.Discoverer, config conf.Config) {
 	port := config.MetricsPort()
-	address := utils.GetServiceAddress(port, discoverer, config)
+	address := utils.GetServiceAddress(port, discoverer.LocalInfo(), config)
 	c := make(chan bool, 1)
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())

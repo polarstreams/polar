@@ -17,7 +17,7 @@ import (
 // acceptDataConnections starts listening to TCP connections for data
 func (g *gossiper) acceptDataConnections() error {
 	port := g.config.GossipDataPort()
-	address := utils.GetServiceAddress(port, g.discoverer, g.config)
+	address := utils.GetServiceAddress(port, g.discoverer.LocalInfo(), g.config)
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {

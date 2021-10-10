@@ -37,7 +37,7 @@ func (g *gossiper) acceptHttpConnections() error {
 		MaxConcurrentStreams: 2048,
 	}
 	port := g.config.GossipPort()
-	address := GetServiceAddress(port, g.discoverer, g.config)
+	address := GetServiceAddress(port, g.discoverer.LocalInfo(), g.config)
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {

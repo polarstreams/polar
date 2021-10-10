@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
@@ -58,13 +57,12 @@ func NewBufferCap(initialCap int) *bytes.Buffer {
 }
 
 // GetServiceAddress determines whether it should be bind to all interfaces or it should use a single host name
-func GetServiceAddress(port int, discoverer discovery.TopologyGetter, config conf.BasicConfig) string {
+func GetServiceAddress(port int, localInfo *types.BrokerInfo, config conf.BasicConfig) string {
 	address := fmt.Sprintf(":%d", port)
 
 	if !config.ListenOnAllAddresses() {
-		info := discoverer.LocalInfo()
 		// Use the provided name / address
-		address = fmt.Sprintf("%s:%d", info.HostName, port)
+		address = fmt.Sprintf("%s:%d", localInfo.HostName, port)
 	}
 
 	return address
@@ -90,7 +88,10 @@ func FromUnixMillis(millis int64) time.Time {
 	return time.Unix(0, millis*int64(time.Millisecond))
 }
 
-func NaturalRingOrder(size int) []uint32 {
+// OrdinalsPlacementOrder gets a slice of ordinals in the placement order.
+//
+// e.g. {0, 1, 2} for 3-broker cluster and {0, 3, 1, 4, 2, 5} for a 6-broker cluster.
+func OrdinalsPlacementOrder(size int) []uint32 {
 	if size == 3 {
 		return []uint32{0, 1, 2}
 	}

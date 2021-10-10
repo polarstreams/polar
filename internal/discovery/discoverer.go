@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/jorgebay/soda/internal/conf"
 	. "github.com/jorgebay/soda/internal/types"
+	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -41,7 +43,9 @@ type TopologyGetter interface {
 	// Returns a point-in-time list of all brokers except itself
 	Peers() []BrokerInfo
 
-	// Returns a point-in-time list of all brokers
+	// Returns a point-in-time list of all brokers.
+	//
+	// The slice is sorted in natural order (i.e. 0, 3, 1, 4, 2, 5)
 	Brokers() []BrokerInfo
 
 	TokenByOrdinal(ordinal int) Token
@@ -64,10 +68,11 @@ func NewDiscoverer(config conf.DiscovererConfig) Discoverer {
 }
 
 type discoverer struct {
-	config      conf.DiscovererConfig
-	listeners   []TopologyChangeHandler
-	brokers     []BrokerInfo
-	ring        []Token
+	config    conf.DiscovererConfig
+	listeners []TopologyChangeHandler
+	brokers   []BrokerInfo
+	ring      []Token
+	// TODO: Remove
 	ordinal     int
 	genMutex    sync.Mutex
 	genProposed genMap
@@ -80,22 +85,12 @@ func (d *discoverer) Init() error {
 		d.brokers = parseFixedBrokers(fixedOrdinal)
 	} else {
 		// Use normal discovery
-		replicas, _ := strconv.Atoi(os.Getenv(envReplicas))
-		if replicas == 0 {
-			replicas = 1
-		}
-		brokers := make([]BrokerInfo, 0, replicas)
-		baseHostName := d.config.BaseHostName()
+		// TODO: Use func and set ordinal once
 		d.ordinal = d.config.Ordinal()
-		for i := 0; i < replicas; i++ {
-			brokers = append(brokers, BrokerInfo{
-				IsSelf:   i == d.ordinal,
-				Ordinal:  i,
-				HostName: baseHostName + strconv.Itoa(i),
-			})
-		}
-
-		d.brokers = brokers
+		// TODO: Round to 3*2^n
+		// TODO: Get local index
+		totalBrokers, _ := strconv.Atoi(os.Getenv(envReplicas))
+		d.brokers, _ = brokersOrdered(totalBrokers, d.config)
 	}
 
 	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.brokers))
@@ -106,6 +101,33 @@ func (d *discoverer) Init() error {
 	}
 
 	return nil
+}
+
+func brokersOrdered(totalBrokers int, config conf.DiscovererConfig) (brokers []BrokerInfo, localIndex int) {
+	if totalBrokers == 0 {
+		totalBrokers = 1
+	}
+	baseHostName := config.BaseHostName()
+	localOrdinal := uint32(config.Ordinal())
+
+	// Use ring in natural order
+	ordinalList := utils.OrdinalsPlacementOrder(totalBrokers)
+	brokers = make([]BrokerInfo, len(ordinalList), len(ordinalList))
+	for i := 0; i < len(ordinalList); i++ {
+		ordinal := ordinalList[i]
+		isSelf := ordinal == localOrdinal
+		brokers[i] = BrokerInfo{
+			IsSelf:   isSelf,
+			Ordinal:  int(ordinal),
+			HostName: fmt.Sprintf("%s%d", baseHostName, ordinal),
+		}
+
+		if isSelf {
+			localIndex = i
+		}
+	}
+
+	return
 }
 
 func (d *discoverer) Peers() []BrokerInfo {
@@ -147,7 +169,8 @@ func (d *discoverer) TokenByOrdinal(ordinal int) Token {
 func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 	if partitionKey == "" {
 		return ReplicationInfo{
-			Leader:    d.LocalInfo(),
+			Leader: d.LocalInfo(),
+			// TODO: gen use current generation
 			Followers: d.Peers(),
 			Token:     0,
 		}
@@ -156,7 +179,7 @@ func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 	token := GetToken(partitionKey)
 	leaderIndex := GetPrimaryTokenIndex(token, d.ring)
 
-	// TODO: Use generation logic
+	// TODO: gen use generation
 	return ReplicationInfo{
 		Leader:    &d.brokers[leaderIndex],
 		Followers: d.brokersExcept(leaderIndex),
