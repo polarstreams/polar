@@ -48,7 +48,7 @@ type TopologyGetter interface {
 	// The slice is sorted in natural order (i.e. 0, 3, 1, 4, 2, 5)
 	Brokers() []BrokerInfo
 
-	TokenByOrdinal(ordinal int) Token
+	TokenByOrdinal(ordinal int) Token // TODO: Probably unnecessary
 }
 
 type TopologyChangeHandler func()
@@ -68,12 +68,9 @@ func NewDiscoverer(config conf.DiscovererConfig) Discoverer {
 }
 
 type discoverer struct {
-	config    conf.DiscovererConfig
-	listeners []TopologyChangeHandler
-	brokers   []BrokerInfo
-	ring      []Token
-	// TODO: Remove
-	ordinal     int
+	config      conf.DiscovererConfig
+	listeners   []TopologyChangeHandler
+	topology    TopologyInfo // Gets the current brokers, index and ring
 	genMutex    sync.Mutex
 	genProposed genMap
 	generations atomic.Value // copy on write semantics
@@ -81,29 +78,20 @@ type discoverer struct {
 
 func (d *discoverer) Init() error {
 	if fixedOrdinal, err := strconv.Atoi(os.Getenv(envOrdinal)); err == nil {
-		d.ordinal = fixedOrdinal
-		d.brokers = parseFixedBrokers(fixedOrdinal)
+		d.topology = parseFixedBrokers(fixedOrdinal)
 	} else {
 		// Use normal discovery
-		// TODO: Use func and set ordinal once
-		d.ordinal = d.config.Ordinal()
 		// TODO: Round to 3*2^n
-		// TODO: Get local index
 		totalBrokers, _ := strconv.Atoi(os.Getenv(envReplicas))
-		d.brokers, _ = brokersOrdered(totalBrokers, d.config)
+		d.topology = brokersOrdered(totalBrokers, d.config)
 	}
 
-	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.brokers))
-
-	d.ring = make([]Token, len(d.brokers))
-	for i := range d.brokers {
-		d.ring[i] = GetTokenAtIndex(len(d.brokers), i)
-	}
+	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.topology.Brokers))
 
 	return nil
 }
 
-func brokersOrdered(totalBrokers int, config conf.DiscovererConfig) (brokers []BrokerInfo, localIndex int) {
+func brokersOrdered(totalBrokers int, config conf.DiscovererConfig) TopologyInfo {
 	if totalBrokers == 0 {
 		totalBrokers = 1
 	}
@@ -112,7 +100,7 @@ func brokersOrdered(totalBrokers int, config conf.DiscovererConfig) (brokers []B
 
 	// Use ring in natural order
 	ordinalList := utils.OrdinalsPlacementOrder(totalBrokers)
-	brokers = make([]BrokerInfo, len(ordinalList), len(ordinalList))
+	brokers := make([]BrokerInfo, len(ordinalList), len(ordinalList))
 	for i := 0; i < len(ordinalList); i++ {
 		ordinal := ordinalList[i]
 		isSelf := ordinal == localOrdinal
@@ -121,52 +109,51 @@ func brokersOrdered(totalBrokers int, config conf.DiscovererConfig) (brokers []B
 			Ordinal:  int(ordinal),
 			HostName: fmt.Sprintf("%s%d", baseHostName, ordinal),
 		}
-
-		if isSelf {
-			localIndex = i
-		}
 	}
 
-	return
+	return NewTopology(brokers)
 }
 
-func (d *discoverer) Peers() []BrokerInfo {
-	return d.brokersExcept(d.ordinal)
-}
-
-func (d *discoverer) Brokers() []BrokerInfo {
-	return d.brokers
-}
-
-func parseFixedBrokers(ordinal int) []BrokerInfo {
+func parseFixedBrokers(ordinal int) TopologyInfo {
 	names := os.Getenv(envBrokerNames)
 	if names == "" {
-		return []BrokerInfo{}
+		return TopologyInfo{}
 	}
 
 	parts := strings.Split(names, ",")
-	brokers := make([]BrokerInfo, 0, len(parts))
+	brokers := make([]BrokerInfo, len(parts), len(parts))
 
 	for i, hostName := range parts {
-		brokers = append(brokers, BrokerInfo{
-			IsSelf:   i == ordinal,
-			Ordinal:  i,
+		brokers[i] = BrokerInfo{
+			Ordinal:  i,            // TODO: Obtain ordinal (ordinal and broker index is not the same)
+			IsSelf:   i == ordinal, // TODO: Fix
 			HostName: hostName,
-		})
+		}
 	}
 
-	return brokers
+	return NewTopology(brokers)
+}
+
+func (d *discoverer) Peers() []BrokerInfo {
+	return d.brokersExcept(d.topology.LocalIndex)
+}
+
+func (d *discoverer) Brokers() []BrokerInfo {
+	return d.topology.Brokers
 }
 
 func (d *discoverer) LocalInfo() *BrokerInfo {
-	return &d.brokers[d.ordinal]
+	topology := d.topology
+	return &topology.Brokers[topology.LocalIndex]
 }
 
 func (d *discoverer) TokenByOrdinal(ordinal int) Token {
-	return d.ring[ordinal]
+	index := d.topology.GetIndex(ordinal)
+	return d.topology.GetToken(index)
 }
 
 func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
+	topology := d.topology
 	if partitionKey == "" {
 		return ReplicationInfo{
 			Leader: d.LocalInfo(),
@@ -177,20 +164,21 @@ func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 	}
 
 	token := GetToken(partitionKey)
-	leaderIndex := GetPrimaryTokenIndex(token, d.ring)
+	leaderIndex := GetPrimaryTokenIndex(token, len(topology.Brokers))
 
 	// TODO: gen use generation
 	return ReplicationInfo{
-		Leader:    &d.brokers[leaderIndex],
-		Followers: d.brokersExcept(leaderIndex),
-		Token:     d.ring[leaderIndex],
+		Leader:    &topology.Brokers[leaderIndex],
+		Followers: followers(topology.Brokers, leaderIndex),
+		Token:     d.topology.GetToken(leaderIndex),
 	}
 }
 
-func (d *discoverer) brokersExcept(index int) []BrokerInfo {
-	result := make([]BrokerInfo, 0, len(d.brokers)-1)
-	for i, broker := range d.brokers {
-		if i != index {
+func (d *discoverer) brokersExcept(index BrokerIndex) []BrokerInfo {
+	brokers := d.topology.Brokers
+	result := make([]BrokerInfo, 0, len(brokers)-1)
+	for i, broker := range brokers {
+		if i != int(index) {
 			result = append(result, broker)
 		}
 	}
@@ -202,3 +190,16 @@ func (d *discoverer) RegisterListener(l TopologyChangeHandler) {
 }
 
 func (d *discoverer) Shutdown() {}
+
+// followers gets the next two brokers according to the broker order.
+func followers(brokers []BrokerInfo, index BrokerIndex) []BrokerInfo {
+	brokersLength := len(brokers)
+	if brokersLength < 3 {
+		return []BrokerInfo{}
+	}
+	result := make([]BrokerInfo, 2, 2)
+	for i := 0; i < 2; i++ {
+		result[i] = brokers[(int(index)+i+1)%brokersLength]
+	}
+	return result
+}

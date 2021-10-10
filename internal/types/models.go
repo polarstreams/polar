@@ -16,6 +16,12 @@ type BrokerInfo struct {
 	HostName string
 }
 
+// BrokerIndex represents the position of a broker in the current broker list.
+// It's exposed as different type to avoid mixing it up w/ Ordinal (replica number)
+//
+// e.g. in a cluster composed of {0, 3, 1, 4, 2, 3}, the index of 3 is 1.
+type BrokerIndex int
+
 func (b *BrokerInfo) String() string {
 	return fmt.Sprintf("%s (%d)", b.HostName, b.Ordinal)
 }
@@ -28,6 +34,40 @@ type ReplicationInfo struct {
 	Leader    *BrokerInfo
 	Followers []BrokerInfo
 	Token     Token
+}
+
+// TopologyInfo represents a snapshot of the current placement of the brokers
+type TopologyInfo struct {
+	Brokers        []BrokerInfo
+	LocalIndex     BrokerIndex
+	indexByOrdinal map[int]BrokerIndex // Map of key ordinals and value indexes
+}
+
+func NewTopology(brokers []BrokerInfo) TopologyInfo {
+	// It can be a slice but let's make it a map
+	indexByOrdinal := make(map[int]BrokerIndex, len(brokers))
+	localIndex := 0
+	for index, broker := range brokers {
+		indexByOrdinal[broker.Ordinal] = BrokerIndex(index)
+		if broker.IsSelf {
+			localIndex = index
+		}
+	}
+	return TopologyInfo{
+		Brokers:        brokers,
+		LocalIndex:     BrokerIndex(localIndex),
+		indexByOrdinal: indexByOrdinal,
+	}
+}
+
+// GetToken gets the token by the broker index.
+func (t *TopologyInfo) GetToken(index BrokerIndex) Token {
+	return GetTokenAtIndex(len(t.Brokers), int(index))
+}
+
+// GetIndex gets the position of the broker in the broker slice.
+func (t *TopologyInfo) GetIndex(ordinal int) BrokerIndex {
+	return t.indexByOrdinal[ordinal]
 }
 
 // TopicDataId contains information to locate a certain piece of data.

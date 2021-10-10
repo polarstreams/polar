@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/jorgebay/soda/internal/test/conf/mocks"
-	"github.com/jorgebay/soda/internal/types"
+	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -30,7 +30,7 @@ var _ = Describe("discoverer", func() {
 
 			d.Init()
 
-			Expect(d.brokers).To(Equal([]types.BrokerInfo{
+			Expect(d.topology.Brokers).To(Equal([]BrokerInfo{
 				{
 					IsSelf:   false,
 					Ordinal:  0,
@@ -58,7 +58,7 @@ var _ = Describe("discoverer", func() {
 
 			d.Init()
 
-			Expect(d.brokers).To(Equal([]types.BrokerInfo{
+			Expect(d.topology.Brokers).To(Equal([]BrokerInfo{
 				{
 					IsSelf:   false,
 					Ordinal:  0,
@@ -74,21 +74,6 @@ var _ = Describe("discoverer", func() {
 				},
 			}))
 		})
-
-		It("should create the token ring", func() {
-			os.Setenv(envReplicas, "3")
-			d := &discoverer{
-				config: &configFake{
-					baseHostName: "soda-",
-				},
-			}
-
-			d.Init()
-
-			// 3 parts of around 6148914691236517205 length each (math.MaxUint64 / 3).
-			// Rounded to avoid token movement on resizing.
-			Expect(d.ring).To(Equal([]types.Token{-9223372036854775808, -3074457345618259968, 3074457345618255872}))
-		})
 	})
 
 	Describe("Peers()", func() {
@@ -103,7 +88,7 @@ var _ = Describe("discoverer", func() {
 
 			d.Init()
 
-			Expect(d.Peers()).To(Equal([]types.BrokerInfo{
+			Expect(d.Peers()).To(Equal([]BrokerInfo{
 				{
 					IsSelf:   false,
 					Ordinal:  0,
@@ -123,13 +108,13 @@ var _ = Describe("discoverer", func() {
 			config.On("BaseHostName").Return("barco-")
 			config.On("Ordinal").Return(1)
 
-			brokers, index := brokersOrdered(3, config)
-			Expect(brokers).To(Equal([]types.BrokerInfo{
+			topology := brokersOrdered(3, config)
+			Expect(topology.Brokers).To(Equal([]BrokerInfo{
 				{IsSelf: false, Ordinal: 0, HostName: "barco-0"},
 				{IsSelf: true, Ordinal: 1, HostName: "barco-1"},
 				{IsSelf: false, Ordinal: 2, HostName: "barco-2"},
 			}))
-			Expect(index).To(Equal(1))
+			Expect(topology.LocalIndex).To(Equal(BrokerIndex(1)))
 		})
 
 		It("should return the brokers in placement order for 6 broker cluster", func() {
@@ -137,8 +122,8 @@ var _ = Describe("discoverer", func() {
 			config.On("BaseHostName").Return("broker-")
 			config.On("Ordinal").Return(1)
 
-			brokers, index := brokersOrdered(6, config)
-			Expect(brokers).To(Equal([]types.BrokerInfo{
+			topology := brokersOrdered(6, config)
+			Expect(topology.Brokers).To(Equal([]BrokerInfo{
 				{IsSelf: false, Ordinal: 0, HostName: "broker-0"},
 				{IsSelf: false, Ordinal: 3, HostName: "broker-3"},
 				{IsSelf: true, Ordinal: 1, HostName: "broker-1"},
@@ -146,13 +131,13 @@ var _ = Describe("discoverer", func() {
 				{IsSelf: false, Ordinal: 2, HostName: "broker-2"},
 				{IsSelf: false, Ordinal: 5, HostName: "broker-5"},
 			}))
-			Expect(index).To(Equal(2))
+			Expect(topology.LocalIndex).To(Equal(BrokerIndex(2)))
 
 			config = new(mocks.Config)
 			config.On("BaseHostName").Return("broker-")
 			config.On("Ordinal").Return(2)
-			_, index = brokersOrdered(6, config)
-			Expect(index).To(Equal(4))
+			topology = brokersOrdered(6, config)
+			Expect(topology.LocalIndex).To(Equal(BrokerIndex(4)))
 		})
 
 		It("should return the brokers in placement order for 12 broker cluster", func() {
@@ -160,8 +145,8 @@ var _ = Describe("discoverer", func() {
 			config.On("BaseHostName").Return("broker-")
 			config.On("Ordinal").Return(4)
 
-			brokers, index := brokersOrdered(12, config)
-			Expect(brokers).To(Equal([]types.BrokerInfo{
+			topology := brokersOrdered(12, config)
+			Expect(topology.Brokers).To(Equal([]BrokerInfo{
 				{IsSelf: false, Ordinal: 0, HostName: "broker-0"},
 				{IsSelf: false, Ordinal: 6, HostName: "broker-6"},
 				{IsSelf: false, Ordinal: 3, HostName: "broker-3"},
@@ -175,7 +160,7 @@ var _ = Describe("discoverer", func() {
 				{IsSelf: false, Ordinal: 5, HostName: "broker-5"},
 				{IsSelf: false, Ordinal: 11, HostName: "broker-11"},
 			}))
-			Expect(index).To(Equal(6))
+			Expect(topology.LocalIndex).To(Equal(BrokerIndex(6)))
 		})
 	})
 })
