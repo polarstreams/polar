@@ -10,7 +10,6 @@ import (
 
 	"github.com/jorgebay/soda/internal/conf"
 	. "github.com/jorgebay/soda/internal/types"
-	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -78,12 +77,12 @@ type discoverer struct {
 
 func (d *discoverer) Init() error {
 	if fixedOrdinal, err := strconv.Atoi(os.Getenv(envOrdinal)); err == nil {
-		d.topology = parseFixedBrokers(fixedOrdinal)
+		d.topology = createFixedTopology(fixedOrdinal)
 	} else {
 		// Use normal discovery
-		// TODO: Round to 3*2^n
+		// TODO: Validate and round to 3*2^n
 		totalBrokers, _ := strconv.Atoi(os.Getenv(envReplicas))
-		d.topology = brokersOrdered(totalBrokers, d.config)
+		d.topology = createTopology(totalBrokers, d.config)
 	}
 
 	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.topology.Brokers))
@@ -91,42 +90,43 @@ func (d *discoverer) Init() error {
 	return nil
 }
 
-func brokersOrdered(totalBrokers int, config conf.DiscovererConfig) TopologyInfo {
+func createTopology(totalBrokers int, config conf.DiscovererConfig) TopologyInfo {
 	if totalBrokers == 0 {
 		totalBrokers = 1
 	}
 	baseHostName := config.BaseHostName()
-	localOrdinal := uint32(config.Ordinal())
+	localOrdinal := config.Ordinal()
 
-	// Use ring in natural order
-	ordinalList := utils.OrdinalsPlacementOrder(totalBrokers)
-	brokers := make([]BrokerInfo, len(ordinalList), len(ordinalList))
-	for i := 0; i < len(ordinalList); i++ {
-		ordinal := ordinalList[i]
-		isSelf := ordinal == localOrdinal
-		brokers[i] = BrokerInfo{
+	// Ring in sorted by ordinal
+	brokers := make([]BrokerInfo, 0, totalBrokers)
+	for i := 0; i < totalBrokers; i++ {
+		isSelf := i == localOrdinal
+		brokers = append(brokers, BrokerInfo{
 			IsSelf:   isSelf,
-			Ordinal:  int(ordinal),
-			HostName: fmt.Sprintf("%s%d", baseHostName, ordinal),
-		}
+			Ordinal:  i,
+			HostName: fmt.Sprintf("%s%d", baseHostName, i),
+		})
 	}
 
 	return NewTopology(brokers)
 }
 
-func parseFixedBrokers(ordinal int) TopologyInfo {
+func createFixedTopology(ordinal int) TopologyInfo {
 	names := os.Getenv(envBrokerNames)
 	if names == "" {
 		return TopologyInfo{}
 	}
 
+	// We expect the names to be sorted by ordinal (0, 1, 2, 3, 4, 6)
 	parts := strings.Split(names, ",")
 	brokers := make([]BrokerInfo, len(parts), len(parts))
+	// TODO: Validate and round to 3*2^n
+	// ordinalList := utils.OrdinalsPlacementOrder(len(parts))
 
 	for i, hostName := range parts {
 		brokers[i] = BrokerInfo{
-			Ordinal:  i,            // TODO: Obtain ordinal (ordinal and broker index is not the same)
-			IsSelf:   i == ordinal, // TODO: Fix
+			Ordinal:  i,
+			IsSelf:   i == ordinal,
 			HostName: hostName,
 		}
 	}

@@ -10,7 +10,7 @@ import (
 
 func TestTokens(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Token Suite")
+	RunSpecs(t, "Types Suite")
 }
 
 var _ = Describe("getTokenAtIndex()", func() {

@@ -47,7 +47,7 @@ var _ = Describe("discoverer", func() {
 			}))
 		})
 
-		It("should parse real brokers", func() {
+		It("should parse 3 real brokers", func() {
 			os.Setenv(envReplicas, "3")
 			d := &discoverer{
 				config: &configFake{
@@ -59,20 +59,34 @@ var _ = Describe("discoverer", func() {
 			d.Init()
 
 			Expect(d.topology.Brokers).To(Equal([]BrokerInfo{
-				{
-					IsSelf:   false,
-					Ordinal:  0,
-					HostName: "soda-0",
-				}, {
-					IsSelf:   true,
-					Ordinal:  1,
-					HostName: "soda-1",
-				}, {
-					IsSelf:   false,
-					Ordinal:  2,
-					HostName: "soda-2",
-				},
+				{IsSelf: false, Ordinal: 0, HostName: "soda-0"},
+				{IsSelf: true, Ordinal: 1, HostName: "soda-1"},
+				{IsSelf: false, Ordinal: 2, HostName: "soda-2"},
 			}))
+			Expect(d.topology.LocalIndex).To(Equal(BrokerIndex(1)))
+		})
+
+		It("should parse 6 real brokers", func() {
+			os.Setenv(envReplicas, "6")
+			d := &discoverer{
+				config: &configFake{
+					ordinal:      2,
+					baseHostName: "soda-",
+				},
+			}
+
+			d.Init()
+
+			Expect(d.topology.Brokers).To(Equal([]BrokerInfo{
+				{IsSelf: false, Ordinal: 0, HostName: "soda-0"},
+				{IsSelf: false, Ordinal: 3, HostName: "soda-3"},
+				{IsSelf: false, Ordinal: 1, HostName: "soda-1"},
+				{IsSelf: false, Ordinal: 4, HostName: "soda-4"},
+				{IsSelf: true, Ordinal: 2, HostName: "soda-2"},
+				{IsSelf: false, Ordinal: 5, HostName: "soda-5"},
+			}))
+
+			Expect(d.topology.LocalIndex).To(Equal(BrokerIndex(4)))
 		})
 	})
 
@@ -102,13 +116,13 @@ var _ = Describe("discoverer", func() {
 		})
 	})
 
-	Describe("brokersOrdered()", func() {
+	Describe("createTopology()", func() {
 		It("should return the brokers in placement order for 3 broker cluster", func() {
 			config := new(mocks.Config)
 			config.On("BaseHostName").Return("barco-")
 			config.On("Ordinal").Return(1)
 
-			topology := brokersOrdered(3, config)
+			topology := createTopology(3, config)
 			Expect(topology.Brokers).To(Equal([]BrokerInfo{
 				{IsSelf: false, Ordinal: 0, HostName: "barco-0"},
 				{IsSelf: true, Ordinal: 1, HostName: "barco-1"},
@@ -122,7 +136,7 @@ var _ = Describe("discoverer", func() {
 			config.On("BaseHostName").Return("broker-")
 			config.On("Ordinal").Return(1)
 
-			topology := brokersOrdered(6, config)
+			topology := createTopology(6, config)
 			Expect(topology.Brokers).To(Equal([]BrokerInfo{
 				{IsSelf: false, Ordinal: 0, HostName: "broker-0"},
 				{IsSelf: false, Ordinal: 3, HostName: "broker-3"},
@@ -132,11 +146,17 @@ var _ = Describe("discoverer", func() {
 				{IsSelf: false, Ordinal: 5, HostName: "broker-5"},
 			}))
 			Expect(topology.LocalIndex).To(Equal(BrokerIndex(2)))
+			Expect(topology.GetIndex(0)).To(Equal(BrokerIndex(0)))
+			Expect(topology.GetIndex(3)).To(Equal(BrokerIndex(1)))
+			Expect(topology.GetIndex(1)).To(Equal(BrokerIndex(2)))
+			Expect(topology.GetIndex(4)).To(Equal(BrokerIndex(3)))
+			Expect(topology.GetIndex(2)).To(Equal(BrokerIndex(4)))
+			Expect(topology.GetIndex(5)).To(Equal(BrokerIndex(5)))
 
 			config = new(mocks.Config)
 			config.On("BaseHostName").Return("broker-")
 			config.On("Ordinal").Return(2)
-			topology = brokersOrdered(6, config)
+			topology = createTopology(6, config)
 			Expect(topology.LocalIndex).To(Equal(BrokerIndex(4)))
 		})
 
@@ -145,7 +165,7 @@ var _ = Describe("discoverer", func() {
 			config.On("BaseHostName").Return("broker-")
 			config.On("Ordinal").Return(4)
 
-			topology := brokersOrdered(12, config)
+			topology := createTopology(12, config)
 			Expect(topology.Brokers).To(Equal([]BrokerInfo{
 				{IsSelf: false, Ordinal: 0, HostName: "broker-0"},
 				{IsSelf: false, Ordinal: 6, HostName: "broker-6"},

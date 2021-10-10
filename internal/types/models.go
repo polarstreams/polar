@@ -38,20 +38,26 @@ type ReplicationInfo struct {
 
 // TopologyInfo represents a snapshot of the current placement of the brokers
 type TopologyInfo struct {
-	Brokers        []BrokerInfo
+	Brokers        []BrokerInfo // Brokers ordered by index (e.g. 0,3,1,4,2,5)
 	LocalIndex     BrokerIndex
 	indexByOrdinal map[int]BrokerIndex // Map of key ordinals and value indexes
 }
 
-func NewTopology(brokers []BrokerInfo) TopologyInfo {
+// NewTopology creates a Topology struct using brokers in ordinal order.
+func NewTopology(brokersByOrdinal []BrokerInfo) TopologyInfo {
+	totalBrokers := len(brokersByOrdinal)
+	ordinalList := ordinalsPlacementOrder(totalBrokers)
+	brokers := make([]BrokerInfo, 0, totalBrokers)
 	// It can be a slice but let's make it a map
-	indexByOrdinal := make(map[int]BrokerIndex, len(brokers))
+	indexByOrdinal := make(map[int]BrokerIndex, totalBrokers)
 	localIndex := 0
-	for index, broker := range brokers {
-		indexByOrdinal[broker.Ordinal] = BrokerIndex(index)
-		if broker.IsSelf {
+	for index, ordinal := range ordinalList {
+		b := brokersByOrdinal[ordinal]
+		indexByOrdinal[int(ordinal)] = BrokerIndex(index)
+		if b.IsSelf {
 			localIndex = index
 		}
+		brokers = append(brokers, b)
 	}
 	return TopologyInfo{
 		Brokers:        brokers,
