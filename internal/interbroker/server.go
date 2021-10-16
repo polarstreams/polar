@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jorgebay/soda/internal/conf"
 	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/jorgebay/soda/internal/utils"
@@ -64,6 +65,7 @@ func (g *gossiper) acceptHttpConnections() error {
 			router.GET(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), ToHandle(g.getGenHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), ToPostHandle(g.postGenHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationProposeUrl, ":token"), ToPostHandle(g.postGenProposeHandler))
+			router.POST(fmt.Sprintf(conf.GossipGenerationCommmitUrl, ":token"), ToPostHandle(g.postGenCommitHandler))
 
 			//TODO: routes to propose/accept new generation
 
@@ -131,4 +133,17 @@ func (g *gossiper) postGenProposeHandler(w http.ResponseWriter, r *http.Request,
 	}
 	// Use the registered listener
 	return g.genListener.OnRemoteSetAsProposed(message.Generation, message.ExpectedTx)
+}
+
+func (g *gossiper) postGenCommitHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	token, err := strconv.ParseInt(strings.TrimSpace(ps.ByName("token")), 10, 64)
+	if err != nil {
+		return err
+	}
+	var tx uuid.UUID
+	if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
+		return err
+	}
+	// Use the registered listener
+	return g.genListener.OnRemoteSetAsCommitted(Token(token), tx)
 }

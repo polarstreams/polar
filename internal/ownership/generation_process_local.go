@@ -16,8 +16,6 @@ func (o *generator) processLocal(message *localGenMessage) error {
 	token := topology.MyToken()
 	timestamp := time.Now()
 
-	log.Info().Msgf("Processing a generation started locally for T-%d (%d)", topology.MyOrdinal(), topology.MyToken())
-
 	generation := Generation{
 		Start:     token,
 		End:       topology.GetToken(topology.LocalIndex + 1),
@@ -30,6 +28,10 @@ func (o *generator) processLocal(message *localGenMessage) error {
 		Status:    StatusProposed,
 		ToDelete:  false,
 	}
+
+	log.Info().Msgf(
+		"Processing a generation started locally for T%d (%d) with B%d and B%d as followers",
+		topology.MyOrdinal(), topology.MyToken(), generation.Followers[0], generation.Followers[1])
 
 	// Perform a read from followers
 	readResults := o.readStateFromFollowers(&generation)
@@ -101,7 +103,16 @@ func (o *generator) processLocal(message *localGenMessage) error {
 		return fmt.Errorf("Set as committed locally failed")
 	}
 
-	//TODO: Set on followers / define messages
+	generation.Status = StatusCommitted
+	followerErrors = o.setStateToFollowers(&generation, followerErrors, readResults)
+	if followerErrors[0] != nil && followerErrors[1] != nil {
+		// The transaction is still considered committed and
+		// will be roll forward by the followers
+		log.Warn().Msgf(
+			"Setting transaction for T-%d (%d) as committed failed on followers",
+			topology.MyOrdinal(),
+			topology.MyToken())
+	}
 
 	return nil
 }
@@ -152,12 +163,20 @@ func (o *generator) setRemoteState(
 		return
 	}
 	var tx *uuid.UUID
-	if gen.Status == StatusAccepted {
+	if gen.Status != StatusProposed {
+		// On the following steps, use the gen tx to compare
 		tx = &gen.Tx
 	} else if readResult.Proposed != nil {
 		tx = &readResult.Proposed.Tx
 	}
-	errorChan <- o.gossiper.SetGenerationAsProposed(ordinal, gen, tx)
+
+	if gen.Status != StatusCommitted {
+		// Use proposed CAS
+		errorChan <- o.gossiper.SetGenerationAsProposed(ordinal, gen, tx)
+	} else {
+		// Use committed CAS
+		errorChan <- o.gossiper.SetAsCommitted(ordinal, gen.Start, *tx)
+	}
 }
 
 func (o *generator) readStateFromFollowers(gen *Generation) []GenReadResult {

@@ -59,6 +59,9 @@ type GenerationGossiper interface {
 	// Compare and sets the generation value to the proposed state
 	SetGenerationAsProposed(ordinal int, newGen *Generation, expectedTx *UUID) error
 
+	// Compare and sets the generation as committed
+	SetAsCommitted(ordinal int, token Token, tx UUID) error
+
 	// RegisterGenListener adds a listener for new generations received by the gossipper
 	RegisterGenListener(listener GenListener)
 }
@@ -67,6 +70,8 @@ type GenListener interface {
 	OnNewRemoteGeneration(existing *Generation, new *Generation) error
 
 	OnRemoteSetAsProposed(newGen *Generation, expectedTx *UUID) error
+
+	OnRemoteSetAsCommitted(token Token, tx UUID) error
 }
 
 type GenReadResult struct {
@@ -114,6 +119,11 @@ func (g *gossiper) IsTokenRangeCovered(ordinal int, token Token) (bool, error) {
 func (g *gossiper) HasTokenHistoryForToken(ordinal int, token Token) (bool, error) {
 	// TODO: Implement
 	return false, nil
+}
+
+func (g *gossiper) SetAsCommitted(ordinal int, token Token, tx UUID) error {
+	// TODO: Implement
+	return nil
 }
 
 func (g *gossiper) RegisterGenListener(listener GenListener) {

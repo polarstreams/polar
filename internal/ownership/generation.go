@@ -70,6 +70,11 @@ func (o *generator) OnRemoteSetAsProposed(newGen *Generation, expectedTx *uuid.U
 	return nil
 }
 
+func (o *generator) OnRemoteSetAsCommitted(token Token, tx uuid.UUID) error {
+	//TODO: Create message to channel
+	return nil
+}
+
 func (o *generator) StartGenerations() {
 	started := make(chan bool, 1)
 	go func() {

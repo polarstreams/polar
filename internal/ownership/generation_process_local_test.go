@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/jorgebay/soda/internal/interbroker"
 	. "github.com/jorgebay/soda/internal/test/discovery/mocks"
 	. "github.com/jorgebay/soda/internal/test/interbroker/mocks"
 	. "github.com/jorgebay/soda/internal/test/localdb/mocks"
@@ -21,37 +22,37 @@ func TestSuite(t *testing.T) {
 
 var _ = Describe("generator", func() {
 	Describe("determineStartReason()", func() {
-		// It("should mark as restarted when data is there", func() {
-		// 	log.Info().Msgf("Starting first test")
-		// 	dbMock := new(Client)
-		// 	dbMock.On("DbWasNewlyCreated").Return(false)
-		// 	o := &generator{localDb: dbMock}
+		It("should mark as restarted when data is there", func() {
+			log.Info().Msgf("Starting first test")
+			dbMock := new(Client)
+			dbMock.On("DbWasNewlyCreated").Return(false)
+			o := &generator{localDb: dbMock}
 
-		// 	Expect(o.determineStartReason()).To(Equal(restarted))
-		// })
+			Expect(o.determineStartReason()).To(Equal(restarted))
+		})
 
-		// It("should mark as scaling up when covered by n-1", func() {
-		// 	log.Info().Msgf("Starting second test")
-		// 	dbMock := new(Client)
-		// 	dbMock.On("DbWasNewlyCreated").Return(true)
-		// 	currentOrdinal := 1
-		// 	previousOrdinal := 3 // 0, 3, 1, ...
+		It("should mark as scaling up when covered by n-1", func() {
+			log.Info().Msgf("Starting second test")
+			dbMock := new(Client)
+			dbMock.On("DbWasNewlyCreated").Return(true)
+			currentOrdinal := 1
+			previousOrdinal := 3 // 0, 3, 1, ...
 
-		// 	topology := newTestTopology(6, currentOrdinal)
-		// 	discovererMock := new(Discoverer)
-		// 	discovererMock.On("Topology").Return(topology)
+			topology := newTestTopology(6, currentOrdinal)
+			discovererMock := new(Discoverer)
+			discovererMock.On("Topology").Return(topology)
 
-		// 	gossiperMock := new(Gossiper)
-		// 	gossiperMock.On("IsTokenRangeCovered", previousOrdinal, topology.MyToken()).Return(true, nil)
+			gossiperMock := new(Gossiper)
+			gossiperMock.On("IsTokenRangeCovered", previousOrdinal, topology.MyToken()).Return(true, nil)
 
-		// 	o := &generator{
-		// 		discoverer: discovererMock,
-		// 		gossiper:   gossiperMock,
-		// 		localDb:    dbMock,
-		// 	}
+			o := &generator{
+				discoverer: discovererMock,
+				gossiper:   gossiperMock,
+				localDb:    dbMock,
+			}
 
-		// 	Expect(o.determineStartReason()).To(Equal(scalingUp))
-		// })
+			Expect(o.determineStartReason()).To(Equal(scalingUp))
+		})
 
 		It("should panic on gossiper error", func() {
 			log.Info().Msgf("Starting third test")
@@ -78,6 +79,39 @@ var _ = Describe("generator", func() {
 			Expect(func() {
 				o.determineStartReason()
 			}).To(Panic())
+		})
+	})
+
+	Describe("processLocal()", func ()  {
+		It("should create a version 1 for empty metadata", func ()  {
+			topology := newTestTopology(6, 3)
+			discovererMock := new(Discoverer)
+			discovererMock.On("Topology").Return(topology)
+			discovererMock.On("GenerationProposed", mock.Anything).Return(nil, nil)
+			discovererMock.On("SetGenerationProposed", mock.Anything, mock.Anything).Return(nil)
+			discovererMock.On("SetAsCommitted", mock.Anything, mock.Anything).Return(nil)
+
+			gossiperMock := new(Gossiper)
+			// Return nil generations
+			gossiperMock.
+				On("GetGenerations", mock.Anything, mock.Anything).
+				Return(interbroker.GenReadResult{})
+			gossiperMock.
+				On("SetGenerationAsProposed", mock.Anything, mock.Anything, mock.Anything).
+				Return(nil)
+			gossiperMock.
+				On("SetAsCommitted", mock.Anything, mock.Anything, mock.Anything).
+				Return(nil)
+
+			o := &generator{
+				discoverer: discovererMock,
+				gossiper:   gossiperMock,
+			}
+
+			err := o.processLocal(&localGenMessage{reason: newCluster})
+			Expect(err).NotTo(HaveOccurred())
+
+			gossiperMock.AssertExpectations(GinkgoT())
 		})
 	})
 })

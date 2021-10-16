@@ -13,8 +13,10 @@ const (
 
 	// Url for getting/setting the generation by token
 	GossipGenerationUrl = "/v1/generation/%s"
-	// Url for setting the generation as accepted token
+	// Url for setting the generation as proposed/accepted for token
 	GossipGenerationProposeUrl = "/v1/generation/%s/propose"
+	// Url for setting the generation and transaction as committed for token
+	GossipGenerationCommmitUrl = "/v1/generation/%s/commit"
 )
 
 const MaxTopicLength = 255
