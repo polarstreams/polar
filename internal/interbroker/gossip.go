@@ -57,7 +57,7 @@ type GenerationGossiper interface {
 	HasTokenHistoryForToken(ordinal int, token Token) (bool, error)
 
 	// Compare and sets the generation value to the proposed state
-	SetGenerationAsProposed(ordinal int, newGen Generation, expectedTx *UUID) error
+	SetGenerationAsProposed(ordinal int, newGen *Generation, expectedTx *UUID) error
 
 	// RegisterGenListener adds a listener for new generations received by the gossipper
 	RegisterGenListener(listener GenListener)
@@ -66,7 +66,7 @@ type GenerationGossiper interface {
 type GenListener interface {
 	OnNewRemoteGeneration(existing *Generation, new *Generation) error
 
-	OnRemoteSetAsProposed(newGen Generation, expectedTx *UUID) error
+	OnRemoteSetAsProposed(newGen *Generation, expectedTx *UUID) error
 }
 
 type GenReadResult struct {
@@ -217,7 +217,7 @@ func (g *gossiper) GetGenerations(ordinal int, token Token) GenReadResult {
 	return result
 }
 
-func (g *gossiper) SetGenerationAsProposed(ordinal int, newGen Generation, expectedTx *UUID) error {
+func (g *gossiper) SetGenerationAsProposed(ordinal int, newGen *Generation, expectedTx *UUID) error {
 	message := GenerationProposeMessage{
 		Generation: newGen,
 		ExpectedTx: expectedTx,

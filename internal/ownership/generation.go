@@ -65,7 +65,7 @@ func (o *generator) OnNewRemoteGeneration(existing *Generation, new *Generation)
 	return nil
 }
 
-func (o *generator) OnRemoteSetAsProposed(newGen Generation, expectedTx *uuid.UUID) error {
+func (o *generator) OnRemoteSetAsProposed(newGen *Generation, expectedTx *uuid.UUID) error {
 	//TODO: Create message to channel
 	return nil
 }

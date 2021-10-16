@@ -41,7 +41,7 @@ var _ = Describe("GenerationState", func() {
 			s.genProposed[gen.Start] = gen
 
 			tx := Must(NewRandom())
-			err := s.SetGenerationProposed(gen, &tx)
+			err := s.SetGenerationProposed(&gen, &tx)
 			Expect(err).To(MatchError(MatchRegexp(fmt.Sprintf(
 				"Existing proposed does not match.*expected %s", tx))))
 		})
@@ -57,7 +57,7 @@ var _ = Describe("GenerationState", func() {
 			}
 
 			tx := Must(NewRandom())
-			err := s.SetGenerationProposed(gen, &tx)
+			err := s.SetGenerationProposed(&gen, &tx)
 			Expect(err).To(MatchError("Existing transaction is nil and expected not to be"))
 		})
 
@@ -88,7 +88,7 @@ var _ = Describe("GenerationState", func() {
 				Status:  StatusAccepted,
 			}
 
-			err := s.SetGenerationProposed(newGen, &tx)
+			err := s.SetGenerationProposed(&newGen, &tx)
 			Expect(err).To(MatchError(
 				"Proposed version is not the next version of committed: committed = 1, proposed = 1"))
 		})
@@ -120,7 +120,7 @@ var _ = Describe("GenerationState", func() {
 				Status:  StatusAccepted,
 			}
 
-			err := s.SetGenerationProposed(newGen, &tx)
+			err := s.SetGenerationProposed(&newGen, &tx)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(s.genProposed[existingProposed.Start]).To(Equal(newGen))

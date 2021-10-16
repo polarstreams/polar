@@ -6,6 +6,6 @@ import (
 )
 
 type GenerationProposeMessage struct {
-	Generation Generation `json:"generation"`
-	ExpectedTx *UUID      `json:"tx,omitempty"`
+	Generation *Generation `json:"generation"`
+	ExpectedTx *UUID       `json:"tx,omitempty"`
 }

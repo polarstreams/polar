@@ -21,7 +21,7 @@ type GenerationState interface {
 	//
 	// Checks that the previous tx matches or is null.
 	// Also checks that provided gen.version is equal to committed plus one.
-	SetGenerationProposed(gen Generation, expectedTx *UUID) error
+	SetGenerationProposed(gen *Generation, expectedTx *UUID) error
 
 	// SetAsCommitted sets the transaction as committed, storing the history and
 	// setting the proposed generation as committed
@@ -53,7 +53,7 @@ func (d *discoverer) GenerationProposed(token Token) (committed *Generation, pro
 	return
 }
 
-func (d *discoverer) SetGenerationProposed(gen Generation, expectedTx *UUID) error {
+func (d *discoverer) SetGenerationProposed(gen *Generation, expectedTx *UUID) error {
 	defer d.genMutex.Unlock()
 	d.genMutex.Lock()
 
@@ -89,7 +89,7 @@ func (d *discoverer) SetGenerationProposed(gen Generation, expectedTx *UUID) err
 		gen.Status, gen.Version, gen.Leader, gen.Start, gen.End)
 
 	// Replace entire proposed value
-	d.genProposed[gen.Start] = gen
+	d.genProposed[gen.Start] = *gen
 
 	return nil
 }
@@ -113,12 +113,13 @@ func (d *discoverer) SetAsCommitted(token Token, tx UUID) error {
 		"Setting committed version %d with leader %d for range [%d, %d]", gen.Version, gen.Leader, gen.Start, gen.End)
 	gen.Status = StatusCommitted
 
+	// TODO: store the history first
+	// That way failures don't affect local state
+
 	copyAndStore(&d.generations, gen)
 
 	// Remove from proposed
 	delete(d.genProposed, token)
-
-	// TODO: store the history
 	return nil
 }
 

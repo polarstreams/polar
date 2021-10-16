@@ -58,10 +58,50 @@ func (o *generator) processLocal(message *localGenMessage) error {
 	}
 
 	// After reading, we can continue by performing a CAS operation for proposed
+	log.Info().Msgf("Proposing myself as a leader for T-%d (%d)", topology.MyOrdinal(), topology.MyToken())
 
-	log.Info().Msgf("Proposing myself for T-%d (%d)", topology.MyOrdinal(), topology.MyToken())
+	followerErrors := o.setStateToFollowers(&generation, []error{nil, nil}, readResults)
+	if followerErrors[0] != nil && followerErrors[1] != nil {
+		defer o.retryStartLocal(&generation)
+		return fmt.Errorf("Followers state could not be set to proposed")
+	}
 
-	//TODO: o.gossiper.SetGenerationAsProposed()
+	var localTx *uuid.UUID
+	if localProposed != nil {
+		localTx = &localProposed.Tx
+	}
+
+	if err := o.discoverer.SetGenerationProposed(&generation, localTx); err != nil {
+		log.Err(err).Msg("Unexpected error when setting as proposed locally")
+		// Don't retry
+		return fmt.Errorf("Unexpected local error")
+	}
+
+	log.Info().Msgf("Accepting myself as a leader for T-%d (%d)", topology.MyOrdinal(), topology.MyToken())
+	generation.Status = StatusAccepted
+
+	followerErrors = o.setStateToFollowers(&generation, followerErrors, readResults)
+	if followerErrors[0] != nil && followerErrors[1] != nil {
+		defer o.retryStartLocal(&generation)
+		return fmt.Errorf("Followers state could not be set to accepted")
+	}
+
+	if err := o.discoverer.SetGenerationProposed(&generation, &generation.Tx); err != nil {
+		log.Err(err).Msg("Unexpected error when setting as proposed locally")
+		return fmt.Errorf("Unexpected local error")
+	}
+
+	// Now we have a majority of replicas
+	log.Info().Msgf("Setting transaction for T-%d (%d) as committed", topology.MyOrdinal(), topology.MyToken())
+
+	// We can now start receiving producer traffic for this token
+	if err := o.discoverer.SetAsCommitted(generation.Start, generation.Tx); err != nil {
+		log.Err(err).Msg("Set as committed locally failed (probably local db related)")
+		defer o.retryStartLocal(&generation)
+		return fmt.Errorf("Set as committed locally failed")
+	}
+
+	//TODO: Set on followers / define messages
 
 	return nil
 }
@@ -71,7 +111,53 @@ func isInProgress(proposed *Generation) bool {
 }
 
 func (o *generator) retryStartLocal(gen *Generation) {
+	if o.items == nil {
+		// Suitable for testing
+		return
+	}
 	//TODO: Implement
+}
+
+func (o *generator) setStateToFollowers(
+	gen *Generation,
+	previousErrors []error,
+	readResults []GenReadResult,
+) []error {
+	error1 := make(chan error)
+	error2 := make(chan error)
+
+	setFunc := func(i int, errorChan chan error) {
+		o.setRemoteState(gen.Followers[i], gen, previousErrors[i], readResults[i], errorChan)
+	}
+
+	go setFunc(0, error1)
+	go setFunc(1, error2)
+
+	return []error{<-error1, <-error2}
+}
+
+func (o *generator) setRemoteState(
+	ordinal int,
+	gen *Generation,
+	previousError error,
+	readResult GenReadResult,
+	errorChan chan error,
+) {
+	if previousError != nil {
+		errorChan <- previousError
+		return
+	}
+	if readResult.Error != nil {
+		errorChan <- readResult.Error
+		return
+	}
+	var tx *uuid.UUID
+	if gen.Status == StatusAccepted {
+		tx = &gen.Tx
+	} else if readResult.Proposed != nil {
+		tx = &readResult.Proposed.Tx
+	}
+	errorChan <- o.gossiper.SetGenerationAsProposed(ordinal, gen, tx)
 }
 
 func (o *generator) readStateFromFollowers(gen *Generation) []GenReadResult {

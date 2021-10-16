@@ -148,11 +148,11 @@ func (_m *Gossiper) SendToLeader(replicationInfo types.ReplicationInfo, topic st
 }
 
 // SetGenerationAsProposed provides a mock function with given fields: ordinal, newGen, expectedTx
-func (_m *Gossiper) SetGenerationAsProposed(ordinal int, newGen types.Generation, expectedTx *uuid.UUID) error {
+func (_m *Gossiper) SetGenerationAsProposed(ordinal int, newGen *types.Generation, expectedTx *uuid.UUID) error {
 	ret := _m.Called(ordinal, newGen, expectedTx)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(int, types.Generation, *uuid.UUID) error); ok {
+	if rf, ok := ret.Get(0).(func(int, *types.Generation, *uuid.UUID) error); ok {
 		r0 = rf(ordinal, newGen, expectedTx)
 	} else {
 		r0 = ret.Error(0)
