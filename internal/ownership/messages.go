@@ -1,14 +1,14 @@
 package ownership
 
-import "github.com/jorgebay/soda/internal/types"
+import . "github.com/jorgebay/soda/internal/types"
 
 type genMessage interface {
 	setResult(err error)
 }
 
 type localGenMessage struct {
-	generation types.Generation
-	result     chan error
+	reason startReason
+	result chan error
 }
 
 func (m *localGenMessage) setResult(err error) {
@@ -16,8 +16,8 @@ func (m *localGenMessage) setResult(err error) {
 }
 
 type remoteGenMessage struct {
-	existing *types.Generation
-	new      *types.Generation
+	existing *Generation
+	new      *Generation
 	result   chan error
 }
 

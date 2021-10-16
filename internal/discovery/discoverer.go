@@ -25,12 +25,13 @@ const (
 type Discoverer interface {
 	Initializer
 	TopologyGetter
-	GenerationState
 	RegisterListener(l TopologyChangeHandler)
 	Shutdown()
 }
 
 type TopologyGetter interface {
+	GenerationState
+
 	// Leader gets the current leader and followers of a given partition key.
 	//
 	// In case partitionKey is empty, the current node is provided

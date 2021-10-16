@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -71,9 +72,14 @@ func (t *TopologyInfo) GetToken(index BrokerIndex) Token {
 	return GetTokenAtIndex(len(t.Brokers), int(index))
 }
 
-// GetToken gets the natural token by based on the current broker index.
+// MyToken gets the natural token based on the current broker index.
 func (t *TopologyInfo) MyToken() Token {
 	return GetTokenAtIndex(len(t.Brokers), int(t.LocalIndex))
+}
+
+// GetToken gets the natural token by based on the current broker index.
+func (t *TopologyInfo) MyOrdinal() int {
+	return t.Brokers[t.LocalIndex].Ordinal
 }
 
 // GetIndex gets the position of the broker in the broker slice.
@@ -93,12 +99,17 @@ func (t *TopologyInfo) PreviousBroker() *BrokerInfo {
 
 // NextBroker returns the broker in the position n+1
 func (t *TopologyInfo) NextBroker() *BrokerInfo {
-	index := 0
-	if int(t.LocalIndex) < len(t.Brokers)-1 {
-		index = int(t.LocalIndex) + 1
-	}
+	return &t.Brokers[(int(t.LocalIndex)+1)%len(t.Brokers)]
+}
 
-	return &t.Brokers[index]
+// NaturalFollowers gets the ordinals of the brokers at position n+1 and n+2
+func (t *TopologyInfo) NaturalFollowers() []int {
+	totalBrokers := len(t.Brokers)
+	localIndex := int(t.LocalIndex)
+	return []int{
+		t.Brokers[(localIndex+1)%totalBrokers].Ordinal,
+		t.Brokers[(localIndex+2)%totalBrokers].Ordinal,
+	}
 }
 
 // TopicDataId contains information to locate a certain piece of data.
@@ -120,15 +131,23 @@ type Generation struct {
 	Start     Token     `json:"start"`
 	End       Token     `json:"end"`
 	Version   int       `json:"version"`
-	Timestamp int64     `json:"timestamp"`
-	Leader    int       `json:"leader"`
-	Followers []int     `json:"followers"`
+	Timestamp int64     `json:"timestamp"` // In unix micros
+	Leader    int       `json:"leader"`    // Leader ordinal
+	Followers []int     `json:"followers"` // Follower ordinals
 	Tx        uuid.UUID `json:"tx"`
 	TxLeader  int       `json:"txLeader"`
 	Status    GenStatus `json:"status"`
 	ToDelete  bool      `json:"toDelete"`
 }
 
+// Time() returns the timestamp expressed as a time.Time
+func (o *Generation) Time() time.Time {
+	// Timestamp is expressed in micros
+	nanos := o.Timestamp * 1000
+	return time.Unix(0, nanos)
+}
+
+// GenStatus determines the state (proposed, accepted, ...) of the status
 type GenStatus int
 
 var genStatusNames = [...]string{"Cancelled", "Proposed", "Accepted", "Committed"}

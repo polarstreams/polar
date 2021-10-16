@@ -2,6 +2,7 @@ package ownership
 
 import (
 	"fmt"
+	"testing"
 
 	. "github.com/jorgebay/soda/internal/test/discovery/mocks"
 	. "github.com/jorgebay/soda/internal/test/interbroker/mocks"
@@ -9,42 +10,51 @@ import (
 	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/mock"
 )
 
+func TestSuite(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Ownership Suite")
+}
+
 var _ = Describe("generator", func() {
 	Describe("determineStartReason()", func() {
-		It("should mark as restarted when data is there", func() {
-			dbMock := new(Client)
-			dbMock.On("DbWasNewlyCreated").Return(false)
-			o := &generator{localDb: dbMock}
+		// It("should mark as restarted when data is there", func() {
+		// 	log.Info().Msgf("Starting first test")
+		// 	dbMock := new(Client)
+		// 	dbMock.On("DbWasNewlyCreated").Return(false)
+		// 	o := &generator{localDb: dbMock}
 
-			Expect(o.determineStartReason()).To(Equal(restarted))
-		})
+		// 	Expect(o.determineStartReason()).To(Equal(restarted))
+		// })
 
-		It("should mark as scaling up when covered by n-1", func() {
-			dbMock := new(Client)
-			dbMock.On("DbWasNewlyCreated").Return(true)
-			currentOrdinal := 1
-			previousOrdinal := 3 // 0, 3, 1, ...
+		// It("should mark as scaling up when covered by n-1", func() {
+		// 	log.Info().Msgf("Starting second test")
+		// 	dbMock := new(Client)
+		// 	dbMock.On("DbWasNewlyCreated").Return(true)
+		// 	currentOrdinal := 1
+		// 	previousOrdinal := 3 // 0, 3, 1, ...
 
-			topology := newTestTopology(6, currentOrdinal)
-			discovererMock := new(Discoverer)
-			discovererMock.On("Topology").Return(topology)
+		// 	topology := newTestTopology(6, currentOrdinal)
+		// 	discovererMock := new(Discoverer)
+		// 	discovererMock.On("Topology").Return(topology)
 
-			gossiperMock := new(Gossiper)
-			gossiperMock.On("IsTokenRangeCovered", previousOrdinal, topology.MyToken()).Return(true, nil)
+		// 	gossiperMock := new(Gossiper)
+		// 	gossiperMock.On("IsTokenRangeCovered", previousOrdinal, topology.MyToken()).Return(true, nil)
 
-			o := &generator{
-				discoverer: discovererMock,
-				gossiper:   gossiperMock,
-				localDb:    dbMock,
-			}
+		// 	o := &generator{
+		// 		discoverer: discovererMock,
+		// 		gossiper:   gossiperMock,
+		// 		localDb:    dbMock,
+		// 	}
 
-			Expect(o.determineStartReason()).To(Equal(scalingUp))
-		})
+		// 	Expect(o.determineStartReason()).To(Equal(scalingUp))
+		// })
 
 		It("should panic on gossiper error", func() {
+			log.Info().Msgf("Starting third test")
 			dbMock := new(Client)
 			dbMock.On("DbWasNewlyCreated").Return(true)
 
@@ -62,6 +72,8 @@ var _ = Describe("generator", func() {
 				gossiper:   gossiperMock,
 				localDb:    dbMock,
 			}
+
+			Expect(o).NotTo(BeNil())
 
 			Expect(func() {
 				o.determineStartReason()

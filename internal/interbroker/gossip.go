@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	. "github.com/google/uuid"
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/localdb"
@@ -46,7 +47,7 @@ type Gossiper interface {
 //  GenerationGossiper is responsible for communicating actions related to generations.
 type GenerationGossiper interface {
 	// GetGenerations gets the generations for a given token on a peer
-	GetGenerations(ordinal int, token Token) ([]Generation, error)
+	GetGenerations(ordinal int, token Token) GenReadResult
 
 	// IsTokenRangeCovered sends a request to the peer to determine whether the broker
 	// has an active range containing (but not starting) the token
@@ -55,13 +56,8 @@ type GenerationGossiper interface {
 	// HasTokenHistoryForToken determines whether the broker has any history matching the token
 	HasTokenHistoryForToken(ordinal int, token Token) (bool, error)
 
-	// UpsertGeneration sends a request to a peer to update/insert a generation
-	//
-	// When existing is defined, it tries to update it the unaccepted generation,
-	// otherwise it will insert a new one.
-	UpsertGeneration(ordinal int, existing *Generation, newGeneration Generation) error
-
-	SetGenerationAsAccepted(ordinal int, newGen Generation) error
+	// Compare and sets the generation value to the proposed state
+	SetGenerationAsProposed(ordinal int, newGen Generation, expectedTx *UUID) error
 
 	// RegisterGenListener adds a listener for new generations received by the gossipper
 	RegisterGenListener(listener GenListener)
@@ -70,7 +66,13 @@ type GenerationGossiper interface {
 type GenListener interface {
 	OnNewRemoteGeneration(existing *Generation, new *Generation) error
 
-	OnRemoteSetAsAccepted(newGen *Generation) error
+	OnRemoteSetAsProposed(newGen Generation, expectedTx *UUID) error
+}
+
+type GenReadResult struct {
+	Committed *Generation
+	Proposed  *Generation
+	Error     error
 }
 
 func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Gossiper {
@@ -193,35 +195,40 @@ func (g *gossiper) requestPost(ordinal int, baseUrl string, body []byte) (*http.
 	return resp, err
 }
 
-func (g *gossiper) GetGenerations(ordinal int, token Token) ([]Generation, error) {
+func (g *gossiper) GetGenerations(ordinal int, token Token) GenReadResult {
 	r, err := g.requestGet(ordinal, fmt.Sprintf(conf.GossipGenerationUrl, token.String()))
 	if err != nil {
-		return nil, err
+		return GenReadResult{Error: err}
 	}
 	defer r.Body.Close()
-	var result []Generation
-	err = json.NewDecoder(r.Body).Decode(&result)
-	return result, err
-}
-
-func (g *gossiper) UpsertGeneration(ordinal int, existing *Generation, newGeneration Generation) error {
-	jsonBody, err := json.Marshal([]*Generation{existing, &newGeneration})
-	if err != nil {
-		log.Fatal().Err(err).Msgf("json marshalling failed when upserting generation")
+	var gens []Generation
+	if err = json.NewDecoder(r.Body).Decode(&gens); err != nil {
+		return GenReadResult{Error: err}
 	}
 
-	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationUrl, newGeneration.Start.String()), jsonBody)
-	defer r.Body.Close()
-	return err
+	result := GenReadResult{}
+
+	if len(gens) > 0 && gens[0].Version > 0 {
+		result.Committed = &gens[0]
+	}
+	if len(gens) > 1 && gens[1].Version > 0 {
+		result.Proposed = &gens[1]
+	}
+	return result
 }
 
-func (g *gossiper) SetGenerationAsAccepted(ordinal int, newGen Generation) error {
-	jsonBody, err := json.Marshal(newGen)
+func (g *gossiper) SetGenerationAsProposed(ordinal int, newGen Generation, expectedTx *UUID) error {
+	message := GenerationProposeMessage{
+		Generation: newGen,
+		ExpectedTx: expectedTx,
+	}
+
+	jsonBody, err := json.Marshal(message)
 	if err != nil {
 		log.Fatal().Err(err).Msgf("json marshalling failed when setting generation as accepted")
 	}
 
-	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationAcceptUrl, newGen.Start.String()), jsonBody)
+	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationProposeUrl, newGen.Start.String()), jsonBody)
 	defer r.Body.Close()
 	return err
 }

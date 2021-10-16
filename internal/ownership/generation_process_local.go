@@ -1,89 +1,92 @@
 package ownership
 
 import (
-	"errors"
 	"fmt"
+	"time"
 
+	"github.com/google/uuid"
+	. "github.com/jorgebay/soda/internal/interbroker"
 	. "github.com/jorgebay/soda/internal/types"
+	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
-func (o *generator) processLocal(newGen Generation) error {
-	log.Debug().Msg("Processing a generation started locally")
+func (o *generator) processLocal(message *localGenMessage) error {
+	topology := o.discoverer.Topology()
+	token := topology.MyToken()
+	timestamp := time.Now()
 
-	accepted := &emptyGeneration
-	proposed := &emptyGeneration
+	log.Info().Msgf("Processing a generation started locally for T-%d (%d)", topology.MyOrdinal(), topology.MyToken())
 
-	// Retrieve locally
-	if gens, err := o.localDb.GetGenerationsByToken(newGen.Start); err != nil {
-		log.Fatal().Err(err).Msg("Generations could not be retrieved")
-	} else {
-		accepted, proposed = checkState(gens, accepted, proposed)
+	generation := Generation{
+		Start:     token,
+		End:       topology.GetToken(topology.LocalIndex + 1),
+		Version:   0,
+		Timestamp: timestamp.UnixMicro(),
+		Leader:    topology.MyOrdinal(),
+		Followers: topology.NaturalFollowers(),
+		Tx:        uuid.New(),
+		TxLeader:  topology.MyOrdinal(),
+		Status:    StatusProposed,
+		ToDelete:  false,
 	}
 
-	//TODO: Local accepted and proposed
-	_, localProposed := accepted, proposed
+	// Perform a read from followers
+	readResults := o.readStateFromFollowers(&generation)
 
-	genByFollower := make([][]Generation, len(newGen.Followers))
-
-	// Retrieve from followers
-	for i, follower := range newGen.Followers {
-		gens, err := o.gossiper.GetGenerations(follower, newGen.Start)
-		if err != nil {
-			log.Debug().Msgf("Error when trying to retrieve generations from broker %d: %s", follower, err.Error())
-			continue
-		}
-
-		log.Debug().Msgf("Obtained generations %v from broker %d", gens, follower)
-		accepted, proposed = checkState(gens, accepted, proposed)
-		genByFollower[i] = gens
+	if readResults[0].Error != nil && readResults[1].Error != nil {
+		// No point in continuing
+		defer o.retryStartLocal(&generation)
+		return fmt.Errorf("Followers state could not be read")
 	}
 
-	if proposed != &emptyGeneration {
-		// TODO: Check whether it's old, cancel and override
-		log.Info().Msgf("There's already a previous proposed generation TODO FIX")
-		return errors.New("There's already a proposed generation for this token")
+	localCommitted, localProposed := o.discoverer.GenerationProposed(token)
+
+	generation.Version = utils.MaxVersion(
+		localCommitted,
+		readResults[0].Committed,
+		readResults[1].Committed) + 1
+
+	if isInProgress(localProposed) {
+		defer o.retryStartLocal(&generation)
+		return fmt.Errorf("In progress generation in local broker")
 	}
 
-	newGen.Version = accepted.Version + 1
-	newGen.Tx = o.nextUuid()
-	newGen.Status = StatusProposed
-
-	failedFollowers := make([]int, 0)
-
-	// Start by trying to propose the generation on the followers
-	for i, follower := range newGen.Followers {
-		gens := genByFollower[i]
-		var existingGen *Generation = nil
-		if len(gens) > 0 && gens[0].Status == StatusProposed {
-			existingGen = &gens[0]
-		}
-
-		// TODO: In parallel!
-		if err := o.gossiper.UpsertGeneration(follower, existingGen, newGen); err != nil {
-			log.Warn().Err(err).Msgf("Upsert generation failed in peer %d", follower)
-			failedFollowers = append(failedFollowers, follower)
-		}
+	if isInProgress(readResults[0].Proposed) || isInProgress(readResults[1].Proposed) {
+		defer o.retryStartLocal(&generation)
+		return fmt.Errorf("In progress generation in remote broker")
 	}
 
-	if len(failedFollowers) >= len(newGen.Followers)/2 {
-		return fmt.Errorf("Generation creation was rejected by proposed followers")
-	}
+	// After reading, we can continue by performing a CAS operation for proposed
 
-	//TODO: Heal failed followers
+	log.Info().Msgf("Proposing myself for T-%d (%d)", topology.MyOrdinal(), topology.MyToken())
 
-	if localProposed == &emptyGeneration {
-		localProposed = nil
-	}
+	//TODO: o.gossiper.SetGenerationAsProposed()
 
-	log.Debug().Msgf("Proposing locally new generation %+v", newGen)
+	return nil
+}
 
-	if err := o.localDb.UpsertGeneration(localProposed, &newGen); err != nil {
-		log.Error().Msg("Generation could not be proposed locally")
-		return fmt.Errorf("Generation could not be proposed locally")
-	}
+func isInProgress(proposed *Generation) bool {
+	return proposed != nil && time.Since(proposed.Time()) > maxDelay
+}
 
-	return o.setAsAccepted(&newGen)
+func (o *generator) retryStartLocal(gen *Generation) {
+	//TODO: Implement
+}
+
+func (o *generator) readStateFromFollowers(gen *Generation) []GenReadResult {
+	r1 := make(chan GenReadResult)
+	r2 := make(chan GenReadResult)
+
+	go func() {
+		r1 <- o.gossiper.GetGenerations(gen.Followers[0], gen.Start)
+	}()
+
+	go func() {
+		r2 <- o.gossiper.GetGenerations(gen.Followers[1], gen.Start)
+	}()
+
+	return []GenReadResult{<-r1, <-r2}
 }
 
 func (o *generator) determineStartReason() startReason {
@@ -95,13 +98,13 @@ func (o *generator) determineStartReason() startReason {
 	topology := o.discoverer.Topology()
 	myToken := topology.MyToken()
 
-	// When the previous broker has in range the token that
-	// belongs to the current broker, that signals that it should
-	// be splitted up
 	if cond, err := o.gossiper.IsTokenRangeCovered(topology.PreviousBroker().Ordinal, myToken); cond {
+		// When the previous broker has in range the token that
+		// belongs to the current broker, that signals that it should
+		// be splitted up
 		return scalingUp
 	} else if err != nil {
-		log.Fatal().Err(err).Msgf("Gossip query failed for token range")
+		log.Panic().Err(err).Msgf("Gossip query failed for token range")
 	}
 
 	// Just to make sure, we query the next broker
@@ -109,7 +112,7 @@ func (o *generator) determineStartReason() startReason {
 	if cond, err := o.gossiper.HasTokenHistoryForToken(topology.NextBroker().Ordinal, myToken); cond {
 		return restarted
 	} else if err != nil {
-		log.Fatal().Err(err).Msgf("Gossip query failed for token history")
+		log.Panic().Err(err).Msgf("Gossip query failed for token history")
 	}
 
 	return newCluster

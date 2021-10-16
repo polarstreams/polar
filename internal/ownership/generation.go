@@ -16,10 +16,9 @@ import (
 )
 
 const (
-	baseDelayMs                     = 150
-	maxDuration       time.Duration = 1<<63 - 1
-	maxInitElapsed                  = 10 * time.Second
-	replicationFactor               = 3
+	baseDelayMs       = 150
+	maxDelay          = 300 * time.Millisecond
+	replicationFactor = 3
 )
 
 var emptyGeneration = Generation{Start: math.MaxInt64, Version: 0, Status: StatusCancelled}
@@ -66,7 +65,7 @@ func (o *generator) OnNewRemoteGeneration(existing *Generation, new *Generation)
 	return nil
 }
 
-func (o *generator) OnRemoteSetAsAccepted(newGen *Generation) error {
+func (o *generator) OnRemoteSetAsProposed(newGen Generation, expectedTx *uuid.UUID) error {
 	//TODO: Create message to channel
 	return nil
 }
@@ -75,67 +74,30 @@ func (o *generator) StartGenerations() {
 	started := make(chan bool, 1)
 	go func() {
 		started <- true
-		if err := o.startNew(maxInitElapsed); err != nil {
-			log.Warn().Msgf("Initial generation could not be created after %.0fs", maxInitElapsed.Seconds())
-
-			// TODO: Retry or Panic
-		}
+		o.startNew()
 	}()
 	<-started
 }
 
-func (o *generator) startNew(maxElapsed time.Duration) error {
+func (o *generator) startNew() {
+	reason := o.determineStartReason()
 
-	//TODO: Rewrite everything
-	self := o.discoverer.LocalInfo()
-	brokers := o.discoverer.Brokers()
-	followers := make([]int, int(math.Min(float64(len(brokers)), replicationFactor-1)))
-
-	// Get the next peers in the ring as followers
-	for i := 0; i < len(followers); i++ {
-		followers[i] = brokers[(self.Ordinal+1+i)%len(brokers)].Ordinal
+	if reason == scalingUp {
+		// TODO: Send a message to broker n-1 to start the process
+		// of splitting the token range
+		return
 	}
 
-	// initial delay
-	time.Sleep(time.Duration(baseDelayMs*self.Ordinal) * time.Millisecond)
-	start := time.Now()
-
-	for i := 0; ; i++ {
-		if time.Since(start) > maxElapsed {
-			return fmt.Errorf(
-				"New generation creation timed out after %d attempts and %.2fs",
-				i, time.Since(start).Seconds())
-		}
-
-		newGeneration := Generation{
-			Start:     o.discoverer.TokenByOrdinal(self.Ordinal),
-			End:       o.discoverer.TokenByOrdinal((self.Ordinal + 1) % len(brokers)),
-			Leader:    self.Ordinal,
-			Followers: followers,
-		}
-
-		log.Debug().Msgf("Starting new generation for token %d with followers %v", newGeneration.Start, followers)
-
-		message := localGenMessage{
-			generation: newGeneration,
-			result:     make(chan error, 1),
-		}
-
-		o.items <- &message
-		if err := <-message.result; err == nil {
-			log.Info().Msg("New generation for token %d was created")
-			break
-		}
-
-		if i > 0 && (i+1)%3 == 0 {
-			log.Warn().
-				Msgf("New generation for token %d could not be created after %d attempts", newGeneration.Start, i+1)
-		}
-
-		time.Sleep(getDelay())
+	message := localGenMessage{
+		reason: reason,
+		result: make(chan error),
 	}
 
-	return nil
+	// Send to the processing queue
+	o.items <- &message
+	err := <-message.result
+	log.Err(err).Msg("Could not create generation when starting")
+	// TODO: Retry or panic
 }
 
 // process Processes events in order.
@@ -166,7 +128,7 @@ func (o *generator) process() {
 func (o *generator) processGeneration(message genMessage) error {
 	// Consider a channel if state is needed across multiple items, i.e. "serialItems"
 	if localGen, ok := message.(*localGenMessage); ok {
-		return o.processLocal(localGen.generation)
+		return o.processLocal(localGen)
 	} else {
 		m := message.(*remoteGenMessage)
 		return o.processRemote(m.existing, m.new)
