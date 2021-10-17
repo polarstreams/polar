@@ -60,19 +60,25 @@ func (o *generator) Init() error {
 	return nil
 }
 
-func (o *generator) OnNewRemoteGeneration(existing *Generation, new *Generation) error {
-	//TODO: Create message
-	return nil
-}
-
 func (o *generator) OnRemoteSetAsProposed(newGen *Generation, expectedTx *uuid.UUID) error {
-	//TODO: Create message to channel
-	return nil
+	// Create message to channel
+	message := remoteGenProposedMessage{
+		gen:        newGen,
+		expectedTx: expectedTx,
+		result:     make(chan error),
+	}
+	o.items <- &message
+	return <-message.result
 }
 
 func (o *generator) OnRemoteSetAsCommitted(token Token, tx uuid.UUID) error {
-	//TODO: Create message to channel
-	return nil
+	message := remoteGenCommittedMessage{
+		token: token,
+		tx: tx,
+		result:     make(chan error),
+	}
+	o.items <- &message
+	return <-message.result
 }
 
 func (o *generator) StartGenerations() {
@@ -132,23 +138,20 @@ func (o *generator) process() {
 // processGeneration() returns nil when the generation was created, otherwise an error.
 func (o *generator) processGeneration(message genMessage) error {
 	// Consider a channel if state is needed across multiple items, i.e. "serialItems"
-	if localGen, ok := message.(*localGenMessage); ok {
-		return o.processLocal(localGen)
-	} else {
-		m := message.(*remoteGenMessage)
-		return o.processRemote(m.existing, m.new)
+	if m, ok := message.(*localGenMessage); ok {
+		return o.processLocal(m)
 	}
-}
 
-func (o *generator) setAsAccepted(newGen *Generation) error {
-	//TODO: Implement
+	if m, ok := message.(*remoteGenProposedMessage); ok {
+		return o.processRemoteProposed(m)
+	}
+
+	if m, ok := message.(*remoteGenCommittedMessage); ok {
+		return o.processRemoteCommitted(m)
+	}
+
+	log.Panic().Msg("Unhandled generation internal message type")
 	return nil
-}
-
-func (o *generator) processRemote(existing *Generation, new *Generation) error {
-	log.Debug().Msg("Processing a generation item started remotely")
-
-	return o.localDb.UpsertGeneration(existing, new)
 }
 
 func checkState(gens []Generation, accepted, proposed *Generation) (*Generation, *Generation) {

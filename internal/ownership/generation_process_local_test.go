@@ -82,8 +82,8 @@ var _ = Describe("generator", func() {
 		})
 	})
 
-	Describe("processLocal()", func ()  {
-		It("should create a version 1 for empty metadata", func ()  {
+	Describe("processLocal()", func() {
+		It("should create a version 1 for empty metadata", func() {
 			topology := newTestTopology(6, 3)
 			discovererMock := new(Discoverer)
 			discovererMock.On("Topology").Return(topology)

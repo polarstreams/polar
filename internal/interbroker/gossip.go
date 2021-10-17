@@ -67,8 +67,6 @@ type GenerationGossiper interface {
 }
 
 type GenListener interface {
-	OnNewRemoteGeneration(existing *Generation, new *Generation) error
-
 	OnRemoteSetAsProposed(newGen *Generation, expectedTx *UUID) error
 
 	OnRemoteSetAsCommitted(token Token, tx UUID) error
@@ -119,11 +117,6 @@ func (g *gossiper) IsTokenRangeCovered(ordinal int, token Token) (bool, error) {
 func (g *gossiper) HasTokenHistoryForToken(ordinal int, token Token) (bool, error) {
 	// TODO: Implement
 	return false, nil
-}
-
-func (g *gossiper) SetAsCommitted(ordinal int, token Token, tx UUID) error {
-	// TODO: Implement
-	return nil
 }
 
 func (g *gossiper) RegisterGenListener(listener GenListener) {
@@ -238,7 +231,18 @@ func (g *gossiper) SetGenerationAsProposed(ordinal int, newGen *Generation, expe
 		log.Fatal().Err(err).Msgf("json marshalling failed when setting generation as accepted")
 	}
 
-	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationProposeUrl, newGen.Start.String()), jsonBody)
+	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationProposeUrl, newGen.Start), jsonBody)
+	defer r.Body.Close()
+	return err
+}
+
+func (g *gossiper) SetAsCommitted(ordinal int, token Token, tx UUID) error {
+	jsonBody, err := json.Marshal(tx)
+	if err != nil {
+		log.Fatal().Err(err).Msgf("json marshalling failed when setting generation as committed")
+	}
+
+	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationProposeUrl, token), jsonBody)
 	defer r.Body.Close()
 	return err
 }

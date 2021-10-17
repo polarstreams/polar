@@ -63,7 +63,6 @@ func (g *gossiper) acceptHttpConnections() error {
 				fmt.Fprintf(w, "Peer listening on %d\n", port)
 			})
 			router.GET(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), ToHandle(g.getGenHandler))
-			router.POST(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), ToPostHandle(g.postGenHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationProposeUrl, ":token"), ToPostHandle(g.postGenProposeHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationCommmitUrl, ":token"), ToPostHandle(g.postGenCommitHandler))
 
@@ -100,27 +99,6 @@ func (g *gossiper) getGenHandler(w http.ResponseWriter, r *http.Request, ps http
 	}
 
 	return nil
-}
-
-func (g *gossiper) postGenHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
-	if _, err := strconv.ParseInt(strings.TrimSpace(ps.ByName("token")), 10, 64); err != nil {
-		return err
-	}
-	var gens []*Generation
-	if err := json.NewDecoder(r.Body).Decode(&gens); err != nil {
-		return err
-	}
-
-	if len(gens) != 2 || gens[1] == nil {
-		return NewHttpError(http.StatusBadRequest, "Generations were not provided")
-	}
-
-	if g.genListener == nil {
-		panic("Generation listener was not registered")
-	}
-
-	// Use the registered listener
-	return g.genListener.OnNewRemoteGeneration(gens[0], gens[1])
 }
 
 func (g *gossiper) postGenProposeHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
