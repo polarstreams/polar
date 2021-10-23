@@ -64,118 +64,26 @@ var _ = Describe("Client", func() {
 		})
 	})
 
-	Describe("UpsertGeneration()", func() {
-		It("Should insert generation when existing is not provided", func() {
+	Describe("CommitGeneration()", func() {
+		It("should insert a record in each table", func() {
 			client := newTestClient()
 
 			gen := Generation{
-				Start:     1010,
-				End:       2010,
-				Version:   1,
+				Start:     2001,
+				End:       3001,
+				Version:   123,
+				Timestamp: time.Now().UnixMicro(),
+				Leader:    3,
+				Followers: []int{1, 4},
+				TxLeader:  3,
 				Tx:        uuid.New(),
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Status:    StatusProposed,
-				Leader:    0,
-				Followers: []int{1, 2},
-			}
-			err := client.UpsertGeneration(nil, &gen)
-			Expect(err).NotTo(HaveOccurred())
-
-			obtained, err := client.GetGenerationsByToken(gen.Start)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(gen).To(Equal(obtained[0]))
-		})
-
-		It("Should update when existing is provided", func() {
-			client := newTestClient()
-
-			gen := Generation{
-				Start:     1021,
-				End:       2021,
-				Version:   2,
-				Tx:        uuid.New(),
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Status:    StatusProposed,
-				Leader:    0,
-				Followers: []int{1, 2},
+				Status:    StatusCommitted,
 			}
 
-			insertGeneration(client, gen)
-
-			newGen := gen
-			newGen.Leader = 1
-			newGen.Followers = []int{2, 0}
-			newGen.Tx = uuid.New()
-
-			err := client.UpsertGeneration(&gen, &newGen)
+			err := client.CommitGeneration(&gen)
 			Expect(err).NotTo(HaveOccurred())
-
-			obtained, err := client.GetGenerationsByToken(gen.Start)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(newGen).To(Equal(obtained[0]))
-		})
-
-		It("Should return an error when no row is affected", func() {
-			client := newTestClient()
-
-			gen := Generation{
-				Start:     1030,
-				End:       2030,
-				Version:   1,
-				Tx:        uuid.New(),
-				Status:    StatusProposed,
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Leader:    0,
-				Followers: []int{1, 2},
-			}
-
-			err := client.UpsertGeneration(&gen, &gen)
-			Expect(err).To(MatchError("No generation was updated"))
-		})
-	})
-
-	Describe("SetAsAccepted()", func() {
-		It("Should update the status to accepted when's a match", func() {
-			client := newTestClient()
-
-			gen := Generation{
-				Start:     1040,
-				End:       2040,
-				Version:   2,
-				Tx:        uuid.New(),
-				Status:    StatusProposed,
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Leader:    2,
-				Followers: []int{0, 1},
-			}
-
-			insertGeneration(client, gen)
-
-			gen.Status = StatusAccepted
-
-			err := client.SetGenerationAsAccepted(&gen)
-			Expect(err).ToNot(HaveOccurred())
-
-			obtained, err := client.GetGenerationsByToken(gen.Start)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(gen).To(Equal(obtained[0]))
-		})
-
-		It("Should error when no row was affected", func() {
-			client := newTestClient()
-			gen := Generation{
-				Start:     1050, // Does not exist
-				End:       2050,
-				Version:   2,
-				Tx:        uuid.New(),
-				Status:    StatusAccepted,
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Leader:    2,
-				Followers: []int{0, 1},
-			}
-
-			err := client.SetGenerationAsAccepted(&gen)
-			Expect(err).To(MatchError("No generation was updated"))
+			expectToMatchStored(client, gen)
+			expectTransactionStored(client, gen)
 		})
 	})
 })
@@ -197,10 +105,27 @@ func (c *testConfig) LocalDbPath() string {
 
 func insertGeneration(c *client, gen Generation) {
 	query := `
-		INSERT INTO generations (start_token, end_token, version, timestamp, tx, status, leader, followers)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		INSERT INTO generations (start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := c.db.Exec(
-		query, gen.Start, gen.End, gen.Version, gen.Timestamp, gen.Tx,
+		query, gen.Start, gen.End, gen.Version, gen.Timestamp, gen.Tx, gen.TxLeader,
 		gen.Status, gen.Leader, utils.ToCsv(gen.Followers))
 	Expect(err).NotTo(HaveOccurred())
+}
+
+func expectTransactionStored(c *client, gen Generation) {
+	query := `SELECT tx, origin, timestamp, status FROM transactions WHERE tx = ?`
+	obtained := Generation{}
+	err := c.db.QueryRow(query, gen.Tx).Scan(&obtained.Tx, &obtained.TxLeader, &obtained.Timestamp, &obtained.Status)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(obtained.Tx).To(Equal(gen.Tx))
+	Expect(obtained.TxLeader).To(Equal(gen.TxLeader))
+	Expect(obtained.Status).To(Equal(gen.Status))
+}
+
+func expectToMatchStored(c *client, gen Generation) {
+	result, err := c.GetGenerationsByToken(gen.Start)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(result).To(HaveLen(1))
+	Expect(result[0]).To(Equal(gen))
 }

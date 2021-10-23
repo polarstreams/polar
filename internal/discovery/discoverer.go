@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/localdb"
 	. "github.com/jorgebay/soda/internal/types"
 	"github.com/rs/zerolog/log"
 )
@@ -44,7 +45,7 @@ type TopologyGetter interface {
 	Peers() []BrokerInfo
 
 	// Returns a point-in-time list of all brokers and local info.
-	Topology() TopologyInfo
+	Topology() *TopologyInfo
 
 	// Returns a point-in-time list of all brokers.
 	//
@@ -58,12 +59,13 @@ type TopologyChangeHandler func()
 
 type genMap map[Token]Generation
 
-func NewDiscoverer(config conf.DiscovererConfig) Discoverer {
+func NewDiscoverer(config conf.DiscovererConfig, localDb localdb.Client) Discoverer {
 	generations := atomic.Value{}
 	generations.Store(genMap{})
 
 	return &discoverer{
 		config:      config,
+		localDb:     localDb,
 		listeners:   make([]TopologyChangeHandler, 0),
 		generations: generations,
 		genProposed: genMap{},
@@ -72,6 +74,7 @@ func NewDiscoverer(config conf.DiscovererConfig) Discoverer {
 
 type discoverer struct {
 	config      conf.DiscovererConfig
+	localDb     localdb.Client
 	listeners   []TopologyChangeHandler
 	topology    TopologyInfo // Gets the current brokers, index and ring
 	genMutex    sync.Mutex
@@ -94,8 +97,8 @@ func (d *discoverer) Init() error {
 	return nil
 }
 
-func (d *discoverer) Topology() TopologyInfo {
-	return d.topology
+func (d *discoverer) Topology() *TopologyInfo {
+	return &d.topology
 }
 
 func createTopology(totalBrokers int, config conf.DiscovererConfig) TopologyInfo {

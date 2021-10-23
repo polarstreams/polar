@@ -1,39 +1,32 @@
 package localdb
 
 import (
+	"context"
 	"database/sql"
-	"errors"
 	"strconv"
 	"strings"
 
-	"github.com/jorgebay/soda/internal/types"
+	. "github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
 )
 
 type queries struct {
 	selectGenerations *sql.Stmt
-	updateGeneration  *sql.Stmt
 	insertGeneration  *sql.Stmt
-	acceptGeneration  *sql.Stmt
+	insertTransaction *sql.Stmt
 }
 
 func (c *client) prepareQueries() {
 	c.queries.selectGenerations = c.prepare(`
-		SELECT start_token, end_token, version, timestamp, tx, status, leader, followers FROM
+		SELECT start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers FROM
 		generations WHERE start_token = ? ORDER BY start_token, version DESC LIMIT 2`)
 
 	c.queries.insertGeneration = c.prepare(`
-		INSERT INTO generations (start_token, end_token, version, timestamp, tx, status, leader, followers)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+		INSERT INTO generations (start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
-	c.queries.updateGeneration = c.prepare(`
-		UPDATE generations
-		SET
-			end_token = ?, timestamp = ?, tx = ?, status = ?, leader = ?, followers = ?
-		WHERE
-			start_token = ? AND version = ? AND
-			end_token = ? AND tx = ? AND status = ? AND
-			leader = ? AND followers = ?`)
+	c.queries.insertTransaction = c.prepare(
+		`INSERT INTO transactions (tx, origin, timestamp, status) VALUES (?, ?, ?, ?)`)
 }
 
 func (c *client) prepare(query string) *sql.Stmt {
@@ -73,19 +66,20 @@ func (c *client) setCurrentSchemaVersion() error {
 	return err
 }
 
-func (c *client) GetGenerationsByToken(token types.Token) ([]types.Generation, error) {
+func (c *client) GetGenerationsByToken(token Token) ([]Generation, error) {
 	rows, err := c.queries.selectGenerations.Query(int64(token))
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]types.Generation, 0)
+	result := make([]Generation, 0)
 	defer rows.Close()
 	for rows.Next() {
-		item := types.Generation{}
+		item := Generation{}
 		var followers string
 		err = rows.Scan(
-			&item.Start, &item.End, &item.Version, &item.Timestamp, &item.Tx, &item.Status, &item.Leader, &followers)
+			&item.Start, &item.End, &item.Version, &item.Timestamp, &item.Tx, &item.TxLeader,
+			&item.Status, &item.Leader, &followers)
 		if err != nil {
 			return result, err
 		}
@@ -105,50 +99,30 @@ func (c *client) GetGenerationsByToken(token types.Token) ([]types.Generation, e
 	return result, nil
 }
 
-func (c *client) UpsertGeneration(existing *types.Generation, newGen *types.Generation) error {
-	newFollowers := utils.ToCsv(newGen.Followers)
-	if existing == nil {
-		_, err := c.queries.insertGeneration.Exec(
-			newGen.Start, newGen.End, newGen.Version, newGen.Timestamp, newGen.Tx, newGen.Status, newGen.Leader, newFollowers)
-		return err
-	}
-
-	r, err := c.queries.updateGeneration.Exec(
-		// SET
-		newGen.End, newGen.Timestamp, newGen.Tx, newGen.Status, newGen.Leader, newFollowers,
-		// WHERE
-		newGen.Start, newGen.Version,
-		// WHERE existing gen
-		existing.End, existing.Tx, existing.Status, existing.Leader, utils.ToCsv(existing.Followers),
-	)
-
+func (c *client) CommitGeneration(gen *Generation) error {
+	db := c.db
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
 
-	if n, _ := r.RowsAffected(); n == 0 {
-		return errors.New("No generation was updated")
-	}
+	// The rollback will be ignored if the tx has been committed
+	defer tx.Rollback()
 
-	return nil
-}
+	insertGenStatement := tx.StmtContext(context.TODO(), c.queries.insertGeneration)
+	insertTxStatement := tx.StmtContext(context.TODO(), c.queries.insertTransaction)
 
-func (c *client) SetGenerationAsAccepted(newGen *types.Generation) error {
-	followers := utils.ToCsv(newGen.Followers)
-	r, err := c.queries.updateGeneration.Exec(
-		// SET
-		newGen.End, newGen.Timestamp, newGen.Tx, types.StatusAccepted, newGen.Leader, followers,
-		// WHERE
-		newGen.Start, newGen.Version,
-		newGen.End, newGen.Tx, types.StatusProposed, newGen.Leader, followers,
-	)
-
-	if err != nil {
+	if _, err := insertTxStatement.Exec(
+		gen.Tx, gen.TxLeader, gen.Timestamp, StatusCommitted); err != nil {
 		return err
 	}
 
-	if n, _ := r.RowsAffected(); n == 0 {
-		return errors.New("No generation was updated")
+	followers := utils.ToCsv(gen.Followers)
+	if _, err := insertGenStatement.Exec(
+		gen.Start, gen.End, gen.Version, gen.Timestamp, gen.Tx, gen.TxLeader,
+		StatusCommitted, gen.Leader, followers); err != nil {
+		return err
 	}
-	return nil
+
+	return tx.Commit()
 }

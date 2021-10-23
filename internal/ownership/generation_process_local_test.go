@@ -40,7 +40,7 @@ var _ = Describe("generator", func() {
 
 			topology := newTestTopology(6, currentOrdinal)
 			discovererMock := new(Discoverer)
-			discovererMock.On("Topology").Return(topology)
+			discovererMock.On("Topology").Return(&topology)
 
 			gossiperMock := new(Gossiper)
 			gossiperMock.On("IsTokenRangeCovered", previousOrdinal, topology.MyToken()).Return(true, nil)
@@ -61,7 +61,7 @@ var _ = Describe("generator", func() {
 
 			topology := newTestTopology(6, 1)
 			discovererMock := new(Discoverer)
-			discovererMock.On("Topology").Return(topology)
+			discovererMock.On("Topology").Return(&topology)
 
 			gossiperMock := new(Gossiper)
 			gossiperMock.
@@ -86,10 +86,10 @@ var _ = Describe("generator", func() {
 		It("should create a version 1 for empty metadata", func() {
 			topology := newTestTopology(6, 3)
 			discovererMock := new(Discoverer)
-			discovererMock.On("Topology").Return(topology)
+			discovererMock.On("Topology").Return(&topology)
 			discovererMock.On("GenerationProposed", mock.Anything).Return(nil, nil)
 			discovererMock.On("SetGenerationProposed", mock.Anything, mock.Anything).Return(nil)
-			discovererMock.On("SetAsCommitted", mock.Anything, mock.Anything).Return(nil)
+			discovererMock.On("SetAsCommitted", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 			gossiperMock := new(Gossiper)
 			// Return nil generations

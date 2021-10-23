@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/julienschmidt/httprouter"
@@ -98,4 +99,16 @@ func ToUnixMillis(t time.Time) int64 {
 
 func FromUnixMillis(millis int64) time.Time {
 	return time.Unix(0, millis*int64(time.Millisecond))
+}
+
+func PanicIfErr(err error, message string) {
+	if err != nil {
+		log.Panic().Err(err).Msg(message)
+	}
+}
+
+func ToBlob(v uuid.UUID) []byte {
+	// Can't error
+	blob, _ := v.MarshalBinary()
+	return blob
 }

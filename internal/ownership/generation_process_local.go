@@ -97,7 +97,7 @@ func (o *generator) processLocal(message *localGenMessage) error {
 	log.Info().Msgf("Setting transaction for T-%d (%d) as committed", topology.MyOrdinal(), topology.MyToken())
 
 	// We can now start receiving producer traffic for this token
-	if err := o.discoverer.SetAsCommitted(generation.Start, generation.Tx); err != nil {
+	if err := o.discoverer.SetAsCommitted(generation.Start, generation.Tx, topology.MyOrdinal()); err != nil {
 		log.Err(err).Msg("Set as committed locally failed (probably local db related)")
 		defer o.retryStartLocal(&generation)
 		return fmt.Errorf("Set as committed locally failed")

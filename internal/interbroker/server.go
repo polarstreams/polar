@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/jorgebay/soda/internal/conf"
 	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/jorgebay/soda/internal/utils"
@@ -65,6 +64,7 @@ func (g *gossiper) acceptHttpConnections() error {
 			router.GET(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), ToHandle(g.getGenHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationProposeUrl, ":token"), ToPostHandle(g.postGenProposeHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationCommmitUrl, ":token"), ToPostHandle(g.postGenCommitHandler))
+			router.GET(fmt.Sprintf(conf.GossipTokenInRange, ":token"), ToHandle(g.getTokenInRangeHandler))
 
 			//TODO: routes to propose/accept new generation
 
@@ -93,7 +93,8 @@ func (g *gossiper) getGenHandler(w http.ResponseWriter, r *http.Request, ps http
 
 	if result, err := g.localDb.GetGenerationsByToken(Token(token)); err == nil {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
+		PanicIfErr(json.NewEncoder(w).Encode(result), "Unexpected error when serializing generation")
+
 	} else {
 		return err
 	}
@@ -118,10 +119,22 @@ func (g *gossiper) postGenCommitHandler(w http.ResponseWriter, r *http.Request, 
 	if err != nil {
 		return err
 	}
-	var tx uuid.UUID
-	if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
+	var message GenerationCommitMessage
+	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
 		return err
 	}
 	// Use the registered listener
-	return g.genListener.OnRemoteSetAsCommitted(Token(token), tx)
+	return g.genListener.OnRemoteSetAsCommitted(Token(token), message.Tx, message.Origin)
+}
+
+func (g *gossiper) getTokenInRangeHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	token, err := strconv.ParseInt(strings.TrimSpace(ps.ByName("token")), 10, 64)
+	if err != nil {
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	// Encode can't fail for a bool
+	_ = json.NewEncoder(w).Encode(g.discoverer.IsTokenInRange(Token(token)))
+	return nil
 }

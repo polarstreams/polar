@@ -69,7 +69,7 @@ type GenerationGossiper interface {
 type GenListener interface {
 	OnRemoteSetAsProposed(newGen *Generation, expectedTx *UUID) error
 
-	OnRemoteSetAsCommitted(token Token, tx UUID) error
+	OnRemoteSetAsCommitted(token Token, tx UUID, origin int) error
 }
 
 type GenReadResult struct {
@@ -101,11 +101,11 @@ type gossiper struct {
 }
 
 func (g *gossiper) Init() error {
-	g.discoverer.RegisterListener(g.OnTopologyChange)
+	g.discoverer.RegisterListener(g.onDiscoveredTopologyChange)
 	return nil
 }
 
-func (g *gossiper) OnTopologyChange() {
+func (g *gossiper) onDiscoveredTopologyChange() {
 	// TODO: Create new connections, refresh existing
 }
 
@@ -237,12 +237,16 @@ func (g *gossiper) SetGenerationAsProposed(ordinal int, newGen *Generation, expe
 }
 
 func (g *gossiper) SetAsCommitted(ordinal int, token Token, tx UUID) error {
-	jsonBody, err := json.Marshal(tx)
+	message := GenerationCommitMessage{
+		Tx:     tx,
+		Origin: g.discoverer.Topology().MyOrdinal(),
+	}
+	jsonBody, err := json.Marshal(message)
 	if err != nil {
 		log.Fatal().Err(err).Msgf("json marshalling failed when setting generation as committed")
 	}
 
-	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationProposeUrl, token), jsonBody)
+	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationCommmitUrl, token), jsonBody)
 	defer r.Body.Close()
 	return err
 }

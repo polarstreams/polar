@@ -14,6 +14,7 @@ const ddl01 = `
 		version INT NOT NULL,
 		timestamp BIGINT NOT NULL,
 		tx BLOB NOT NULL,
+		tx_leader INT NOT NULL,
 		status INT NOT NULL,
 		leader INT NOT NULL,
 		followers TEXT NOT NULL, -- comma separated values

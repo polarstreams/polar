@@ -87,6 +87,20 @@ func (_m *Discoverer) Init() error {
 	return r0
 }
 
+// IsTokenInRange provides a mock function with given fields: token
+func (_m *Discoverer) IsTokenInRange(token types.Token) bool {
+	ret := _m.Called(token)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(types.Token) bool); ok {
+		r0 = rf(token)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	return r0
+}
+
 // Leader provides a mock function with given fields: partitionKey
 func (_m *Discoverer) Leader(partitionKey string) types.ReplicationInfo {
 	ret := _m.Called(partitionKey)
@@ -138,13 +152,13 @@ func (_m *Discoverer) RegisterListener(l discovery.TopologyChangeHandler) {
 	_m.Called(l)
 }
 
-// SetAsCommitted provides a mock function with given fields: token, tx
-func (_m *Discoverer) SetAsCommitted(token types.Token, tx uuid.UUID) error {
-	ret := _m.Called(token, tx)
+// SetAsCommitted provides a mock function with given fields: token, tx, origin
+func (_m *Discoverer) SetAsCommitted(token types.Token, tx uuid.UUID, origin int) error {
+	ret := _m.Called(token, tx, origin)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(types.Token, uuid.UUID) error); ok {
-		r0 = rf(token, tx)
+	if rf, ok := ret.Get(0).(func(types.Token, uuid.UUID, int) error); ok {
+		r0 = rf(token, tx, origin)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -186,14 +200,16 @@ func (_m *Discoverer) TokenByOrdinal(ordinal int) types.Token {
 }
 
 // Topology provides a mock function with given fields:
-func (_m *Discoverer) Topology() types.TopologyInfo {
+func (_m *Discoverer) Topology() *types.TopologyInfo {
 	ret := _m.Called()
 
-	var r0 types.TopologyInfo
-	if rf, ok := ret.Get(0).(func() types.TopologyInfo); ok {
+	var r0 *types.TopologyInfo
+	if rf, ok := ret.Get(0).(func() *types.TopologyInfo); ok {
 		r0 = rf()
 	} else {
-		r0 = ret.Get(0).(types.TopologyInfo)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*types.TopologyInfo)
+		}
 	}
 
 	return r0

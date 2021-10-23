@@ -17,6 +17,8 @@ const (
 	GossipGenerationProposeUrl = "/v1/generation/%s/propose"
 	// Url for setting the generation and transaction as committed for token
 	GossipGenerationCommmitUrl = "/v1/generation/%s/commit"
+	GossipTokenHasHistoryUrl   = "/v1/token/%s/has-history"
+	GossipTokenInRange         = "/v1/token/%s/in-range"
 )
 
 const MaxTopicLength = 255

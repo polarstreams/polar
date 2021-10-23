@@ -5,9 +5,11 @@ import (
 	"sync/atomic"
 
 	. "github.com/google/uuid"
+	"github.com/jorgebay/soda/internal/test/localdb/mocks"
 	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 )
 
 var _ = Describe("GenerationState", func() {
@@ -139,7 +141,7 @@ var _ = Describe("GenerationState", func() {
 			}
 			s.genProposed[gen.Start] = gen
 
-			err := s.SetAsCommitted(gen.Start, gen.Tx)
+			err := s.SetAsCommitted(gen.Start, gen.Tx, 3)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(s.genProposed).To(HaveLen(0))
 
@@ -154,7 +156,7 @@ var _ = Describe("GenerationState", func() {
 			s := state()
 			tx := Must(NewRandom())
 
-			err := s.SetAsCommitted(Token(123), tx)
+			err := s.SetAsCommitted(Token(123), tx, 2)
 			Expect(err).To(MatchError("No proposed value found"))
 		})
 
@@ -169,14 +171,16 @@ var _ = Describe("GenerationState", func() {
 			}
 			s.genProposed[gen.Start] = gen
 
-			err := s.SetAsCommitted(gen.Start, Must(NewRandom()))
+			err := s.SetAsCommitted(gen.Start, Must(NewRandom()), 4)
 			Expect(err).To(MatchError("Transaction does not match"))
 		})
 	})
 })
 
 func state() *discoverer {
-	return NewDiscoverer(nil).(*discoverer)
+	dbClient := new(mocks.Client)
+	dbClient.On("CommitGeneration", mock.Anything).Return(nil)
+	return NewDiscoverer(nil, dbClient).(*discoverer)
 }
 
 func storeCommitted(s *discoverer, gen Generation) {

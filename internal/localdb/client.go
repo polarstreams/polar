@@ -17,12 +17,10 @@ type Client interface {
 	// Determines whether the local db was not present and had to be created
 	DbWasNewlyCreated() bool
 
-	// TODO: start/end of token
+	CommitGeneration(generation *types.Generation) error
+
+	// TODO: convert to history
 	GetGenerationsByToken(token types.Token) ([]types.Generation, error)
-
-	UpsertGeneration(existing *types.Generation, newGen *types.Generation) error
-
-	SetGenerationAsAccepted(newGen *types.Generation) error
 }
 
 // NewClient creates a new instance of Client.

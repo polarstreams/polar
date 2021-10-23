@@ -134,8 +134,8 @@ type Generation struct {
 	Timestamp int64     `json:"timestamp"` // In unix micros
 	Leader    int       `json:"leader"`    // Leader ordinal
 	Followers []int     `json:"followers"` // Follower ordinals
+	TxLeader  int       `json:"txLeader"`  // The originator of the transaction
 	Tx        uuid.UUID `json:"tx"`
-	TxLeader  int       `json:"txLeader"`
 	Status    GenStatus `json:"status"`
 	ToDelete  bool      `json:"toDelete"`
 }

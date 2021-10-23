@@ -39,7 +39,7 @@ func main() {
 
 	localDbClient := localdb.NewClient(config)
 	topicHandler := topics.NewHandler(config)
-	discoverer := discovery.NewDiscoverer(config)
+	discoverer := discovery.NewDiscoverer(config, localDbClient)
 	datalog := data.NewDatalog(config)
 	gossiper := interbroker.NewGossiper(config, discoverer)
 	generator := ownership.NewGenerator(discoverer, gossiper, localDbClient)

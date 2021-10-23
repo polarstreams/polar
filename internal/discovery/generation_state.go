@@ -27,7 +27,10 @@ type GenerationState interface {
 	// setting the proposed generation as committed
 	//
 	// Returns an error when transaction does not match
-	SetAsCommitted(token Token, tx UUID) error
+	SetAsCommitted(token Token, tx UUID, origin int) error
+
+	// Determine whether there's active range containing (but not starting) the token
+	IsTokenInRange(token Token) bool
 }
 
 func (d *discoverer) Generation(token Token) *Generation {
@@ -51,6 +54,20 @@ func (d *discoverer) GenerationProposed(token Token) (committed *Generation, pro
 
 	committed = d.Generation(token)
 	return
+}
+
+func (d *discoverer) IsTokenInRange(token Token) bool {
+	generationMap := d.generations.Load().(genMap)
+
+	// O(n) is not that bad given the number of
+	// active generations managed by broker
+	for _, gen := range generationMap {
+		// containing the token but not the start token
+		if token <= gen.End && token > gen.Start {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *discoverer) SetGenerationProposed(gen *Generation, expectedTx *UUID) error {
@@ -94,7 +111,7 @@ func (d *discoverer) SetGenerationProposed(gen *Generation, expectedTx *UUID) er
 	return nil
 }
 
-func (d *discoverer) SetAsCommitted(token Token, tx UUID) error {
+func (d *discoverer) SetAsCommitted(token Token, tx UUID, origin int) error {
 	defer d.genMutex.Unlock()
 	d.genMutex.Lock()
 
@@ -113,8 +130,11 @@ func (d *discoverer) SetAsCommitted(token Token, tx UUID) error {
 		"Setting committed version %d with leader %d for range [%d, %d]", gen.Version, gen.Leader, gen.Start, gen.End)
 	gen.Status = StatusCommitted
 
-	// TODO: store the history first
-	// That way failures don't affect local state
+	// Store the history and the tx table first
+	// that way db failures don't affect local state
+	if err := d.localDb.CommitGeneration(&gen); err != nil {
+		return err
+	}
 
 	copyAndStore(&d.generations, gen)
 

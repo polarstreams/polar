@@ -17,6 +17,20 @@ func (_m *Client) Close() {
 	_m.Called()
 }
 
+// CommitGeneration provides a mock function with given fields: generation
+func (_m *Client) CommitGeneration(generation *types.Generation) error {
+	ret := _m.Called(generation)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*types.Generation) error); ok {
+		r0 = rf(generation)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // DbWasNewlyCreated provides a mock function with given fields:
 func (_m *Client) DbWasNewlyCreated() bool {
 	ret := _m.Called()
@@ -61,34 +75,6 @@ func (_m *Client) Init() error {
 	var r0 error
 	if rf, ok := ret.Get(0).(func() error); ok {
 		r0 = rf()
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// SetGenerationAsAccepted provides a mock function with given fields: newGen
-func (_m *Client) SetGenerationAsAccepted(newGen *types.Generation) error {
-	ret := _m.Called(newGen)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(*types.Generation) error); ok {
-		r0 = rf(newGen)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// UpsertGeneration provides a mock function with given fields: existing, newGen
-func (_m *Client) UpsertGeneration(existing *types.Generation, newGen *types.Generation) error {
-	ret := _m.Called(existing, newGen)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(*types.Generation, *types.Generation) error); ok {
-		r0 = rf(existing, newGen)
 	} else {
 		r0 = ret.Error(0)
 	}
