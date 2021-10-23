@@ -17,7 +17,8 @@ func (t Token) String() string {
 	return fmt.Sprintf("%d", t)
 }
 
-func GetToken(key string) Token {
+// Gets a token based on a murmur3 hash
+func HashToken(key string) Token {
 	return Token(Murmur3H1([]byte(key)))
 }
 

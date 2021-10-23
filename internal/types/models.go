@@ -39,8 +39,8 @@ type ReplicationInfo struct {
 
 // TopologyInfo represents a snapshot of the current placement of the brokers
 type TopologyInfo struct {
-	Brokers        []BrokerInfo // Brokers ordered by index (e.g. 0,3,1,4,2,5)
-	LocalIndex     BrokerIndex
+	Brokers        []BrokerInfo        // Brokers ordered by index (e.g. 0,3,1,4,2,5)
+	LocalIndex     BrokerIndex         // Index of the current broker relative to this topology instance
 	indexByOrdinal map[int]BrokerIndex // Map of key ordinals and value indexes
 }
 
@@ -87,6 +87,20 @@ func (t *TopologyInfo) GetIndex(ordinal int) BrokerIndex {
 	return t.indexByOrdinal[ordinal]
 }
 
+// BrokerByOrdinal gets the broker by a given ordinal.
+func (t *TopologyInfo) BrokerByOrdinal(ordinal int) *BrokerInfo {
+	return &t.Brokers[int(t.GetIndex(ordinal))]
+}
+
+// BrokerByOrdinal gets the broker by a given ordinal.
+func (t *TopologyInfo) BrokerByOrdinalList(ordinals []int) []BrokerInfo {
+	result := make([]BrokerInfo, len(ordinals), len(ordinals))
+	for i, v := range ordinals {
+		result[i] = t.Brokers[int(t.GetIndex(v))]
+	}
+	return result
+}
+
 // PreviousBroker returns the broker in the position n-1
 func (t *TopologyInfo) PreviousBroker() *BrokerInfo {
 	index := len(t.Brokers) - 1
@@ -102,6 +116,17 @@ func (t *TopologyInfo) NextBroker() *BrokerInfo {
 	return &t.Brokers[(int(t.LocalIndex)+1)%len(t.Brokers)]
 }
 
+// NextBrokers returns the broker in the position n+1, n+2, n...
+func (t *TopologyInfo) NextBrokers(index BrokerIndex, length int) []BrokerInfo {
+	totalBrokers := len(t.Brokers)
+	result := make([]BrokerInfo, length, length)
+	for i := 0; i < length; i++ {
+		result[i] = t.Brokers[(int(index)+1+i)%totalBrokers]
+	}
+
+	return result
+}
+
 // NaturalFollowers gets the ordinals of the brokers at position n+1 and n+2
 func (t *TopologyInfo) NaturalFollowers() []int {
 	totalBrokers := len(t.Brokers)
@@ -112,13 +137,19 @@ func (t *TopologyInfo) NaturalFollowers() []int {
 	}
 }
 
+// Returns the primary token (start of the range) and BrokerIndex for a given token
+func (t *TopologyInfo) PrimaryToken(token Token) (Token, BrokerIndex) {
+	brokerIndex := GetPrimaryTokenIndex(token, len(t.Brokers))
+	return t.GetToken(brokerIndex), brokerIndex
+}
+
 // TopicDataId contains information to locate a certain piece of data.
 //
 // Specifies a topic, for a token, for a defined gen id.
 type TopicDataId struct {
 	Name  string
 	Token Token
-	GenId uint16
+	GenId uint32
 }
 
 // Replicator contains logic to send data to replicas

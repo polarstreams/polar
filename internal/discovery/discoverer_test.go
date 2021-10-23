@@ -12,7 +12,7 @@ import (
 
 func Test(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Discoverer Suite")
+	RunSpecs(t, "Discovery Suite")
 }
 
 var _ = Describe("discoverer", func() {
@@ -183,6 +183,71 @@ var _ = Describe("discoverer", func() {
 			Expect(topology.LocalIndex).To(Equal(BrokerIndex(6)))
 		})
 	})
+
+	Describe("Leader()", func() {
+		It("should default to the current token when not partition key is provided", func() {
+			os.Setenv(envReplicas, "6")
+			ordinal := 1
+			d := NewDiscoverer(newConfigFake(ordinal), nil).(*discoverer)
+
+			d.Init()
+
+			existingMap := d.generations.Load().(genMap)
+			existingMap[d.topology.MyToken()] = Generation{
+				Start:     d.topology.MyToken(),
+				End:       d.topology.GetToken(d.topology.LocalIndex + 1),
+				Version:   1,
+				Leader:    ordinal,
+				Followers: []int{4, 2},
+				Status:    StatusCommitted,
+			}
+
+			info := d.Leader("")
+			Expect(info.Leader.Ordinal).To(Equal(ordinal))
+			Expect(info.Token).To(Equal(d.topology.MyToken()))
+			Expect(info.Followers[0].Ordinal).To(Equal(4))
+			Expect(info.Followers[1].Ordinal).To(Equal(2))
+		})
+
+		It("should calculate the primary token and get the generation", func() {
+			os.Setenv(envReplicas, "6")
+			ordinal := 1
+			d := NewDiscoverer(newConfigFake(ordinal), nil).(*discoverer)
+
+			d.Init()
+
+			existingMap := d.generations.Load().(genMap)
+			existingMap[d.topology.GetToken(0)] = Generation{
+				Start:     d.topology.GetToken(0),
+				End:       d.topology.GetToken(1),
+				Version:   1,
+				Leader:    0,        // Ordinal of node at 0 is zero
+				Followers: []int{3}, // Use a single follower as a signal that the generation was obtained
+				Status:    StatusCommitted,
+			}
+
+			info := d.Leader("a") // token -8839064797231613815 , it should use the first broker
+			Expect(info.Leader.Ordinal).To(Equal(0))
+			Expect(info.Token).To(Equal(d.topology.GetToken(0)))
+			Expect(info.Followers[0].Ordinal).To(Equal(3))
+			// A single follower as a signal
+			Expect(info.Followers).To(HaveLen(1))
+		})
+
+		It("should set it to the natural owner when there's no information", func() {
+			os.Setenv(envReplicas, "6")
+			d := NewDiscoverer(newConfigFake(1), nil).(*discoverer)
+
+			d.Init()
+
+			partitionKey := "hui" // token: "7851606034017063987" -> last range
+			info := d.Leader(partitionKey)
+			Expect(info.Leader.Ordinal).To(Equal(5))
+			Expect(info.Token).To(Equal(d.topology.GetToken(BrokerIndex(5))))
+			Expect(info.Followers[0].Ordinal).To(Equal(0))
+			Expect(info.Followers[1].Ordinal).To(Equal(3))
+		})
+	})
 })
 
 type configFake struct {
@@ -196,4 +261,11 @@ func (c *configFake) Ordinal() int {
 
 func (c *configFake) BaseHostName() string {
 	return c.baseHostName
+}
+
+func newConfigFake(ordinal int) *configFake {
+	return &configFake{
+		ordinal:      ordinal,
+		baseHostName: "soda-",
+	}
 }

@@ -165,23 +165,31 @@ func (d *discoverer) TokenByOrdinal(ordinal int) Token {
 
 func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 	topology := d.topology
-	if partitionKey == "" {
+	token := topology.MyToken()
+	brokerIndex := topology.LocalIndex
+
+	if partitionKey != "" {
+		// Calculate the token based on the partition key
+		token, brokerIndex = topology.PrimaryToken(HashToken(partitionKey))
+	}
+
+	gen := d.Generation(token)
+
+	if gen == nil {
+		fmt.Println("--Getting info from natural")
+		// We don't have information about it and it's OK
+		// Send it to the natural owner or the natural owner followers
 		return ReplicationInfo{
-			Leader: d.LocalInfo(),
-			// TODO: gen use current generation
-			Followers: d.Peers(),
-			Token:     0,
+			Leader:    &topology.Brokers[brokerIndex],
+			Followers: topology.NextBrokers(brokerIndex, 2),
+			Token:     token,
 		}
 	}
 
-	token := GetToken(partitionKey)
-	leaderIndex := GetPrimaryTokenIndex(token, len(topology.Brokers))
-
-	// TODO: gen use generation
 	return ReplicationInfo{
-		Leader:    &topology.Brokers[leaderIndex],
-		Followers: followers(topology.Brokers, leaderIndex),
-		Token:     d.topology.GetToken(leaderIndex),
+		Leader:    topology.BrokerByOrdinal(gen.Leader),
+		Followers: topology.BrokerByOrdinalList(gen.Followers),
+		Token:     token,
 	}
 }
 

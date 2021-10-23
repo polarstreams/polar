@@ -40,7 +40,7 @@ type dataRequestMeta struct {
 	// Strict ordering, exported fields
 	SegmentId int64
 	Token     types.Token
-	GenId     uint16
+	GenId     uint32
 	// TopicLength is the size in bytes of the topic name
 	TopicLength uint8
 }

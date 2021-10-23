@@ -76,7 +76,7 @@ func newNonRetryableError(format string, a ...interface{}) creationError {
 }
 
 type simpleCreationError struct {
-	message string
+	message          string
 	canBeRetriedFlag bool
 }
 

@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	baseDelay       = 150 * time.Millisecond
+	baseDelay         = 150 * time.Millisecond
 	maxDelay          = 300 * time.Millisecond
 	replicationFactor = 3
 )
@@ -179,5 +179,5 @@ func checkState(gens []Generation, accepted, proposed *Generation) (*Generation,
 
 // getDelay gets a value between base delay and max delay
 func getDelay() time.Duration {
-	return time.Duration(rand.Intn(int(baseDelay.Milliseconds()))) * time.Millisecond + baseDelay
+	return time.Duration(rand.Intn(int(baseDelay.Milliseconds())))*time.Millisecond + baseDelay
 }
