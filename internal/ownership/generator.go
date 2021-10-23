@@ -1,7 +1,6 @@
 package ownership
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"sync/atomic"
@@ -16,7 +15,7 @@ import (
 )
 
 const (
-	baseDelayMs       = 150
+	baseDelay       = 150 * time.Millisecond
 	maxDelay          = 300 * time.Millisecond
 	replicationFactor = 3
 )
@@ -102,14 +101,22 @@ func (o *generator) startNew() {
 
 	message := localGenMessage{
 		reason: reason,
-		result: make(chan error),
+		result: make(chan creationError),
 	}
 
 	// Send to the processing queue
 	o.items <- &message
-	err := <-message.result
-	log.Err(err).Msg("Could not create generation when starting")
-	// TODO: Retry or panic
+
+	for err := <-message.result; err != nil; {
+		log.Err(err).Msg("Could not create generation when starting")
+
+		if !err.canBeRetried() {
+			log.Panic().Err(err).Msg("Non retryable error found when starting")
+		}
+		time.Sleep(getDelay())
+
+		o.items <- &message
+	}
 }
 
 // process Processes events in order.
@@ -123,7 +130,7 @@ func (o *generator) process() {
 		canProcess := atomic.CompareAndSwapInt32(processingFlag, 0, 1)
 		if !canProcess {
 			// Fast reject
-			message.setResult(fmt.Errorf("Concurrent generation creation rejected"))
+			message.setResult(newCreationError("Concurrent generation creation rejected"))
 			continue
 		}
 
@@ -137,7 +144,7 @@ func (o *generator) process() {
 }
 
 // processGeneration() returns nil when the generation was created, otherwise an error.
-func (o *generator) processGeneration(message genMessage) error {
+func (o *generator) processGeneration(message genMessage) creationError {
 	// Consider a channel if state is needed across multiple items, i.e. "serialItems"
 	if m, ok := message.(*localGenMessage); ok {
 		return o.processLocal(m)
@@ -170,6 +177,7 @@ func checkState(gens []Generation, accepted, proposed *Generation) (*Generation,
 	return accepted, proposed
 }
 
+// getDelay gets a value between base delay and max delay
 func getDelay() time.Duration {
-	return time.Duration(rand.Intn(baseDelayMs)+baseDelayMs) * time.Millisecond
+	return time.Duration(rand.Intn(int(baseDelay.Milliseconds()))) * time.Millisecond + baseDelay
 }

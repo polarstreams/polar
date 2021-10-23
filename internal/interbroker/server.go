@@ -65,6 +65,7 @@ func (g *gossiper) acceptHttpConnections() error {
 			router.POST(fmt.Sprintf(conf.GossipGenerationProposeUrl, ":token"), ToPostHandle(g.postGenProposeHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationCommmitUrl, ":token"), ToPostHandle(g.postGenCommitHandler))
 			router.GET(fmt.Sprintf(conf.GossipTokenInRange, ":token"), ToHandle(g.getTokenInRangeHandler))
+			router.GET(fmt.Sprintf(conf.GossipTokenHasHistoryUrl, ":token"), ToHandle(g.getTokenHasHistoryUrl))
 
 			//TODO: routes to propose/accept new generation
 
@@ -91,13 +92,19 @@ func (g *gossiper) getGenHandler(w http.ResponseWriter, r *http.Request, ps http
 		return err
 	}
 
-	if result, err := g.localDb.GetGenerationsByToken(Token(token)); err == nil {
-		w.Header().Set("Content-Type", "application/json")
-		PanicIfErr(json.NewEncoder(w).Encode(result), "Unexpected error when serializing generation")
+	committed, proposed := g.discoverer.GenerationProposed(Token(token))
+	w.Header().Set("Content-Type", "application/json")
 
-	} else {
-		return err
+	// Return an array of generations w/ committed in the first position
+	result := make([]Generation, 2)
+	if committed != nil {
+		result[0] = *committed
 	}
+	if proposed != nil {
+		result[1] = *committed
+	}
+
+	PanicIfErr(json.NewEncoder(w).Encode(result), "Unexpected error when serializing generation")
 
 	return nil
 }
@@ -136,5 +143,22 @@ func (g *gossiper) getTokenInRangeHandler(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	// Encode can't fail for a bool
 	_ = json.NewEncoder(w).Encode(g.discoverer.IsTokenInRange(Token(token)))
+	return nil
+}
+
+func (g *gossiper) getTokenHasHistoryUrl(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	token, err := strconv.ParseInt(strings.TrimSpace(ps.ByName("token")), 10, 64)
+	if err != nil {
+		return err
+	}
+
+	result, err := g.discoverer.HasTokenHistory(Token(token))
+	if err != nil {
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	// Encode can't fail for a bool
+	_ = json.NewEncoder(w).Encode(result)
 	return nil
 }

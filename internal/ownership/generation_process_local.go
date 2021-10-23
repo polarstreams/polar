@@ -1,7 +1,6 @@
 package ownership
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,7 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func (o *generator) processLocal(message *localGenMessage) error {
+func (o *generator) processLocal(message *localGenMessage) creationError {
 	topology := o.discoverer.Topology()
 	token := topology.MyToken()
 	timestamp := time.Now()
@@ -38,8 +37,7 @@ func (o *generator) processLocal(message *localGenMessage) error {
 
 	if readResults[0].Error != nil && readResults[1].Error != nil {
 		// No point in continuing
-		defer o.retryStartLocal(&generation)
-		return fmt.Errorf("Followers state could not be read")
+		return newCreationError("Followers state could not be read")
 	}
 
 	localCommitted, localProposed := o.discoverer.GenerationProposed(token)
@@ -50,22 +48,19 @@ func (o *generator) processLocal(message *localGenMessage) error {
 		readResults[1].Committed) + 1
 
 	if isInProgress(localProposed) {
-		defer o.retryStartLocal(&generation)
-		return fmt.Errorf("In progress generation in local broker")
+		return newCreationError("In progress generation in local broker")
 	}
 
 	if isInProgress(readResults[0].Proposed) || isInProgress(readResults[1].Proposed) {
-		defer o.retryStartLocal(&generation)
-		return fmt.Errorf("In progress generation in remote broker")
+		return newCreationError("In progress generation in remote broker")
 	}
 
 	// After reading, we can continue by performing a CAS operation for proposed
-	log.Info().Msgf("Proposing myself as a leader for T-%d (%d)", topology.MyOrdinal(), topology.MyToken())
+	log.Info().Msgf("Proposing myself as a leader for T%d (%d)", topology.MyOrdinal(), topology.MyToken())
 
 	followerErrors := o.setStateToFollowers(&generation, []error{nil, nil}, readResults)
 	if followerErrors[0] != nil && followerErrors[1] != nil {
-		defer o.retryStartLocal(&generation)
-		return fmt.Errorf("Followers state could not be set to proposed")
+		return newCreationError("Followers state could not be set to proposed")
 	}
 
 	var localTx *uuid.UUID
@@ -76,31 +71,29 @@ func (o *generator) processLocal(message *localGenMessage) error {
 	if err := o.discoverer.SetGenerationProposed(&generation, localTx); err != nil {
 		log.Err(err).Msg("Unexpected error when setting as proposed locally")
 		// Don't retry
-		return fmt.Errorf("Unexpected local error")
+		return newCreationError("Unexpected local error")
 	}
 
-	log.Info().Msgf("Accepting myself as a leader for T-%d (%d)", topology.MyOrdinal(), topology.MyToken())
+	log.Info().Msgf("Accepting myself as a leader for T%d (%d)", topology.MyOrdinal(), topology.MyToken())
 	generation.Status = StatusAccepted
 
 	followerErrors = o.setStateToFollowers(&generation, followerErrors, readResults)
 	if followerErrors[0] != nil && followerErrors[1] != nil {
-		defer o.retryStartLocal(&generation)
-		return fmt.Errorf("Followers state could not be set to accepted")
+		return newCreationError("Followers state could not be set to accepted")
 	}
 
 	if err := o.discoverer.SetGenerationProposed(&generation, &generation.Tx); err != nil {
 		log.Err(err).Msg("Unexpected error when setting as proposed locally")
-		return fmt.Errorf("Unexpected local error")
+		return newCreationError("Unexpected local error")
 	}
 
 	// Now we have a majority of replicas
-	log.Info().Msgf("Setting transaction for T-%d (%d) as committed", topology.MyOrdinal(), topology.MyToken())
+	log.Info().Msgf("Setting transaction for T%d (%d) as committed", topology.MyOrdinal(), topology.MyToken())
 
 	// We can now start receiving producer traffic for this token
 	if err := o.discoverer.SetAsCommitted(generation.Start, generation.Tx, topology.MyOrdinal()); err != nil {
 		log.Err(err).Msg("Set as committed locally failed (probably local db related)")
-		defer o.retryStartLocal(&generation)
-		return fmt.Errorf("Set as committed locally failed")
+		return newCreationError("Set as committed locally failed")
 	}
 
 	generation.Status = StatusCommitted
@@ -109,7 +102,7 @@ func (o *generator) processLocal(message *localGenMessage) error {
 		// The transaction is still considered committed and
 		// will be roll forward by the followers
 		log.Warn().Msgf(
-			"Setting transaction for T-%d (%d) as committed failed on followers",
+			"Setting transaction for T%d (%d) as committed failed on followers",
 			topology.MyOrdinal(),
 			topology.MyToken())
 	}
@@ -119,14 +112,6 @@ func (o *generator) processLocal(message *localGenMessage) error {
 
 func isInProgress(proposed *Generation) bool {
 	return proposed != nil && time.Since(proposed.Time()) > maxDelay
-}
-
-func (o *generator) retryStartLocal(gen *Generation) {
-	if o.items == nil {
-		// Suitable for testing
-		return
-	}
-	//TODO: Implement
 }
 
 func (o *generator) setStateToFollowers(
@@ -195,6 +180,8 @@ func (o *generator) readStateFromFollowers(gen *Generation) []GenReadResult {
 }
 
 func (o *generator) determineStartReason() startReason {
+	log.Info().Msgf("Trying to determine whether its a new cluster")
+
 	if !o.localDb.DbWasNewlyCreated() {
 		// There's local data, it signals that it has been restarted
 		return restarted

@@ -73,6 +73,27 @@ func (_m *Discoverer) GenerationProposed(token types.Token) (*types.Generation, 
 	return r0, r1
 }
 
+// HasTokenHistory provides a mock function with given fields: token
+func (_m *Discoverer) HasTokenHistory(token types.Token) (bool, error) {
+	ret := _m.Called(token)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(types.Token) bool); ok {
+		r0 = rf(token)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(types.Token) error); ok {
+		r1 = rf(token)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Init provides a mock function with given fields:
 func (_m *Discoverer) Init() error {
 	ret := _m.Called()

@@ -29,8 +29,11 @@ type GenerationState interface {
 	// Returns an error when transaction does not match
 	SetAsCommitted(token Token, tx UUID, origin int) error
 
-	// Determine whether there's active range containing (but not starting) the token
+	// Determines whether there's active range containing (but not starting) the token
 	IsTokenInRange(token Token) bool
+
+	// Determines whether there's history matching the token
+	HasTokenHistory(token Token) (bool, error)
 }
 
 func (d *discoverer) Generation(token Token) *Generation {
@@ -68,6 +71,11 @@ func (d *discoverer) IsTokenInRange(token Token) bool {
 		}
 	}
 	return false
+}
+
+func (d *discoverer) HasTokenHistory(token Token) (bool, error) {
+	result, err := d.localDb.GetGenerationsByToken(token)
+	return len(result) > 0, err
 }
 
 func (d *discoverer) SetGenerationProposed(gen *Generation, expectedTx *UUID) error {

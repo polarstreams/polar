@@ -40,7 +40,7 @@ type Gossiper interface {
 	// Sends a message to be handled as a leader of a token
 	SendToLeader(replicationInfo ReplicationInfo, topic string, body []byte) error
 
-	// WaitForPeersUp blocks until at least one peer is UP
+	// WaitForPeersUp blocks until all peers are UP
 	WaitForPeersUp()
 }
 
@@ -110,13 +110,25 @@ func (g *gossiper) onDiscoveredTopologyChange() {
 }
 
 func (g *gossiper) IsTokenRangeCovered(ordinal int, token Token) (bool, error) {
-	// TODO: Implement
-	return false, nil
+	r, err := g.requestGet(ordinal, fmt.Sprintf(conf.GossipTokenInRange, token))
+	if err != nil {
+		return false, err
+	}
+	defer r.Body.Close()
+	var result bool
+	err = json.NewDecoder(r.Body).Decode(&result)
+	return result, err
 }
 
 func (g *gossiper) HasTokenHistoryForToken(ordinal int, token Token) (bool, error) {
-	// TODO: Implement
-	return false, nil
+	r, err := g.requestGet(ordinal, fmt.Sprintf(conf.GossipTokenHasHistoryUrl, token))
+	if err != nil {
+		return false, err
+	}
+	defer r.Body.Close()
+	var result bool
+	err = json.NewDecoder(r.Body).Decode(&result)
+	return result, err
 }
 
 func (g *gossiper) RegisterGenListener(listener GenListener) {
@@ -139,10 +151,18 @@ func (g *gossiper) WaitForPeersUp() {
 	start := time.Now()
 	lastWarn := 0
 	for {
+		allPeersUp := false
 		for _, peer := range g.discoverer.Peers() {
 			if client := g.getClientInfo(peer.Ordinal); client != nil && client.isHostUp() {
-				return
+				allPeersUp = true
+			} else {
+				allPeersUp = false
+				break
 			}
+		}
+
+		if allPeersUp {
+			return
 		}
 
 		elapsed := int(time.Since(start).Seconds())
@@ -199,7 +219,7 @@ func (g *gossiper) requestPost(ordinal int, baseUrl string, body []byte) (*http.
 }
 
 func (g *gossiper) GetGenerations(ordinal int, token Token) GenReadResult {
-	r, err := g.requestGet(ordinal, fmt.Sprintf(conf.GossipGenerationUrl, token.String()))
+	r, err := g.requestGet(ordinal, fmt.Sprintf(conf.GossipGenerationUrl, token))
 	if err != nil {
 		return GenReadResult{Error: err}
 	}
