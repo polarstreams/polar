@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/jorgebay/soda/internal/test/discovery/mocks"
-	"github.com/jorgebay/soda/internal/types"
+	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -15,11 +15,12 @@ var _ = Describe("SendToFollowers()", func() {
 		discoverer:  new(mocks.Discoverer),
 		connections: atomic.Value{},
 	}
-	topic := types.TopicDataId{Name: "abc"}
+	topic := TopicDataId{Name: "abc"}
 	body := make([]byte, 10)
-	replication := types.ReplicationInfo{
+	chunk := &fakeChunk{body}
+	replication := ReplicationInfo{
 		Leader: nil,
-		Followers: []types.BrokerInfo{
+		Followers: []BrokerInfo{
 			{Ordinal: 1},
 			{Ordinal: 2},
 		},
@@ -29,7 +30,7 @@ var _ = Describe("SendToFollowers()", func() {
 	It("should error when there's no client for ordinals", func() {
 		clients := make(clientMap)
 		g.connections.Store(clients)
-		err := g.SendToFollowers(replication, topic, 0, 0, 2, body)
+		err := g.SendToFollowers(replication, topic, 0, chunk)
 		Expect(err).To(MatchError("Chunk for topic abc (0) could not be sent to replicas"))
 	})
 
@@ -40,7 +41,7 @@ var _ = Describe("SendToFollowers()", func() {
 		g.connections.Store(clients)
 		done := make(chan error, 1)
 		go func() {
-			done <- g.SendToFollowers(replication, topic, 0, 0, 2, body)
+			done <- g.SendToFollowers(replication, topic, 0, chunk)
 		}()
 
 		request := <-clients[2].dataMessages
@@ -67,7 +68,7 @@ var _ = Describe("SendToFollowers()", func() {
 		g.connections.Store(clients)
 		done := make(chan error, 1)
 		go func() {
-			done <- g.SendToFollowers(replication, topic, 0, 0, 2, body)
+			done <- g.SendToFollowers(replication, topic, 0, chunk)
 		}()
 
 		request := <-clients[2].dataMessages
@@ -84,3 +85,19 @@ var _ = Describe("SendToFollowers()", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 })
+
+type fakeChunk struct {
+	body []byte
+}
+
+func (c *fakeChunk) DataBlock() []byte {
+	return c.body
+}
+
+func (c *fakeChunk) StartOffset() uint64 {
+	return 0
+}
+
+func (c *fakeChunk) RecordLength() uint32 {
+	return 0
+}

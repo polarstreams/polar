@@ -7,6 +7,12 @@ import (
 	"github.com/google/uuid"
 )
 
+// Represents a topic offset for a given token.
+type Offset struct {
+	Offset     uint64
+	GenVersion uint32
+}
+
 // BrokerInfo contains information about a broker
 type BrokerInfo struct {
 	// IsSelf determines whether the broker refers to this instance
@@ -35,6 +41,13 @@ type ReplicationInfo struct {
 	Leader    *BrokerInfo
 	Followers []BrokerInfo
 	Token     Token
+}
+
+// SegmentChunk represents a group of compressed records.
+type SegmentChunk interface {
+	DataBlock() []byte
+	StartOffset() uint64
+	RecordLength() uint32
 }
 
 // TopologyInfo represents a snapshot of the current placement of the brokers
@@ -159,9 +172,7 @@ type Replicator interface {
 		replicationInfo ReplicationInfo,
 		topic TopicDataId,
 		segmentId int64,
-		startOffset uint64,
-		recordLength uint32,
-		body []byte) error
+		chunk SegmentChunk) error
 }
 
 type Generation struct {

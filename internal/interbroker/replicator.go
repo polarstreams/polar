@@ -15,9 +15,7 @@ func (g *gossiper) SendToFollowers(
 	replicationInfo types.ReplicationInfo,
 	topic types.TopicDataId,
 	segmentId int64,
-	startOffset uint64,
-	recordLength uint32,
-	body []byte,
+	chunk types.SegmentChunk,
 ) error {
 	peers, ok := g.connections.Load().(clientMap)
 	if !ok {
@@ -38,13 +36,13 @@ func (g *gossiper) SendToFollowers(
 			SegmentId:    segmentId,
 			Token:        topic.Token,
 			GenId:        topic.GenId,
-			StartOffset:  startOffset,
-			RecordLength: recordLength,
+			StartOffset:  chunk.StartOffset(),
+			RecordLength: chunk.RecordLength(),
 			TopicLength:  uint8(len(topic.Name)),
 		},
 		topic:    topic.Name,
 		ctxt:     ctxt,
-		data:     body,
+		data:     chunk.DataBlock(),
 		response: response,
 	}
 

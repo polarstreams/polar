@@ -2,6 +2,7 @@ package producing
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"time"
 
@@ -32,9 +33,10 @@ type coalescer struct {
 
 type record struct {
 	replication types.ReplicationInfo
-	length      uint32
+	length      uint32 // Body length
+	timestamp   int64  // Timestamp in micros
 	body        io.ReadCloser
-	offset      uint64
+	offset      uint64 // Record offset
 	response    chan error
 }
 
@@ -92,6 +94,7 @@ func (c *coalescer) add(group []record, item *record, length *int64) ([]record, 
 	}
 	*length += itemLength
 	item.offset = c.offset
+	item.timestamp = time.Now().UnixMicro()
 	c.offset++
 	metrics.CoalescerMessagesProcessed.Inc()
 	group = append(group, *item)
@@ -166,10 +169,16 @@ func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
 	// Compressor writter needs to be reinitialized each time
 	compressor.Reset(buf)
 
-	// Save space for the length of the block
-	buf.Write(lengthBuffer)
-
 	for _, item := range group {
+		// Record's bodyLength+timestamp
+		if err := binary.Write(compressor, conf.Endianness, item.length); err != nil {
+			return nil, err
+		}
+		if err := binary.Write(compressor, conf.Endianness, item.timestamp); err != nil {
+			return nil, err
+		}
+
+		// Record's body
 		if _, err := io.Copy(compressor, item.body); err != nil {
 			return nil, err
 		}
@@ -179,11 +188,7 @@ func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
 		return nil, err
 	}
 
-	b := buf.Bytes()
-	// Write the length of the whole block
-	conf.Endianness.PutUint32(b, uint32(len(b)-4))
-
-	return b, nil
+	return buf.Bytes(), nil
 }
 
 func (c *coalescer) append(replication types.ReplicationInfo, length uint32, body io.ReadCloser) error {
@@ -198,21 +203,18 @@ func (c *coalescer) append(replication types.ReplicationInfo, length uint32, bod
 }
 
 type localDataItem struct {
-	data  []byte
-	group []record
+	data  []byte   // compressed payload of the chunk
+	group []record // records associated with this chunk
 }
 
+// DataBlock() gets the compressed payload of the chunk
 func (d *localDataItem) DataBlock() []byte {
 	return d.data
 }
 
-func (d *localDataItem) Replication() *types.ReplicationInfo {
+func (d *localDataItem) Replication() types.ReplicationInfo {
 	// TODO: Maybe simplify, 1 replication info per generation
-	return &d.group[0].replication
-}
-
-func (d *localDataItem) SegmentId() int64 {
-	return 0
+	return d.group[0].replication
 }
 
 func (d *localDataItem) StartOffset() uint64 {

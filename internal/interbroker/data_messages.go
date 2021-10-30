@@ -66,10 +66,6 @@ func (r *dataRequest) DataBlock() []byte {
 	return r.data
 }
 
-func (r *dataRequest) Replication() *types.ReplicationInfo {
-	return nil
-}
-
 func (r *dataRequest) SegmentId() int64 {
 	return r.meta.SegmentId
 }

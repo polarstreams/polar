@@ -8,4 +8,4 @@ import (
 // Use DIRECT IO for linux
 const WriteFlags = os.O_APPEND | os.O_CREATE | os.O_WRONLY | syscall.O_DIRECT | syscall.O_DSYNC
 
-const ReadFlags = os.O_RDONLY
+const ReadFlags = os.O_RDONLY | syscall.O_DIRECT

@@ -11,7 +11,7 @@ import (
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/metrics"
-	"github.com/jorgebay/soda/internal/types"
+	. "github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
 )
@@ -25,7 +25,7 @@ var alignmentBuffer = createAlignmentBuffer()
 
 // SegmentWriter contains the logic to write a segment on disk and replicate it.
 type SegmentWriter struct {
-	Items         chan DataItem
+	Items         chan SegmentChunk
 	segmentId     int64
 	buffer        *bytes.Buffer
 	lastFlush     time.Time
@@ -33,13 +33,13 @@ type SegmentWriter struct {
 	segmentFile   *os.File
 	segmentLength int
 	basePath      string
-	topic         types.TopicDataId
-	replicator    types.Replicator
+	topic         TopicDataId
+	replicator    Replicator
 }
 
 func NewSegmentWriter(
-	topic types.TopicDataId,
-	gossiper types.Replicator,
+	topic TopicDataId,
+	gossiper Replicator,
 	config conf.DatalogConfig,
 	segmentId int64,
 ) (*SegmentWriter, error) {
@@ -48,7 +48,7 @@ func NewSegmentWriter(
 	s := &SegmentWriter{
 		// Limit's to 1 outstanding write (the current one)
 		// The next group can be generated while the previous is being flushed and sent
-		Items:       make(chan DataItem, 0),
+		Items:       make(chan SegmentChunk, 0),
 		buffer:      utils.NewBufferCap(segmentMaxBufferSize),
 		config:      config,
 		segmentFile: nil,
@@ -75,18 +75,14 @@ func NewSegmentWriter(
 	return s, nil
 }
 
-type DataItem interface {
-	DataBlock() []byte
-	Replication() *types.ReplicationInfo
-	SegmentId() int64
-	StartOffset() uint64
-	RecordLength() uint32
-	SetResult(error)
-}
-
 // writeLoopAsLeader appends to the local file and sends to replicas
 func (s *SegmentWriter) writeLoopAsLeader() {
-	for item := range s.Items {
+	for dataItem := range s.Items {
+		item, ok := dataItem.(LocalWriteItem)
+		if !ok {
+			log.Panic().Msgf("Invalid type for writing as a leader: %v", dataItem)
+		}
+
 		if s.maybeFlush() {
 			s.maybeCloseSegment()
 		}
@@ -116,7 +112,12 @@ func (s *SegmentWriter) writeLoopAsLeader() {
 
 // writeLoopAsReplica appends to local file as replica
 func (s *SegmentWriter) writeLoopAsReplica() {
-	for item := range s.Items {
+	for dataItem := range s.Items {
+		item, ok := dataItem.(ReplicationDataItem)
+		if !ok {
+			log.Panic().Msgf("Invalid type for writing as a replica: %v", dataItem)
+		}
+
 		s.maybeFlush()
 		if item == nil {
 			// It was only a signal to flush the segment, no data, move on
@@ -224,16 +225,16 @@ func (s *SegmentWriter) closeFile(newSegmentId int64) {
 	s.segmentLength = 0
 }
 
-func (s *SegmentWriter) writeToBuffer(item DataItem) {
+func (s *SegmentWriter) writeToBuffer(item SegmentChunk) {
 	if s.lastFlush.IsZero() || s.buffer.Len() == 0 {
 		// When the buffer was previously empty, we should reset the flush check logic
 		s.lastFlush = time.Now()
 	}
 	headStartIndex := s.buffer.Len()
-	body := item.DataBlock()
+	compressedBody := item.DataBlock()
 
 	// Write head
-	binary.Write(s.buffer, conf.Endianness, uint32(len(body)))
+	binary.Write(s.buffer, conf.Endianness, uint32(len(compressedBody)))
 	binary.Write(s.buffer, conf.Endianness, item.StartOffset())
 	binary.Write(s.buffer, conf.Endianness, item.RecordLength())
 
@@ -242,7 +243,7 @@ func (s *SegmentWriter) writeToBuffer(item DataItem) {
 	binary.Write(s.buffer, conf.Endianness, crc32.ChecksumIEEE(head))
 
 	// Write body
-	s.buffer.Write(body)
+	s.buffer.Write(compressedBody)
 }
 
 func (c *SegmentWriter) flushTimer() {
@@ -265,18 +266,15 @@ func (s *SegmentWriter) alignBuffer() {
 }
 
 func (s *SegmentWriter) send(
-	item DataItem,
+	item LocalWriteItem,
 	segmentId int64,
 	response chan error,
 ) {
-	replicationInfo := *item.Replication()
 	err := s.replicator.SendToFollowers(
-		replicationInfo,
+		item.Replication(),
 		s.topic,
 		segmentId,
-		item.StartOffset(),
-		item.RecordLength(),
-		item.DataBlock())
+		item)
 	response <- err
 }
 
