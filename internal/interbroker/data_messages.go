@@ -8,6 +8,7 @@ import (
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/types"
+	"github.com/jorgebay/soda/internal/utils"
 )
 
 type opcode uint8
@@ -38,26 +39,22 @@ const headerSize = 1 + // version
 
 type dataRequestMeta struct {
 	// Strict ordering, exported fields
-	SegmentId int64
-	Token     types.Token
-	GenId     uint32
-	// TopicLength is the size in bytes of the topic name
-	TopicLength uint8
+	SegmentId    int64
+	Token        types.Token
+	GenId        uint32
+	StartOffset  uint64
+	RecordLength uint32
+	TopicLength  uint8 // The size in bytes of the topic name
 }
 
-const dataRequestMetaSize = 8 + // segment id
-	8 + // token
-	2 + // genId
-	1 // topicLength
+var dataRequestMetaSize = utils.BinarySize(dataRequestMeta{})
 
 type dataRequest struct {
-	meta  dataRequestMeta
-	topic string
-	data  []byte
-	// response from replica
-	response chan dataResponse
-	// result from append as a replica
-	appendResult chan error
+	meta         dataRequestMeta
+	topic        string
+	data         []byte
+	response     chan dataResponse // response from replica
+	appendResult chan error        // result from append as a replica
 	ctxt         context.Context
 }
 
@@ -75,6 +72,14 @@ func (r *dataRequest) Replication() *types.ReplicationInfo {
 
 func (r *dataRequest) SegmentId() int64 {
 	return r.meta.SegmentId
+}
+
+func (r *dataRequest) StartOffset() uint64 {
+	return r.meta.StartOffset
+}
+
+func (r *dataRequest) RecordLength() uint32 {
+	return r.meta.RecordLength
 }
 
 func (r *dataRequest) SetResult(err error) {

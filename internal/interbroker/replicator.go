@@ -15,6 +15,8 @@ func (g *gossiper) SendToFollowers(
 	replicationInfo types.ReplicationInfo,
 	topic types.TopicDataId,
 	segmentId int64,
+	startOffset uint64,
+	recordLength uint32,
 	body []byte,
 ) error {
 	peers, ok := g.connections.Load().(clientMap)
@@ -33,10 +35,12 @@ func (g *gossiper) SendToFollowers(
 
 	request := &dataRequest{
 		meta: dataRequestMeta{
-			SegmentId:   segmentId,
-			Token:       topic.Token,
-			GenId:       topic.GenId,
-			TopicLength: uint8(len(topic.Name)),
+			SegmentId:    segmentId,
+			Token:        topic.Token,
+			GenId:        topic.GenId,
+			StartOffset:  startOffset,
+			RecordLength: recordLength,
+			TopicLength:  uint8(len(topic.Name)),
 		},
 		topic:    topic.Name,
 		ctxt:     ctxt,
@@ -70,7 +74,7 @@ func (g *gossiper) SendToFollowers(
 			break
 		}
 
-		if eResponse, ok := r.(*errorResponse); ok {
+		if eResponse, isError := r.(*errorResponse); isError {
 			if i < sent-1 {
 				// Let's wait for the next response
 				continue

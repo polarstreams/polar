@@ -32,7 +32,7 @@ type coalescer struct {
 
 type record struct {
 	replication types.ReplicationInfo
-	length      int64
+	length      uint32
 	body        io.ReadCloser
 	offset      uint64
 	response    chan error
@@ -85,11 +85,12 @@ func newCoalescer(
 }
 
 func (c *coalescer) add(group []record, item *record, length *int64) ([]record, *record) {
-	if *length+item.length > int64(c.config.MaxGroupSize()) {
+	itemLength := int64(item.length)
+	if *length+itemLength > int64(c.config.MaxGroupSize()) {
 		// Return a non-nil record as a signal that it was not appended
 		return group, item
 	}
-	*length += item.length
+	*length += itemLength
 	item.offset = c.offset
 	c.offset++
 	metrics.CoalescerMessagesProcessed.Inc()
@@ -185,7 +186,7 @@ func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
 	return b, nil
 }
 
-func (c *coalescer) append(replication types.ReplicationInfo, length int64, body io.ReadCloser) error {
+func (c *coalescer) append(replication types.ReplicationInfo, length uint32, body io.ReadCloser) error {
 	record := &record{
 		replication: replication,
 		length:      length,
@@ -212,6 +213,14 @@ func (d *localDataItem) Replication() *types.ReplicationInfo {
 
 func (d *localDataItem) SegmentId() int64 {
 	return 0
+}
+
+func (d *localDataItem) StartOffset() uint64 {
+	return d.group[0].offset
+}
+
+func (d *localDataItem) RecordLength() uint32 {
+	return uint32(len(d.group))
 }
 
 func (d *localDataItem) SetResult(err error) {

@@ -155,7 +155,13 @@ type TopicDataId struct {
 // Replicator contains logic to send data to replicas
 type Replicator interface {
 	// Sends a message to be stored as replica of current broker's datalog
-	SendToFollowers(replicationInfo ReplicationInfo, topic TopicDataId, segmentId int64, body []byte) error
+	SendToFollowers(
+		replicationInfo ReplicationInfo,
+		topic TopicDataId,
+		segmentId int64,
+		startOffset uint64,
+		recordLength uint32,
+		body []byte) error
 }
 
 type Generation struct {

@@ -157,7 +157,7 @@ func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 // isHostUp determines whether a host is considered UP
 func (cli *clientInfo) isHostUp() bool {
 	c, ok := cli.connection.Load().(*connectionWrapper)
-	return ok && c.isOpen
+	return ok && c.IsOpen()
 }
 
 // startReconnection starts reconnection in the background if it hasn't started

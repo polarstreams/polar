@@ -134,7 +134,7 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 	if err != nil {
 		return err
 	}
-	if err := coalescer.append(replicationInfo, r.ContentLength, r.Body); err != nil {
+	if err := coalescer.append(replicationInfo, uint32(r.ContentLength), r.Body); err != nil {
 		return err
 	}
 

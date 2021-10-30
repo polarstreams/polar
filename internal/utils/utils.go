@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -111,4 +112,14 @@ func ToBlob(v uuid.UUID) []byte {
 	// Can't error
 	blob, _ := v.MarshalBinary()
 	return blob
+}
+
+// BinarySize gets the amount of bytes required to write the value,
+// validating that all types are fixed-sized.
+func BinarySize(v interface{}) int {
+	size := binary.Size(v)
+	if size <= 0 {
+		panic(fmt.Sprintf("Size of type %v could not be determined", v))
+	}
+	return size
 }

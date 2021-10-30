@@ -2,7 +2,9 @@ package data
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"os"
 	"path/filepath"
 	"time"
@@ -63,10 +65,10 @@ func NewSegmentWriter(
 	if segmentId == 0 {
 		log.Debug().Msgf("Creating segment writer for token %d and topic '%s' as leader", topic.Token, topic.Name)
 		s.segmentId = time.Now().UnixNano()
-		go s.appendAsLeader()
+		go s.writeLoopAsLeader()
 	} else {
 		log.Debug().Msgf("Creating segment writer for token %d and topic '%s' as replica", topic.Token, topic.Name)
-		go s.appendAsReplica()
+		go s.writeLoopAsReplica()
 	}
 
 	go s.flushTimer()
@@ -77,11 +79,13 @@ type DataItem interface {
 	DataBlock() []byte
 	Replication() *types.ReplicationInfo
 	SegmentId() int64
+	StartOffset() uint64
+	RecordLength() uint32
 	SetResult(error)
 }
 
-// appendAsLeader appends to the local file and sends to replicas
-func (s *SegmentWriter) appendAsLeader() {
+// writeLoopAsLeader appends to the local file and sends to replicas
+func (s *SegmentWriter) writeLoopAsLeader() {
 	for item := range s.Items {
 		if s.maybeFlush() {
 			s.maybeCloseSegment()
@@ -92,13 +96,13 @@ func (s *SegmentWriter) appendAsLeader() {
 			continue
 		}
 
-		s.writeToBuffer(item.DataBlock())
+		s.writeToBuffer(item)
 
 		// Response channel should be buffered in case the response is discarded
 		response := make(chan error, 1)
 
 		// Start sending in the background while flushing is occurring
-		go s.send(item.DataBlock(), *item.Replication(), s.segmentId, response)
+		go s.send(item, s.segmentId, response)
 
 		// Check whether to flush before blocking again in the for loop
 		if s.maybeFlush() {
@@ -110,8 +114,8 @@ func (s *SegmentWriter) appendAsLeader() {
 	}
 }
 
-// appendAsReplica appends to local file as replica
-func (s *SegmentWriter) appendAsReplica() {
+// writeLoopAsReplica appends to local file as replica
+func (s *SegmentWriter) writeLoopAsReplica() {
 	for item := range s.Items {
 		s.maybeFlush()
 		if item == nil {
@@ -126,7 +130,7 @@ func (s *SegmentWriter) appendAsReplica() {
 			s.closeFile(item.SegmentId())
 		}
 
-		s.writeToBuffer(item.DataBlock())
+		s.writeToBuffer(item)
 
 		// Check whether to flush before blocking again in the for loop
 		s.maybeFlush()
@@ -220,12 +224,25 @@ func (s *SegmentWriter) closeFile(newSegmentId int64) {
 	s.segmentLength = 0
 }
 
-func (s *SegmentWriter) writeToBuffer(data []byte) {
+func (s *SegmentWriter) writeToBuffer(item DataItem) {
 	if s.lastFlush.IsZero() || s.buffer.Len() == 0 {
 		// When the buffer was previously empty, we should reset the flush check logic
 		s.lastFlush = time.Now()
 	}
-	s.buffer.Write(data)
+	headStartIndex := s.buffer.Len()
+	body := item.DataBlock()
+
+	// Write head
+	binary.Write(s.buffer, conf.Endianness, uint32(len(body)))
+	binary.Write(s.buffer, conf.Endianness, item.StartOffset())
+	binary.Write(s.buffer, conf.Endianness, item.RecordLength())
+
+	// Calculate head checksum and write it
+	head := s.buffer.Bytes()[headStartIndex:]
+	binary.Write(s.buffer, conf.Endianness, crc32.ChecksumIEEE(head))
+
+	// Write body
+	s.buffer.Write(body)
 }
 
 func (c *SegmentWriter) flushTimer() {
@@ -248,12 +265,18 @@ func (s *SegmentWriter) alignBuffer() {
 }
 
 func (s *SegmentWriter) send(
-	block []byte,
-	replicationInfo types.ReplicationInfo,
+	item DataItem,
 	segmentId int64,
 	response chan error,
 ) {
-	err := s.replicator.SendToFollowers(replicationInfo, s.topic, segmentId, block)
+	replicationInfo := *item.Replication()
+	err := s.replicator.SendToFollowers(
+		replicationInfo,
+		s.topic,
+		segmentId,
+		item.StartOffset(),
+		item.RecordLength(),
+		item.DataBlock())
 	response <- err
 }
 

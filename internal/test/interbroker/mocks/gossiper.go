@@ -119,13 +119,13 @@ func (_m *Gossiper) RegisterGenListener(listener interbroker.GenListener) {
 	_m.Called(listener)
 }
 
-// SendToFollowers provides a mock function with given fields: replicationInfo, topic, segmentId, body
-func (_m *Gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId int64, body []byte) error {
-	ret := _m.Called(replicationInfo, topic, segmentId, body)
+// SendToFollowers provides a mock function with given fields: replicationInfo, topic, segmentId, startOffset, recordLength, body
+func (_m *Gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId int64, startOffset uint64, recordLength uint32, body []byte) error {
+	ret := _m.Called(replicationInfo, topic, segmentId, startOffset, recordLength, body)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(types.ReplicationInfo, types.TopicDataId, int64, []byte) error); ok {
-		r0 = rf(replicationInfo, topic, segmentId, body)
+	if rf, ok := ret.Get(0).(func(types.ReplicationInfo, types.TopicDataId, int64, uint64, uint32, []byte) error); ok {
+		r0 = rf(replicationInfo, topic, segmentId, startOffset, recordLength, body)
 	} else {
 		r0 = ret.Error(0)
 	}

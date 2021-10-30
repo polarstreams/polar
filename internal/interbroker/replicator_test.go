@@ -29,7 +29,7 @@ var _ = Describe("SendToFollowers()", func() {
 	It("should error when there's no client for ordinals", func() {
 		clients := make(clientMap)
 		g.connections.Store(clients)
-		err := g.SendToFollowers(replication, topic, 0, body)
+		err := g.SendToFollowers(replication, topic, 0, 0, 2, body)
 		Expect(err).To(MatchError("Chunk for topic abc (0) could not be sent to replicas"))
 	})
 
@@ -40,7 +40,7 @@ var _ = Describe("SendToFollowers()", func() {
 		g.connections.Store(clients)
 		done := make(chan error, 1)
 		go func() {
-			done <- g.SendToFollowers(replication, topic, 0, body)
+			done <- g.SendToFollowers(replication, topic, 0, 0, 2, body)
 		}()
 
 		request := <-clients[2].dataMessages
@@ -67,7 +67,7 @@ var _ = Describe("SendToFollowers()", func() {
 		g.connections.Store(clients)
 		done := make(chan error, 1)
 		go func() {
-			done <- g.SendToFollowers(replication, topic, 0, body)
+			done <- g.SendToFollowers(replication, topic, 0, 0, 2, body)
 		}()
 
 		request := <-clients[2].dataMessages
