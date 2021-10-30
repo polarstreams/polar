@@ -12,12 +12,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-const blockSize = 512
-
 func TestData(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Data Suite")
 }
+
+var blockSize int = 512
 
 var _ = Describe("I/O Techniques", func() {
 	It("should write blocks with direct I/O", func() {
