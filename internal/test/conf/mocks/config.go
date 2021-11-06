@@ -267,3 +267,17 @@ func (_m *Config) ProducerPort() int {
 
 	return r0
 }
+
+// ReadAheadSize provides a mock function with given fields:
+func (_m *Config) ReadAheadSize() int {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}

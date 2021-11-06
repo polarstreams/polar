@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("segmentWriter", func() {
+var _ = Describe("SegmentWriter", func() {
 	Describe("alignBuffer()", func() {
 		const alignment = 512
 		It("should complete the remaining length", func() {

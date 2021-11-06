@@ -165,6 +165,10 @@ type TopicDataId struct {
 	GenId uint32
 }
 
+func (t *TopicDataId) String() string {
+	return fmt.Sprintf("'%s' %d v%d", t.Name, t.Token, t.GenId)
+}
+
 // Replicator contains logic to send data to replicas
 type Replicator interface {
 	// Sends a message to be stored as replica of current broker's datalog
