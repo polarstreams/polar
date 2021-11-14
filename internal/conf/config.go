@@ -27,8 +27,8 @@ type Config interface {
 	LocalDbConfig
 	GossipConfig
 	ProducerConfig
+	ConsumerConfig
 	DiscovererConfig
-	ConsumerPort() int
 	AdminPort() int
 	MetricsPort() int
 	HomePath() string
@@ -63,6 +63,11 @@ type ProducerConfig interface {
 	DatalogConfig
 	ProducerPort() int
 	FlowController() FlowController
+}
+
+type ConsumerConfig interface {
+	BasicConfig
+	ConsumerPort() int
 }
 
 type GossipConfig interface {

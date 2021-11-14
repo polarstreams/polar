@@ -83,13 +83,15 @@ func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 				conn, err := net.Dial(network, addr)
 				if err != nil {
 					// Clean whatever is in cache with a connection marked as closed
-					connection.Store(newFailedConnection())
+					connection.Store(types.NewFailedConnection())
 					clientInfo.startReconnection(g, &broker)
 					return conn, err
 				}
 
 				log.Info().Msgf("Connected to peer %s", addr)
-				c := newOpenConnection(conn, func() { clientInfo.startReconnection(g, &broker) })
+				c := types.NewTrackedConnection(conn, func(c *types.TrackedConnection) {
+					clientInfo.startReconnection(g, &broker)
+				})
 
 				// Store it at clientInfo level to retrieve the connection status later
 				connection.Store(c)
@@ -156,7 +158,7 @@ func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 
 // isHostUp determines whether a host is considered UP
 func (cli *clientInfo) isHostUp() bool {
-	c, ok := cli.connection.Load().(*connectionWrapper)
+	c, ok := cli.connection.Load().(*types.TrackedConnection)
 	return ok && c.IsOpen()
 }
 

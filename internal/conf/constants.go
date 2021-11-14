@@ -6,8 +6,14 @@ const (
 	StatusUrl = "/status"
 	// Producer Urls
 
-	// Url for posting and consuming messages
+	// Url for producing messages
 	TopicMessageUrl = "/v1/topic/:topic/messages"
+
+	// Consumer Urls
+
+	// Url consuming messages
+	ConsumerRegisterUrl = "/v1/consumer/register"
+	ConsumerPollUrl     = "/v1/consumer/poll"
 
 	// Gossip Urls
 
