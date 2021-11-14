@@ -2,10 +2,10 @@ package types
 
 import "math"
 
-// ordinalsPlacementOrder gets a slice of ordinals in the placement order.
+// OrdinalsPlacementOrder gets a slice of ordinals in the placement order.
 //
 // e.g. {0, 1, 2} for 3-broker cluster and {0, 3, 1, 4, 2, 5} for a 6-broker cluster.
-func ordinalsPlacementOrder(size int) []uint32 {
+func OrdinalsPlacementOrder(size int) []uint32 {
 	if size == 3 {
 		return []uint32{0, 1, 2}
 	}

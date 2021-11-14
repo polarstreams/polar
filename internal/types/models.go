@@ -60,7 +60,7 @@ type TopologyInfo struct {
 // NewTopology creates a Topology struct using brokers in ordinal order.
 func NewTopology(brokersByOrdinal []BrokerInfo) TopologyInfo {
 	totalBrokers := len(brokersByOrdinal)
-	ordinalList := ordinalsPlacementOrder(totalBrokers)
+	ordinalList := OrdinalsPlacementOrder(totalBrokers)
 	brokers := make([]BrokerInfo, 0, totalBrokers)
 	// It can be a slice but let's make it a map
 	indexByOrdinal := make(map[int]BrokerIndex, totalBrokers)
