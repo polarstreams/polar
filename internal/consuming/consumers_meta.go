@@ -16,14 +16,15 @@ import (
 
 const staleInfoThreshold = 5 * time.Minute
 const removeDelay = 5 * time.Minute
+const timerPrecision = 20 * time.Millisecond
 
 type consumerKey string
 
 // Represents a single consumer instance
 type ConsumerInfo struct {
-	Id     string // A unique id within the consumer group
-	Group  string // A group unique id
-	Topics []string
+	Id     string   `json:"id"`    // A unique id within the consumer group
+	Group  string   `json:"group"` // A group unique id
+	Topics []string `json:"topics"`
 
 	// Only used internally
 	assignedTokens []Token
@@ -66,7 +67,7 @@ func NewConsumersMeta(topologyGetter discovery.TopologyGetter) *ConsumersMeta {
 		connections:     map[UUID]ConsumerInfo{},
 		peerGroups:      map[int]peerGroupInfo{},
 		recentlyRemoved: map[consumerKey]removedInfo{},
-		removeDelay:     removeDelay,
+		removeDelay:     removeDelay - timerPrecision,
 	}
 }
 
@@ -114,21 +115,21 @@ func (m *ConsumersMeta) GetInfoForPeers() []ConsumerGroup {
 }
 
 // Returns the tokens and topics that a consumer should read
-func (m *ConsumersMeta) CanConsume(id UUID) ([]Token, []string) {
+func (m *ConsumersMeta) CanConsume(id UUID) (string, []Token, []string) {
 	value := m.consumers.Load()
 
 	if value == nil {
-		return nil, nil
+		return "", nil, nil
 	}
 
 	connections, found := value.(map[UUID]ConsumerInfo)
 
 	if !found {
-		return nil, nil
+		return "", nil, nil
 	}
 
 	info := connections[id]
-	return info.assignedTokens, info.Topics
+	return info.Group, info.assignedTokens, info.Topics
 }
 
 func (m *ConsumersMeta) Rebalance() bool {

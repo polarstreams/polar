@@ -1,19 +1,24 @@
-package utils_test
+package utils
 
 import (
 	"errors"
 	"sync"
 	"sync/atomic"
+	"testing"
 
-	"github.com/jorgebay/soda/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
+func TestPackage(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Utils Suite")
+}
+
 var _ = Describe("CopyOnWriteMap()", func() {
 	It("should support concurrent use", func() {
 		var wg sync.WaitGroup
-		m := utils.NewCopyOnWriteMap()
+		m := NewCopyOnWriteMap()
 		value1 := "value 1"
 		value2 := "value 2"
 		var key1Counter int32
@@ -50,7 +55,7 @@ var _ = Describe("CopyOnWriteMap()", func() {
 
 	It("should allow creation errors", func() {
 		var wg sync.WaitGroup
-		m := utils.NewCopyOnWriteMap()
+		m := NewCopyOnWriteMap()
 		value2 := "value 2"
 		var key2Counter int32
 

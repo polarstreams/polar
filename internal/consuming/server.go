@@ -1,6 +1,7 @@
 package consuming
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -16,12 +17,10 @@ import (
 	"golang.org/x/net/http2/h2c"
 )
 
-const (
-	addConsumerDelay    = 10 * time.Second
-	removeConsumerDelay = 5 * time.Minute
-)
+var addDebouncer = Debounce(10*time.Second, 0)
 
-var rebalanceDebouncer = Debounce()
+// Debounce events that occurred in the following 2 minutes
+var removeDebouncer = Debounce(removeDelay, 0.4)
 
 // Consumer represents a consumer server
 type Consumer interface {
@@ -105,15 +104,13 @@ func (c *consumer) postRegister(
 	r *http.Request,
 	ps httprouter.Params,
 ) error {
-	// TODO: Read the consumer group, consumer id and subscribed topics
+	var consumerInfo ConsumerInfo
+	if err := json.NewDecoder(r.Body).Decode(&consumerInfo); err != nil {
+		return err
+	}
+	c.meta.AddConnection(conn.Id(), consumerInfo)
 
-	// consumer := ConsumerInfo{}
-	// consumer.id
-	//connMap[conn.id] = consumer
-	//consumerMap[consumer.id] = consumer
-	//cache -> consumer groups
-
-	rebalanceDebouncer(addConsumerDelay, func() {
+	addDebouncer(func() {
 		if c.meta.Rebalance() {
 			log.Info().Msg("Consumer topology was rebalanced after adding a new consumer")
 		}
@@ -125,11 +122,10 @@ func (c *consumer) postRegister(
 }
 
 func (c *consumer) unRegister(conn *TrackedConnection) {
-	// Remove connection
-	// Remove consumer
+	c.meta.RemoveConnection(conn.Id())
 
-	// Wait a long time to rebalance, as it's maybe rebooting/
-	rebalanceDebouncer(removeConsumerDelay, func() {
+	// We shouldn't rush to rebalance
+	removeDebouncer(func() {
 		if c.meta.Rebalance() {
 			log.Info().Msg("Consumer topology was rebalanced after adding a new consumer")
 		}
@@ -142,9 +138,35 @@ func (c *consumer) postPoll(
 	r *http.Request,
 	ps httprouter.Params,
 ) error {
-	// get consumer by connection
-	// consumer = connMap[conn.id]
-	// shouldConsumerGetDataForTokens()
+	group, tokens, topics := c.meta.CanConsume(conn.Id())
+	if len(tokens) == 0 {
+		// TODO: Write the response
+		_, _ = w.Write([]byte("NO TOKENS"))
+		return nil
+	}
+
+	myOrdinal := c.topologyGetter.Topology().MyOrdinal()
+	ownedTokens := make([]Token, 0)
+
+	for _, token := range tokens {
+		gen := c.topologyGetter.Generation(token)
+		if gen != nil && gen.Leader == myOrdinal {
+			ownedTokens = append(ownedTokens, token)
+		}
+	}
+
+	if len(tokens) == 0 {
+		_, _ = w.Write([]byte("NO TOKENS"))
+		return nil
+	}
+
+	for _, topic := range topics {
+		for _, token := range tokens {
+			// TODO: get or create readers per group/topic/token
+			// Most likely issue reads in a single channel
+			fmt.Println("--Temp", token, topic, group)
+		}
+	}
 
 	return nil
 }

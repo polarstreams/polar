@@ -52,11 +52,11 @@ var _ = Describe("ConsumersMeta", func() {
 				expectedTopics := []string{"tA", "tB", "tC"}
 				assertTopics(meta, expectedTopics, id1, id2, id3)
 
-				tokens1, _ := meta.CanConsume(id1)
+				_, tokens1, _ := meta.CanConsume(id1)
 				Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
-				tokens2, _ := meta.CanConsume(id2)
+				_, tokens2, _ := meta.CanConsume(id2)
 				Expect(tokens2).To(Equal(getTokens(brokerLength, 2, 2)))
-				tokens3, _ := meta.CanConsume(id3)
+				_, tokens3, _ := meta.CanConsume(id3)
 				Expect(tokens3).To(Equal(getTokens(brokerLength, 4, 2)))
 
 				Expect(meta.GetInfoForPeers()).To(HaveLen(1))
@@ -77,11 +77,11 @@ var _ = Describe("ConsumersMeta", func() {
 				meta.Rebalance()
 				assertTopics(meta, []string{"topic1"}, id1a, id1b, id2, id3)
 
-				tokens1, _ := meta.CanConsume(id1a)
+				_, tokens1, _ := meta.CanConsume(id1a)
 				Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
-				tokens2, _ := meta.CanConsume(id2)
+				_, tokens2, _ := meta.CanConsume(id2)
 				Expect(tokens2).To(Equal(getTokens(brokerLength, 2, 2)))
-				tokens3, _ := meta.CanConsume(id3)
+				_, tokens3, _ := meta.CanConsume(id3)
 				Expect(tokens3).To(Equal(getTokens(brokerLength, 4, 2)))
 
 				Expect(meta.GetInfoForPeers()).To(HaveLen(1))
@@ -104,12 +104,12 @@ var _ = Describe("ConsumersMeta", func() {
 
 					meta.Rebalance()
 
-					tokens1, _ := meta.CanConsume(id1)
+					_, tokens1, _ := meta.CanConsume(id1)
 					Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
-					tokens2, _ := meta.CanConsume(id2)
+					_, tokens2, _ := meta.CanConsume(id2)
 					// The id does not map to any tokens
 					Expect(tokens2).To(HaveLen(0))
-					tokens3, _ := meta.CanConsume(id3)
+					_, tokens3, _ := meta.CanConsume(id3)
 					Expect(tokens3).To(Equal(getTokens(brokerLength, 4, 2)))
 
 					Expect(meta.GetInfoForPeers()).To(HaveLen(1))
@@ -135,12 +135,12 @@ var _ = Describe("ConsumersMeta", func() {
 
 					meta.Rebalance()
 
-					tokens2, _ := meta.CanConsume(id2)
+					_, tokens2, _ := meta.CanConsume(id2)
 					Expect(tokens2).To(HaveLen(0))
 
-					tokens1, _ := meta.CanConsume(id1)
+					_, tokens1, _ := meta.CanConsume(id1)
 					Expect(tokens1).To(HaveLen(3))
-					tokens3, _ := meta.CanConsume(id3)
+					_, tokens3, _ := meta.CanConsume(id3)
 					Expect(tokens3).To(HaveLen(3))
 
 					Expect(meta.GetInfoForPeers()).To(HaveLen(1))
@@ -326,7 +326,7 @@ func getTokens(brokerLength int, index int, n int) []Token {
 
 func assertTopics(meta *ConsumersMeta, topics []string, consumerIds ...uuid.UUID) {
 	for _, id := range consumerIds {
-		_, topics := meta.CanConsume(id)
+		_, _, topics := meta.CanConsume(id)
 		Expect(topics).To(ConsistOf(topics))
 	}
 }
