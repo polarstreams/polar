@@ -14,7 +14,8 @@ import (
 	. "github.com/jorgebay/soda/internal/types"
 )
 
-const staleInfoThreshold = 10 * time.Minute
+const staleInfoThreshold = 5 * time.Minute
+const removeDelay = 5 * time.Minute
 
 type consumerKey string
 
@@ -33,6 +34,11 @@ type peerGroupInfo struct {
 	timestamp time.Time
 }
 
+type removedInfo struct {
+	consumer  ConsumerInfo
+	timestamp time.Time
+}
+
 // The global unique identifier of the Consumer
 func (c *ConsumerInfo) key() consumerKey {
 	return consumerKey(fmt.Sprintf("%s-%s", c.Group, c.Id))
@@ -41,9 +47,12 @@ func (c *ConsumerInfo) key() consumerKey {
 // A topology and group metadata of the consumers
 type ConsumersMeta struct {
 	topologyGetter discovery.TopologyGetter
-	mu             sync.Mutex
-	connections    map[UUID]ConsumerInfo // Consumers by connection id
-	peerGroups     map[int]peerGroupInfo // Group information provided by a peer, by ordinal
+	removeDelay    time.Duration
+
+	mu              sync.Mutex
+	connections     map[UUID]ConsumerInfo       // Consumers by connection id
+	peerGroups      map[int]peerGroupInfo       // Group information provided by a peer, by ordinal
+	recentlyRemoved map[consumerKey]removedInfo // Consumers which connections were recently removed by key
 
 	// Snapshot information recalculated periodically
 	groups    atomic.Value // Precalculated info of consumer groups for peers
@@ -52,10 +61,12 @@ type ConsumersMeta struct {
 
 func NewConsumersMeta(topologyGetter discovery.TopologyGetter) *ConsumersMeta {
 	return &ConsumersMeta{
-		topologyGetter: topologyGetter,
-		mu:             sync.Mutex{},
-		connections:    map[UUID]ConsumerInfo{},
-		peerGroups:     map[int]peerGroupInfo{},
+		topologyGetter:  topologyGetter,
+		mu:              sync.Mutex{},
+		connections:     map[UUID]ConsumerInfo{},
+		peerGroups:      map[int]peerGroupInfo{},
+		recentlyRemoved: map[consumerKey]removedInfo{},
+		removeDelay:     removeDelay,
 	}
 }
 
@@ -70,8 +81,16 @@ func (m *ConsumersMeta) RemoveConnection(id UUID) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	_, found := m.connections[id]
-	delete(m.connections, id)
+	consumer, found := m.connections[id]
+	if found {
+		delete(m.connections, id)
+
+		// Add it to a pending remove list
+		m.recentlyRemoved[consumer.key()] = removedInfo{
+			consumer:  consumer,
+			timestamp: time.Now(),
+		}
+	}
 	return found
 }
 
@@ -125,18 +144,16 @@ func (m *ConsumersMeta) Rebalance() bool {
 
 	// From the local connections, create the consumer groups
 	for _, info := range m.connections {
-		key := info.key()
-		_, exists := consumers[key]
-		if !exists {
-			consumers[key] = info
-			// append the list of consumer keys per group
-			keys, found := consumerGroups[info.Group]
-			if !found {
-				keys = StringSet{}
-			}
-			keys.Add(string(key))
-			consumerGroups[info.Group] = keys
+		addToGroup(consumerGroups, consumers, info)
+	}
+
+	// From the recently removed, add it to active consumers
+	for k, removed := range m.recentlyRemoved {
+		if time.Since(removed.timestamp) > m.removeDelay {
+			delete(m.recentlyRemoved, k)
+			continue
 		}
+		addToGroup(consumerGroups, consumers, removed.consumer)
 	}
 
 	// From the consumer groups, add the topics
@@ -233,13 +250,29 @@ func toIds(keys []string, consumers map[consumerKey]ConsumerInfo) []string {
 	return result
 }
 
+func addToGroup(
+	consumerGroups map[string]StringSet,
+	consumers map[consumerKey]ConsumerInfo,
+	info ConsumerInfo,
+) {
+	key := info.key()
+	_, exists := consumers[key]
+	if !exists {
+		consumers[key] = info
+		// append the list of consumer keys per group
+		keys, found := consumerGroups[info.Group]
+		if !found {
+			keys = StringSet{}
+		}
+		keys.Add(string(key))
+		consumerGroups[info.Group] = keys
+	}
+}
+
 // Calculates token assignment for a given set of consumers (in a group).
 //
-// From the consumer index an ordinal is computed.
-//
-// When the number of consumers is greater or equal than the number of brokers
-// the consumer will get the token assigned based on the consumer "ordinal".
-// When there are fewer consumers than brokers it will be assigned in the following way:
+// From the consumer index an ordinal is computed and used to assign broker
+// tokens to consumers.
 func setConsumerAssignment(
 	result map[consumerKey]ConsumerInfo,
 	topology *TopologyInfo,
@@ -250,23 +283,49 @@ func setConsumerAssignment(
 	// Sort the keys within a group
 	sort.Strings(keys)
 	brokerLength := len(topology.Brokers)
+	consumerLength := len(keys)
 
-	prevKey := keys[0]
-	for index, broker := range topology.Brokers {
-		key := prevKey
-		if len(keys) > broker.Ordinal {
-			key = keys[broker.Ordinal]
-			prevKey = key
+	// Distribute fairly in a theoretical ring with 3*2^n shape
+	baseLength := consumerBaseLength(consumerLength)
+	consumerTokens := make([][]Token, baseLength)
+
+	index := 0
+	for brokerIndex, broker := range topology.Brokers {
+		if len(consumerTokens) > broker.Ordinal {
+			// The alphabetical index is considered maps to the broker ordinal
+			index = broker.Ordinal
 		}
 
+		consumerTokens[index] = append(consumerTokens[index], GetTokenAtIndex(brokerLength, brokerIndex))
+	}
+
+	// Assign the tokens to the keys that do exist
+	for i, key := range keys {
 		info := consumers[consumerKey(key)]
 		c := result[consumerKey(key)]
 		c.Id = info.Id
 		c.Group = info.Group
-		c.assignedTokens = append(c.assignedTokens, GetTokenAtIndex(brokerLength, index))
+		c.assignedTokens = consumerTokens[i]
 		c.Topics = topics
 
 		result[consumerKey(key)] = c
+	}
+
+	if baseLength > consumerLength {
+		// Assign the tokens from the theoretical ring to the actual ring
+		remainingTokens := make([]Token, 0)
+		for i := consumerLength; i < baseLength; i++ {
+			remainingTokens = append(remainingTokens, consumerTokens[i]...)
+		}
+
+		for i, token := range remainingTokens {
+			// Assign backwards to avoid overloading the consumer at zero
+			index := int(math.Abs(float64((consumerLength - 1 - i) % consumerLength)))
+			key := keys[index]
+			c := result[consumerKey(key)]
+			c.assignedTokens = append(c.assignedTokens, token)
+			result[consumerKey(key)] = c
+		}
 	}
 
 	// Fill the unused consumers
@@ -279,7 +338,7 @@ func setConsumerAssignment(
 // For a given real consumers length, it returns the ring length that
 // can contain it.
 // For example: given 3 it returns 3; for 4 -> 6; for 5 -> 6; for 7 -> 12
-func consumerOrdinalLength(length int) int {
+func consumerBaseLength(length int) int {
 	if length < 3 {
 		return 3
 	}

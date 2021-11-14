@@ -38,7 +38,7 @@ For example, after B1 starts, it will communicate to broker instances B2 and B3 
 
 In case B1 goes offline, once B2 receives a message for T1 range, B2 will communicate with B3 the intention of starting a new generation for T1. If B3 agrees, a new generation for T1 will start. This generation will be valid until B1 becomes back online, at which time, B1 will try to start a new generation setting itself as leader of this new generation for T1.
 
-This _generational_ approach provides resilency to failure without the need to hold elections, as there will be a deterministic way to set the owner of the a generation at any given time.
+This _generational_ approach provides resiliency to failure without the need to hold elections, as there will be a deterministic way to set the owner of the a generation at any given time.
 
 Creating generations and persisting them across multiple brokers in a strongly consistent manner requires additional metadata/state to be sent (i.e. see [distributed transactions across heterogenous stores](https://www.researchgate.net/publication/282156834_Scalable_Distributed_Transactions_across_Heterogeneous_Stores)).
 

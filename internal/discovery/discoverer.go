@@ -176,7 +176,6 @@ func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 	gen := d.Generation(token)
 
 	if gen == nil {
-		fmt.Println("--Getting info from natural")
 		// We don't have information about it and it's OK
 		// Send it to the natural owner or the natural owner followers
 		return ReplicationInfo{

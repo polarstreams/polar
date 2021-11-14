@@ -3,6 +3,7 @@ package consuming
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jorgebay/soda/internal/test/discovery/mocks"
@@ -16,7 +17,7 @@ func Test(t *testing.T) {
 	RunSpecs(t, "Consumer Suite")
 }
 
-var _ = Describe("consumerOrdinalLength()", func() {
+var _ = Describe("consumerBaseLength()", func() {
 	It("should return the expected size", func() {
 		values := [][]int{
 			{1, 3},
@@ -31,7 +32,7 @@ var _ = Describe("consumerOrdinalLength()", func() {
 		}
 
 		for _, item := range values {
-			Expect(consumerOrdinalLength(item[0])).To(Equal(item[1]))
+			Expect(consumerBaseLength(item[0])).To(Equal(item[1]))
 		}
 	})
 })
@@ -89,6 +90,67 @@ var _ = Describe("ConsumersMeta", func() {
 				Expect(meta.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "b", "c"))
 			})
 		})
+
+		When("all connections to a consumer are removed", func() {
+			When("before the remove delay", func() {
+				It("should still include it", func() {
+					meta := newConsumerMeta(brokerLength)
+					id1 := addConnection(meta, "a", "g1", "topic1")
+					id2 := addConnection(meta, "b", "g1", "topic1")
+					id3 := addConnection(meta, "c", "g1", "topic1")
+
+					// Remove b
+					meta.RemoveConnection(id2)
+
+					meta.Rebalance()
+
+					tokens1, _ := meta.CanConsume(id1)
+					Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
+					tokens2, _ := meta.CanConsume(id2)
+					// The id does not map to any tokens
+					Expect(tokens2).To(HaveLen(0))
+					tokens3, _ := meta.CanConsume(id3)
+					Expect(tokens3).To(Equal(getTokens(brokerLength, 4, 2)))
+
+					Expect(meta.GetInfoForPeers()).To(HaveLen(1))
+					Expect(meta.GetInfoForPeers()[0].Name).To(Equal("g1"))
+					Expect(meta.GetInfoForPeers()[0].Topics).To(ConsistOf("topic1"))
+					// b should still be there
+					Expect(meta.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "b", "c"))
+				})
+			})
+
+			When("after the remove delay", func() {
+				It("should not include it", func() {
+					meta := newConsumerMeta(brokerLength)
+					meta.removeDelay = 2 * time.Millisecond
+					id1 := addConnection(meta, "a", "g1", "topic1")
+					id2 := addConnection(meta, "b", "g1", "topic1")
+					id3 := addConnection(meta, "c", "g1", "topic1")
+
+					// Remove b
+					meta.RemoveConnection(id2)
+
+					time.Sleep(20 * time.Millisecond)
+
+					meta.Rebalance()
+
+					tokens2, _ := meta.CanConsume(id2)
+					Expect(tokens2).To(HaveLen(0))
+
+					tokens1, _ := meta.CanConsume(id1)
+					Expect(tokens1).To(HaveLen(3))
+					tokens3, _ := meta.CanConsume(id3)
+					Expect(tokens3).To(HaveLen(3))
+
+					Expect(meta.GetInfoForPeers()).To(HaveLen(1))
+					Expect(meta.GetInfoForPeers()[0].Name).To(Equal("g1"))
+					// b should be gone
+					Expect(meta.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "c"))
+					Expect(meta.GetInfoForPeers()[0].Topics).To(ConsistOf("topic1"))
+				})
+			})
+		})
 	})
 })
 
@@ -140,7 +202,7 @@ var _ = Describe("setConsumerAssignment()", func() {
 		}
 	})
 
-	It("should set the tokens for when consumers are less than brokers", func() {
+	It("should set the tokens for when consumers are less than brokers (3s)", func() {
 		topology := newTestTopology(6, 0)
 		result := map[consumerKey]ConsumerInfo{}
 		keys, consumers := createTestConsumers(3)
@@ -153,8 +215,26 @@ var _ = Describe("setConsumerAssignment()", func() {
 			Expect(c.Topics).To(Equal(topics))
 			// Assign 2 tokens per consumers
 			Expect(c.assignedTokens).To(HaveLen(2))
-			Expect(c.assignedTokens[0]).To(Equal(topology.GetToken(BrokerIndex(ringIndex))))
-			Expect(c.assignedTokens[1]).To(Equal(topology.GetToken(BrokerIndex(ringIndex + 1))))
+			Expect(c.assignedTokens[0]).To(Equal(topology.GetToken(ringIndex)))
+			Expect(c.assignedTokens[1]).To(Equal(topology.GetToken(ringIndex + 1)))
+		}
+	})
+
+	It("should set the tokens for when consumers are a lot less than brokers (3s)", func() {
+		topology := newTestTopology(48, 0)
+		result := map[consumerKey]ConsumerInfo{}
+		keys, consumers := createTestConsumers(6)
+
+		setConsumerAssignment(result, &topology, keys, topics, consumers)
+
+		for ordinal, k := range keys {
+			c := result[consumerKey(k)]
+			ringIndex := topology.GetIndex(ordinal)
+			Expect(c.Topics).To(Equal(topics))
+			Expect(c.assignedTokens).To(HaveLen(8))
+			for i := 0; i < 8; i++ {
+				Expect(c.assignedTokens[i]).To(Equal(topology.GetToken(ringIndex + BrokerIndex(i))))
+			}
 		}
 	})
 
@@ -172,6 +252,27 @@ var _ = Describe("setConsumerAssignment()", func() {
 		Expect(c.assignedTokens).To(HaveLen(6))
 		for i := 0; i < brokerLength; i++ {
 			Expect(c.assignedTokens[i]).To(Equal(topology.GetToken(BrokerIndex(i))))
+		}
+	})
+
+	It("should set the tokens for when there are 2 consumers", func() {
+		const brokerLength = 6
+		topology := newTestTopology(brokerLength, 0)
+		result := map[consumerKey]ConsumerInfo{}
+		keys, consumers := createTestConsumers(2)
+
+		setConsumerAssignment(result, &topology, keys, topics, consumers)
+
+		for ordinal, k := range keys {
+			c := result[consumerKey(k)]
+			ringIndex := topology.GetIndex(ordinal)
+			Expect(c.Topics).To(Equal(topics))
+			Expect(c.assignedTokens).To(HaveLen(3))
+			// The first two tokens are the natural tokens
+			// The other one is the "remaining one"
+			for i := 0; i < 2; i++ {
+				Expect(c.assignedTokens[i]).To(Equal(topology.GetToken(ringIndex + BrokerIndex(i))))
+			}
 		}
 	})
 })
