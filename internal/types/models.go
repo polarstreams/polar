@@ -23,6 +23,14 @@ type BrokerInfo struct {
 	HostName string
 }
 
+// ConsumerGroup contains info about a single group of consumers.
+// It's used as an interbroker message to send snapshot of the local view of consumers to other brokers.
+type ConsumerGroup struct {
+	Name   string   `json:"name"`
+	Ids    []string `json:"ids"`
+	Topics []string `json:"topics"`
+}
+
 // BrokerIndex represents the position of a broker in the current broker list.
 // It's exposed as different type to avoid mixing it up w/ Ordinal (replica number)
 //

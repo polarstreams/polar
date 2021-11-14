@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	addConsumerDelay    = 5 * time.Second
-	removeConsumerDelay = 30 * time.Second
+	addConsumerDelay    = 10 * time.Second
+	removeConsumerDelay = 5 * time.Minute
 )
 
 var rebalanceDebouncer = Debounce()
