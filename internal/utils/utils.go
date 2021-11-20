@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"time"
@@ -16,6 +17,8 @@ import (
 )
 
 type HandleWithError func(http.ResponseWriter, *http.Request, httprouter.Params) error
+
+var jitterRng = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // ToHandle wraps a handle func with error and converts it to a `httprouter.Handle`
 func ToHandle(he HandleWithError) httprouter.Handle {
@@ -122,4 +125,17 @@ func BinarySize(v interface{}) int {
 		panic(fmt.Sprintf("Size of type %v could not be determined", v))
 	}
 	return size
+}
+
+// Adds a +-5% jitter to the duration with millisecond resolution
+func Jitter(t time.Duration) time.Duration {
+	rand.Float64()
+	ms := float64(t.Milliseconds())
+	maxJitter := 0.1 * ms
+	if maxJitter < 1 {
+		panic("Delay should be at least 20ms")
+	}
+	jitterRange := jitterRng.Float64() * maxJitter
+	startJitter := 0.05 * ms
+	return time.Duration(ms-startJitter+jitterRange) * time.Millisecond
 }

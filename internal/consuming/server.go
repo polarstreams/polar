@@ -9,6 +9,7 @@ import (
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
+	"github.com/jorgebay/soda/internal/interbroker"
 	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/jorgebay/soda/internal/utils"
 	"github.com/julienschmidt/httprouter"
@@ -17,10 +18,10 @@ import (
 	"golang.org/x/net/http2/h2c"
 )
 
-var addDebouncer = Debounce(10*time.Second, 0)
+const consumerGroupsToPeersDelay = 10 * time.Second
 
-// Debounce events that occurred in the following 2 minutes
-var removeDebouncer = Debounce(removeDelay, 0.4)
+var addDebouncer = Debounce(10*time.Second, 0)
+var removeDebouncer = Debounce(removeDelay, 0.4) // Debounce events that occurred in the following 2 minutes
 
 // Consumer represents a consumer server
 type Consumer interface {
@@ -29,10 +30,15 @@ type Consumer interface {
 	AcceptConnections() error
 }
 
-func NewConsumer(config conf.ConsumerConfig, topologyGetter discovery.TopologyGetter) Consumer {
+func NewConsumer(
+	config conf.ConsumerConfig,
+	topologyGetter discovery.TopologyGetter,
+	gossiper interbroker.Gossiper,
+) Consumer {
 	return &consumer{
 		config:         config,
 		topologyGetter: topologyGetter,
+		gossiper:       gossiper,
 		meta:           NewConsumersMeta(topologyGetter),
 	}
 }
@@ -40,10 +46,15 @@ func NewConsumer(config conf.ConsumerConfig, topologyGetter discovery.TopologyGe
 type consumer struct {
 	config         conf.ConsumerConfig
 	topologyGetter discovery.TopologyGetter
+	gossiper       interbroker.Gossiper
 	meta           *ConsumersMeta
 }
 
 func (c *consumer) Init() error {
+	c.gossiper.RegisterConsumerInfoListener(c)
+
+	// Send info in the background
+	go c.sendConsumerGroupsToPeers()
 	return nil
 }
 
@@ -193,4 +204,36 @@ func adaptHttpErr(err error, w http.ResponseWriter) {
 	w.WriteHeader(httpErr.StatusCode())
 	// The message is supposed to be user friendly
 	fmt.Fprintf(w, err.Error())
+}
+
+func (c *consumer) OnConsumerInfoFromPeer(ordinal int, groups []ConsumerGroup) {
+	c.meta.SetInfoFromPeer(ordinal, groups)
+}
+
+func (c *consumer) sendConsumerGroupsToPeers() {
+	const sendPeriod = 1000
+	for i := 0; ; i++ {
+		groups := c.meta.GetInfoForPeers()
+		if len(groups) > 0 {
+			topology := c.topologyGetter.Topology()
+			brokers := topology.NextBrokers(topology.LocalIndex, 2)
+			logEvent := log.Debug()
+			if i%sendPeriod == 0 {
+				logEvent = log.Info()
+			}
+			for i := 0; i < len(brokers); i++ {
+				b := brokers[i]
+				logEvent.Int("broker", b.Ordinal)
+				go func() {
+					err := c.gossiper.SendConsumerGroups(b.Ordinal, groups)
+					if err != nil {
+						log.Warn().Err(err).Msgf(
+							"The was an error when sending consumer group info to peer B%d", b.Ordinal)
+					}
+				}()
+			}
+			logEvent.Int("groups", len(groups)).Msgf("Sending consumer group snapshot to peers")
+		}
+		time.Sleep(Jitter(consumerGroupsToPeersDelay))
+	}
 }

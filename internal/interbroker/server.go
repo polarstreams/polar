@@ -67,7 +67,7 @@ func (g *gossiper) acceptHttpConnections() error {
 			router.GET(fmt.Sprintf(conf.GossipTokenInRange, ":token"), ToHandle(g.getTokenInRangeHandler))
 			router.GET(fmt.Sprintf(conf.GossipTokenHasHistoryUrl, ":token"), ToHandle(g.getTokenHasHistoryUrl))
 
-			//TODO: routes to propose/accept new generation
+			router.POST(conf.GossipConsumerGroupsInfoUrl, ToPostHandle(g.postConsumerGroupInfo))
 
 			// server.ServeConn() will block until the connection is not readable anymore
 			// start it in the background
@@ -160,5 +160,15 @@ func (g *gossiper) getTokenHasHistoryUrl(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Content-Type", "application/json")
 	// Encode can't fail for a bool
 	_ = json.NewEncoder(w).Encode(result)
+	return nil
+}
+
+func (g *gossiper) postConsumerGroupInfo(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	var message ConsumerGroupInfoMessage
+	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
+		return err
+	}
+	// Use the registered listener
+	g.consumerInfoListener.OnConsumerInfoFromPeer(message.Origin, message.Groups)
 	return nil
 }

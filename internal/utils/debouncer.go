@@ -37,7 +37,7 @@ func (d *debouncer) set(f func()) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	// The previous timer will be GC'ed when timer fires.
+	// The previous timer will be GC'ed when timer fires or is stopped
 	previousTimer := d.timer
 	previousStart := d.start
 

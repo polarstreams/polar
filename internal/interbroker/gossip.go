@@ -40,6 +40,12 @@ type Gossiper interface {
 	// Sends a message to be handled as a leader of a token
 	SendToLeader(replicationInfo ReplicationInfo, topic string, body []byte) error
 
+	// Sends a message to the broker with the ordinal number containing the local snapshot of consumers
+	SendConsumerGroups(ordinal int, groups []ConsumerGroup) error
+
+	// Adds a listener
+	RegisterConsumerInfoListener(listener ConsumerInfoListener)
+
 	// WaitForPeersUp blocks until all peers are UP
 	WaitForPeersUp()
 }
@@ -72,6 +78,10 @@ type GenListener interface {
 	OnRemoteSetAsCommitted(token Token, tx UUID, origin int) error
 }
 
+type ConsumerInfoListener interface {
+	OnConsumerInfoFromPeer(ordinal int, groups []ConsumerGroup)
+}
+
 type GenReadResult struct {
 	Committed *Generation
 	Proposed  *Generation
@@ -89,11 +99,12 @@ func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Goss
 }
 
 type gossiper struct {
-	config           conf.GossipConfig
-	discoverer       discovery.Discoverer
-	localDb          localdb.Client
-	genListener      GenListener
-	connectionsMutex sync.Mutex
+	config               conf.GossipConfig
+	discoverer           discovery.Discoverer
+	localDb              localdb.Client
+	genListener          GenListener
+	consumerInfoListener ConsumerInfoListener
+	connectionsMutex     sync.Mutex
 	// Map of connections
 	connections atomic.Value
 	// Map of SegmentWriter to be use for replicating data as a replica
@@ -138,7 +149,15 @@ func (g *gossiper) RegisterGenListener(listener GenListener) {
 	g.genListener = listener
 }
 
+func (g *gossiper) RegisterConsumerInfoListener(listener ConsumerInfoListener) {
+	if g.genListener != nil {
+		panic("Listener registered multiple times")
+	}
+	g.consumerInfoListener = listener
+}
+
 func (g *gossiper) SendToLeader(replicationInfo ReplicationInfo, topic string, body []byte) error {
+	// TODO: Implement
 	return nil
 }
 
@@ -267,6 +286,21 @@ func (g *gossiper) SetAsCommitted(ordinal int, token Token, tx UUID) error {
 	}
 
 	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationCommmitUrl, token), jsonBody)
+	defer r.Body.Close()
+	return err
+}
+
+func (g *gossiper) SendConsumerGroups(ordinal int, groups []ConsumerGroup) error {
+	message := ConsumerGroupInfoMessage{
+		Groups: groups,
+		Origin: g.discoverer.Topology().MyOrdinal(),
+	}
+	jsonBody, err := json.Marshal(message)
+	if err != nil {
+		log.Fatal().Err(err).Msgf("json marshalling failed when creating consumer info message")
+	}
+
+	r, err := g.requestPost(ordinal, conf.GossipConsumerGroupsInfoUrl, jsonBody)
 	defer r.Body.Close()
 	return err
 }

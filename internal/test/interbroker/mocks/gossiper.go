@@ -114,18 +114,37 @@ func (_m *Gossiper) OpenConnections() error {
 	return r0
 }
 
+// RegisterConsumerInfoListener provides a mock function with given fields: listener
+func (_m *Gossiper) RegisterConsumerInfoListener(listener interbroker.ConsumerInfoListener) {
+	_m.Called(listener)
+}
+
 // RegisterGenListener provides a mock function with given fields: listener
 func (_m *Gossiper) RegisterGenListener(listener interbroker.GenListener) {
 	_m.Called(listener)
 }
 
-// SendToFollowers provides a mock function with given fields: replicationInfo, topic, segmentId, startOffset, recordLength, body
-func (_m *Gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId int64, startOffset uint64, recordLength uint32, body []byte) error {
-	ret := _m.Called(replicationInfo, topic, segmentId, startOffset, recordLength, body)
+// SendConsumerGroups provides a mock function with given fields: ordinal, groups
+func (_m *Gossiper) SendConsumerGroups(ordinal int, groups []types.ConsumerGroup) error {
+	ret := _m.Called(ordinal, groups)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(types.ReplicationInfo, types.TopicDataId, int64, uint64, uint32, []byte) error); ok {
-		r0 = rf(replicationInfo, topic, segmentId, startOffset, recordLength, body)
+	if rf, ok := ret.Get(0).(func(int, []types.ConsumerGroup) error); ok {
+		r0 = rf(ordinal, groups)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// SendToFollowers provides a mock function with given fields: replicationInfo, topic, segmentId, chunk
+func (_m *Gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId int64, chunk types.SegmentChunk) error {
+	ret := _m.Called(replicationInfo, topic, segmentId, chunk)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(types.ReplicationInfo, types.TopicDataId, int64, types.SegmentChunk) error); ok {
+		r0 = rf(replicationInfo, topic, segmentId, chunk)
 	} else {
 		r0 = ret.Error(0)
 	}

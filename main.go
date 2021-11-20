@@ -45,7 +45,7 @@ func main() {
 	gossiper := interbroker.NewGossiper(config, discoverer)
 	generator := ownership.NewGenerator(discoverer, gossiper, localDbClient)
 	producer := producing.NewProducer(config, topicHandler, discoverer, datalog, gossiper)
-	consumer := consuming.NewConsumer(config, discoverer)
+	consumer := consuming.NewConsumer(config, discoverer, gossiper)
 
 	toInit := []types.Initializer{localDbClient, topicHandler, discoverer, gossiper, generator, producer, consumer}
 

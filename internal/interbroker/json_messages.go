@@ -18,3 +18,8 @@ type GenerationCommitMessage struct {
 	Tx     UUID `json:"tx"`
 	Origin int  `json:"origin"` // The ordinal of the originator of the transaction
 }
+
+type ConsumerGroupInfoMessage struct {
+	Groups []ConsumerGroup `json:"groups"`
+	Origin int             `json:"origin"` // The ordinal of the sender
+}
