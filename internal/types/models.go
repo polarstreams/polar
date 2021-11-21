@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const NotFoundIndex BrokerIndex = -1
+
 // Represents a topic offset for a given token.
 type Offset struct {
 	Offset     uint64
@@ -104,13 +106,25 @@ func (t *TopologyInfo) MyOrdinal() int {
 }
 
 // GetIndex gets the position of the broker in the broker slice.
+//
+// It returns NotFoundIndex when not found.
 func (t *TopologyInfo) GetIndex(ordinal int) BrokerIndex {
-	return t.indexByOrdinal[ordinal]
+	v, found := t.indexByOrdinal[ordinal]
+	if !found {
+		return NotFoundIndex
+	}
+	return v
 }
 
 // BrokerByOrdinal gets the broker by a given ordinal.
+//
+// It returns nil when not found.
 func (t *TopologyInfo) BrokerByOrdinal(ordinal int) *BrokerInfo {
-	return &t.Brokers[int(t.GetIndex(ordinal))]
+	index := t.GetIndex(ordinal)
+	if index == NotFoundIndex {
+		return nil
+	}
+	return &t.Brokers[int(index)]
 }
 
 // BrokerByOrdinal gets the broker by a given ordinal.

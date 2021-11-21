@@ -12,6 +12,7 @@ import (
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/types"
+	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
 )
@@ -44,7 +45,7 @@ func (g *gossiper) OpenConnections() error {
 			go func() {
 				defer wg.Done()
 				log.Debug().Msgf("Creating initial peer request to %s", p.HostName)
-				_, err := c.client.Get(g.getPeerUrl(&p, conf.StatusUrl))
+				_, err := c.gossipClient.Get(g.getPeerUrl(&p, conf.StatusUrl))
 
 				if err != nil {
 					// Reconnection will continue in the background as part of transport logic
@@ -64,42 +65,70 @@ func (g *gossiper) OpenConnections() error {
 }
 
 func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
-	var connection atomic.Value
+	gossipConnection := &atomic.Value{}
 
 	clientInfo := &clientInfo{
-		connection:   &connection,
-		dataConn:     &atomic.Value{},
-		hostName:     broker.HostName,
-		dataMessages: make(chan *dataRequest, 256),
+		gossipConnection: gossipConnection,
+		dataConn:         &atomic.Value{},
+		hostName:         broker.HostName,
+		dataMessages:     make(chan *dataRequest, 256),
 	}
 
-	clientInfo.client = &http.Client{
+	clientInfo.gossipClient = &http.Client{
 		Transport: &http2.Transport{
-			AllowHTTP: true,
-			// Pretend we are dialing a TLS endpoint
+			StrictMaxConcurrentStreams: true, // Do not create additional connections
+			AllowHTTP:                  true,
 			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+				// Pretend we are dialing a TLS endpoint.
+
 				// When in-flight streams is below max, there's a single open connection
-				log.Debug().Msgf("Creating connection to %s", addr)
+				log.Debug().Msgf("Creating gossip connection to %s", addr)
 				conn, err := net.Dial(network, addr)
 				if err != nil {
 					// Clean whatever is in cache with a connection marked as closed
-					connection.Store(types.NewFailedConnection())
+					gossipConnection.Store(types.NewFailedConnection())
 					clientInfo.startReconnection(g, &broker)
 					return conn, err
 				}
 
-				log.Info().Msgf("Connected to peer %s", addr)
+				log.Info().Msgf("Connected to peer %s on gossip port", addr)
 				c := types.NewTrackedConnection(conn, func(c *types.TrackedConnection) {
+					log.Warn().Msgf("Connection to peer %s on gossip port closed", addr)
 					clientInfo.startReconnection(g, &broker)
 				})
 
 				// Store it at clientInfo level to retrieve the connection status later
-				connection.Store(c)
+				gossipConnection.Store(c)
 				return c, nil
 			},
 			// Use an eager health check setting at the cost of a few bytes/sec
 			ReadIdleTimeout: 200 * time.Millisecond,
 			PingTimeout:     400 * time.Millisecond,
+		},
+	}
+
+	clientInfo.routingClient = &http.Client{
+		Transport: &http2.Transport{
+			StrictMaxConcurrentStreams: true, // Do not create additional connections
+			AllowHTTP:                  true,
+			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+				// Pretend we are dialing a TLS endpoint
+				// When in-flight streams is below max, there's a single open connection
+				log.Debug().Msgf("Creating peer connection to %s for re-routing", addr)
+				conn, err := net.Dial(network, addr)
+				if err != nil {
+					return nil, err
+				}
+
+				log.Info().Msgf("Connected to peer %s on re-routing (gossip) port", addr)
+				c := types.NewTrackedConnection(conn, func(c *types.TrackedConnection) {
+					log.Warn().Msgf("Connection to peer %s on re-routing port closed", addr)
+				})
+				return c, nil
+			},
+			// A little less eager than gossip health checks
+			ReadIdleTimeout: 1 * time.Second,
+			PingTimeout:     2 * time.Second,
 		},
 	}
 
@@ -123,12 +152,13 @@ func (g *gossiper) getClientInfo(ordinal int) *clientInfo {
 }
 
 type clientInfo struct {
-	client         *http.Client
-	connection     *atomic.Value
-	dataConn       *atomic.Value
-	dataMessages   chan *dataRequest
-	hostName       string
-	isReconnecting int32
+	gossipClient     *http.Client  // HTTP/2 client for gossip messages
+	routingClient    *http.Client  // HTTP/2 client for re-routing events to the natural leader
+	gossipConnection *atomic.Value // Tracked connection to determine gossip state
+	dataConn         *atomic.Value // Client data connection
+	dataMessages     chan *dataRequest
+	hostName         string
+	isReconnecting   int32
 }
 
 func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
@@ -158,7 +188,7 @@ func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 
 // isHostUp determines whether a host is considered UP
 func (cli *clientInfo) isHostUp() bool {
-	c, ok := cli.connection.Load().(*types.TrackedConnection)
+	c, ok := cli.gossipConnection.Load().(*types.TrackedConnection)
 	return ok && c.IsOpen()
 }
 
@@ -180,8 +210,8 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
 			} else {
 				i++
 			}
-			// TODO: Add jitter
-			time.Sleep(time.Duration(delay) * time.Millisecond)
+
+			time.Sleep(utils.Jitter(time.Duration(delay) * time.Millisecond))
 
 			if c := g.getClientInfo(broker.Ordinal); c == nil || c.hostName != broker.HostName {
 				// Topology changed, stop reconnecting
@@ -190,7 +220,7 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
 
 			log.Debug().Msgf("Attempting to reconnect to %s after %v ms", broker, delay)
 
-			response, err := c.client.Get(g.getPeerUrl(broker, conf.StatusUrl))
+			response, err := c.gossipClient.Get(g.getPeerUrl(broker, conf.StatusUrl))
 			if err == nil && response.StatusCode == http.StatusOK {
 				// Succeeded
 				break

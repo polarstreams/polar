@@ -48,6 +48,10 @@ func (g *gossiper) acceptDataConnections() error {
 }
 
 func (g *gossiper) handleData(conn net.Conn) {
+	if tcpConn, isTcp := conn.(*net.TCPConn); isTcp {
+		tcpConn.SetNoDelay(false)
+	}
+
 	s := &peerDataServer{
 		conn:           conn,
 		config:         g.config,
@@ -108,8 +112,8 @@ func (s *peerDataServer) serve() {
 			break
 		}
 
-		if header.Op != dataOp {
-			s.responses <- newErrorResponse("Only data operations are supported", header)
+		if header.Op != dataReplicationOp {
+			s.responses <- newErrorResponse("Only data replication operations are supported", header)
 			break
 		}
 
@@ -151,7 +155,7 @@ func (s *peerDataServer) append(d *dataRequest, requestHeader *header) dataRespo
 		return newErrorResponse(fmt.Sprintf("Append error: %s", err.Error()), requestHeader)
 	}
 
-	return &emptyResponse{streamId: requestHeader.StreamId, op: dataResponseOp}
+	return &emptyResponse{streamId: requestHeader.StreamId, op: dataReplicationResponseOp}
 }
 
 func (s *peerDataServer) segmentWriter(d *dataRequest) (*data.SegmentWriter, error) {
@@ -175,7 +179,6 @@ func getReplicaWriterKey(topic *types.TopicDataId) string {
 
 func (s *peerDataServer) writeResponses() {
 	// TODO: Coalesce responses and disable Nagle
-
 	w := utils.NewBufferCap(maxDataResponseSize)
 	for response := range s.responses {
 		w.Reset()

@@ -2,9 +2,11 @@ package producing
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
-	"strings"
+	"net/url"
+	"strconv"
+	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/data"
@@ -55,6 +57,8 @@ type producer struct {
 }
 
 func (p *producer) Init() error {
+	// Listen to rerouted messages from other peers
+	p.gossiper.RegisterReroutedMessageListener(p)
 	return nil
 }
 
@@ -63,7 +67,7 @@ func (p *producer) AcceptConnections() error {
 	address := utils.GetServiceAddress(port, p.leaderGetter.LocalInfo(), p.config)
 	router := httprouter.New()
 
-	router.POST(conf.TopicMessageUrl, utils.ToHandle(p.postMessage))
+	router.POST(conf.TopicMessageUrl, utils.ToPostHandle(p.postMessage))
 	router.GET(conf.StatusUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		fmt.Fprintf(w, "Producer server listening on %d\n", port)
 	})
@@ -93,20 +97,29 @@ func (p *producer) AcceptConnections() error {
 	return nil
 }
 
+func (p *producer) OnReroutedMessage(topic string, querystring url.Values, contentLength int64, body io.ReadCloser) error {
+	return p.handleMessage(topic, querystring, contentLength, body)
+}
+
 func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
-	var topic = strings.TrimSpace(ps.ByName("topic"))
+	return p.handleMessage(ps.ByName("topic"), r.URL.Query(), r.ContentLength, r.Body)
+}
+
+// Produces or re-routes the message request
+func (p *producer) handleMessage(topic string, querystring url.Values, contentLength int64, body io.ReadCloser) error {
 	if topic == "" || !p.topicGetter.Exists(topic) {
 		return types.NewHttpError(http.StatusBadRequest, "Invalid topic")
 	}
 
-	if r.ContentLength <= 0 || r.ContentLength > int64(p.config.MaxMessageSize()) {
+	if contentLength <= 0 || contentLength > int64(p.config.MaxMessageSize()) {
+		log.Debug().Msgf("Invalid content length (%d) when handling message", contentLength)
 		return types.NewHttpErrorf(
 			http.StatusBadRequest,
 			"Content length must be defined (HTTP/1.1 chunked not supported), greater than 0 and less than %d bytes",
 			p.config.MaxMessageSize())
 	}
 
-	partitionKey := r.URL.Query().Get("partitionKey")
+	partitionKey := querystring.Get("partitionKey")
 	replicationInfo := p.leaderGetter.Leader(partitionKey)
 	leader := replicationInfo.Leader
 
@@ -114,31 +127,29 @@ func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httpro
 		return fmt.Errorf("Leader was not found")
 	}
 
-	p.config.FlowController().Allocate(int(r.ContentLength))
-	defer p.config.FlowController().Free(int(r.ContentLength))
+	p.config.FlowController().Allocate(int(contentLength))
+	defer p.config.FlowController().Free(int(contentLength))
 
 	if !leader.IsSelf {
-		// TODO: Define whether ReadAll is needed
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			return err
-		}
-
-		// Route the message as is
-		if err := p.gossiper.SendToLeader(replicationInfo, topic, body); err != nil {
-			return err
-		}
+		// Route the message as-is
+		return p.gossiper.SendToLeader(replicationInfo, topic, querystring, contentLength, body)
 	}
 
 	coalescer, err := p.getCoalescer(topic, replicationInfo.Token)
 	if err != nil {
 		return err
 	}
-	if err := coalescer.append(replicationInfo, uint32(r.ContentLength), r.Body); err != nil {
-		return err
+
+	timestampMicros := time.Now().UnixMicro()
+	if timestamp := querystring.Get("timestamp"); timestamp != "" {
+		if n, err := strconv.ParseInt(timestamp, 10, 64); err != nil {
+			timestampMicros = n
+		}
 	}
 
-	fmt.Fprintf(w, "OK")
+	if err := coalescer.append(replicationInfo, uint32(contentLength), timestampMicros, body); err != nil {
+		return err
+	}
 	return nil
 }
 

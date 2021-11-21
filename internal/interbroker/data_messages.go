@@ -14,12 +14,14 @@ import (
 type opcode uint8
 type streamId uint16
 
+// Operation codes.
+// Use fixed numbers (not iota) to make it harder to break the protocol by moving stuff around.
 const (
-	startupOp opcode = iota
-	readyOp
-	errorOp
-	dataOp
-	dataResponseOp
+	startupOp                 opcode = 1
+	readyOp                   opcode = 2
+	errorOp                   opcode = 3
+	dataReplicationOp         opcode = 4
+	dataReplicationResponseOp opcode = 5
 )
 
 // header is the interbroker message header

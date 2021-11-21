@@ -139,7 +139,7 @@ func (c *dataConnection) readDataResponses(conn net.Conn, config conf.GossipConf
 
 func (c *dataConnection) writeDataRequests(conn net.Conn, config conf.GossipConfig, closeHandler func(string)) {
 	w := utils.NewBufferCap(config.MaxDataBodyLength() + headerSize + dataRequestMetaSize + conf.MaxTopicLength)
-	header := header{Version: 1, Op: dataOp}
+	header := header{Version: 1, Op: dataReplicationOp}
 
 	for message := range c.cli.dataMessages {
 		w.Reset()

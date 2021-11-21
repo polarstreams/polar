@@ -79,7 +79,7 @@ func (c *consumer) AcceptConnections() error {
 				break
 			}
 
-			log.Debug().Msgf("Accepted new consumer http connection on %v", conn.LocalAddr())
+			log.Debug().Msgf("Accepted new consumer http connection on %s", conn.LocalAddr().String())
 
 			router := httprouter.New()
 			router.GET(conf.StatusUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -87,6 +87,7 @@ func (c *consumer) AcceptConnections() error {
 			})
 
 			trackedConn := NewTrackedConnection(conn, func(trackedConn *TrackedConnection) {
+				log.Info().Msgf("Connection from consumer client %s closed", trackedConn.LocalAddr().String())
 				c.unRegister(trackedConn)
 			})
 
@@ -166,10 +167,14 @@ func (c *consumer) postPoll(
 		}
 	}
 
-	if len(tokens) == 0 {
-		_, _ = w.Write([]byte("NO TOKENS"))
+	if len(ownedTokens) == 0 {
+		_, _ = w.Write([]byte("NO OWNED TOKENS"))
 		return nil
 	}
+
+	// TODO: Check can consume from local token data
+	// When there's an split token range, it should check with previous broker
+	// To see whether it can serve to this consumer group (e.g. B3 should check with B0 about T3 for consumer group X)
 
 	for _, topic := range topics {
 		for _, token := range tokens {

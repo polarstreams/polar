@@ -3,10 +3,15 @@
 package mocks
 
 import (
+	io "io"
+
 	interbroker "github.com/jorgebay/soda/internal/interbroker"
+
 	mock "github.com/stretchr/testify/mock"
 
 	types "github.com/jorgebay/soda/internal/types"
+
+	url "net/url"
 
 	uuid "github.com/google/uuid"
 )
@@ -124,6 +129,11 @@ func (_m *Gossiper) RegisterGenListener(listener interbroker.GenListener) {
 	_m.Called(listener)
 }
 
+// RegisterReroutedMessageListener provides a mock function with given fields: listener
+func (_m *Gossiper) RegisterReroutedMessageListener(listener interbroker.ReroutingListener) {
+	_m.Called(listener)
+}
+
 // SendConsumerGroups provides a mock function with given fields: ordinal, groups
 func (_m *Gossiper) SendConsumerGroups(ordinal int, groups []types.ConsumerGroup) error {
 	ret := _m.Called(ordinal, groups)
@@ -152,13 +162,13 @@ func (_m *Gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic
 	return r0
 }
 
-// SendToLeader provides a mock function with given fields: replicationInfo, topic, body
-func (_m *Gossiper) SendToLeader(replicationInfo types.ReplicationInfo, topic string, body []byte) error {
-	ret := _m.Called(replicationInfo, topic, body)
+// SendToLeader provides a mock function with given fields: replicationInfo, topic, querystring, contentLength, body
+func (_m *Gossiper) SendToLeader(replicationInfo types.ReplicationInfo, topic string, querystring url.Values, contentLength int64, body io.Reader) error {
+	ret := _m.Called(replicationInfo, topic, querystring, contentLength, body)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(types.ReplicationInfo, string, []byte) error); ok {
-		r0 = rf(replicationInfo, topic, body)
+	if rf, ok := ret.Get(0).(func(types.ReplicationInfo, string, url.Values, int64, io.Reader) error); ok {
+		r0 = rf(replicationInfo, topic, querystring, contentLength, body)
 	} else {
 		r0 = ret.Error(0)
 	}

@@ -72,7 +72,7 @@ var _ = Describe("SendToFollowers()", func() {
 		}()
 
 		request := <-clients[2].dataMessages
-		request.response <- &emptyResponse{op: dataResponseOp}
+		request.response <- &emptyResponse{op: dataReplicationResponseOp}
 
 		var err error
 		select {

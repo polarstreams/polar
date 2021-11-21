@@ -26,6 +26,10 @@ const (
 	GossipTokenHasHistoryUrl    = "/v1/token/%s/has-history"
 	GossipTokenInRange          = "/v1/token/%s/in-range"
 	GossipConsumerGroupsInfoUrl = "/v1/consumer/groups-info" // Send/receive consumer groups info
+
+	// Routing Urls (using gossip http/2 interface)
+
+	RoutingMessageUrl = "/v1/routing/topic/%s/messages"
 )
 
 const MaxTopicLength = 255

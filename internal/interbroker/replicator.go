@@ -83,7 +83,7 @@ func (g *gossiper) SendToFollowers(
 			return err
 		}
 
-		if eResponse, ok := r.(*emptyResponse); ok && eResponse.op == dataResponseOp {
+		if eResponse, ok := r.(*emptyResponse); ok && eResponse.op == dataReplicationResponseOp {
 			return nil
 		} else {
 			if i < sent-1 {

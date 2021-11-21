@@ -29,6 +29,16 @@ var (
 		Help: "The total number of coalesced group messages received by the interbroker data server",
 	})
 
+	ReroutedSent = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "soda_producing_rerouting_sent_total",
+		Help: "The total number of re-routed messages sent by this broker",
+	}, []string{"target"})
+
+	ReroutedReceived = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "soda_producing_rerouting_received_total",
+		Help: "The total number of re-routed messages received by the broker",
+	})
+
 	SegmentFlushKib = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "soda_segment_flushed_kib",
 		Help:    "Number of Kibibytes flushed to disk",

@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -14,14 +17,17 @@ import (
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/localdb"
+	"github.com/jorgebay/soda/internal/metrics"
 	"github.com/jorgebay/soda/internal/types"
 	. "github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 )
 
 const waitForUpDelay = 200 * time.Millisecond
 const waitForUpMaxWait = 10 * time.Minute
+const contentType = "application/json"
 
 // TODO: Pass Context
 
@@ -38,13 +44,21 @@ type Gossiper interface {
 	OpenConnections() error
 
 	// Sends a message to be handled as a leader of a token
-	SendToLeader(replicationInfo ReplicationInfo, topic string, body []byte) error
+	SendToLeader(
+		replicationInfo ReplicationInfo,
+		topic string,
+		querystring url.Values,
+		contentLength int64,
+		body io.Reader) error
 
 	// Sends a message to the broker with the ordinal number containing the local snapshot of consumers
 	SendConsumerGroups(ordinal int, groups []ConsumerGroup) error
 
-	// Adds a listener
+	// Adds a listener for consumer information
 	RegisterConsumerInfoListener(listener ConsumerInfoListener)
+
+	// Adds a listener for rerouted messages
+	RegisterReroutedMessageListener(listener ReroutingListener)
 
 	// WaitForPeersUp blocks until all peers are UP
 	WaitForPeersUp()
@@ -82,6 +96,10 @@ type ConsumerInfoListener interface {
 	OnConsumerInfoFromPeer(ordinal int, groups []ConsumerGroup)
 }
 
+type ReroutingListener interface {
+	OnReroutedMessage(topic string, querystring url.Values, contentLength int64, body io.ReadCloser) error
+}
+
 type GenReadResult struct {
 	Committed *Generation
 	Proposed  *Generation
@@ -104,6 +122,7 @@ type gossiper struct {
 	localDb              localdb.Client
 	genListener          GenListener
 	consumerInfoListener ConsumerInfoListener
+	reroutingListener    ReroutingListener
 	connectionsMutex     sync.Mutex
 	// Map of connections
 	connections atomic.Value
@@ -150,14 +169,61 @@ func (g *gossiper) RegisterGenListener(listener GenListener) {
 }
 
 func (g *gossiper) RegisterConsumerInfoListener(listener ConsumerInfoListener) {
-	if g.genListener != nil {
+	if g.consumerInfoListener != nil {
 		panic("Listener registered multiple times")
 	}
 	g.consumerInfoListener = listener
 }
 
-func (g *gossiper) SendToLeader(replicationInfo ReplicationInfo, topic string, body []byte) error {
-	// TODO: Implement
+func (g *gossiper) RegisterReroutedMessageListener(listener ReroutingListener) {
+	if g.reroutingListener != nil {
+		panic("Listener registered multiple times")
+	}
+	g.reroutingListener = listener
+}
+
+func (g *gossiper) SendToLeader(
+	replicationInfo ReplicationInfo,
+	topic string,
+	querystring url.Values,
+	contentLength int64,
+	body io.Reader,
+) error {
+	c := g.getClientInfo(replicationInfo.Leader.Ordinal)
+	if c == nil {
+		msg := fmt.Sprintf("No routing client found for peer with ordinal %d as leader", replicationInfo.Leader.Ordinal)
+		log.Error().Msg(msg)
+		return fmt.Errorf(msg)
+	}
+
+	ordinal := replicationInfo.Leader.Ordinal
+	urlPath := fmt.Sprintf(conf.RoutingMessageUrl+"?%s", topic, querystring.Encode())
+	topology := g.discoverer.Topology()
+	broker := topology.BrokerByOrdinal(ordinal)
+
+	if broker == nil {
+		log.Debug().Msgf("Broker with ordinal %d not found", ordinal)
+		return fmt.Errorf("Broker with ordinal %d not found", ordinal)
+	}
+
+	metrics.ReroutedSent.With(prometheus.Labels{"target": strconv.Itoa(ordinal)}).Inc()
+	req, err := http.NewRequest(http.MethodPost, g.getPeerUrl(broker, urlPath), body)
+	if err != nil {
+		return err
+	}
+	req.ContentLength = contentLength
+	resp, err := c.routingClient.Do(req)
+
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return types.NewHttpError(resp.StatusCode, resp.Status)
+	}
+
 	return nil
 }
 
@@ -208,7 +274,7 @@ func (g *gossiper) requestGet(ordinal int, baseUrl string) (*http.Response, erro
 		return nil, fmt.Errorf("No broker %d obtained", ordinal)
 	}
 
-	resp, err := c.client.Get(g.getPeerUrl(&brokers[ordinal], baseUrl))
+	resp, err := c.gossipClient.Get(g.getPeerUrl(&brokers[ordinal], baseUrl))
 
 	if err == nil && resp.StatusCode != http.StatusOK {
 		return nil, errors.New(resp.Status)
@@ -223,12 +289,14 @@ func (g *gossiper) requestPost(ordinal int, baseUrl string, body []byte) (*http.
 		return nil, fmt.Errorf("No connection to broker %d", ordinal)
 	}
 
-	brokers := g.discoverer.Brokers()
-	if len(brokers) <= ordinal {
-		return nil, fmt.Errorf("No broker %d obtained", ordinal)
+	topology := g.discoverer.Topology()
+	broker := topology.BrokerByOrdinal(ordinal)
+
+	if broker == nil {
+		return nil, fmt.Errorf("Broker with ordinal %d not found", ordinal)
 	}
 
-	resp, err := c.client.Post(g.getPeerUrl(&brokers[ordinal], baseUrl), "application/json", bytes.NewReader(body))
+	resp, err := c.gossipClient.Post(g.getPeerUrl(broker, baseUrl), contentType, bytes.NewReader(body))
 
 	if err == nil && resp.StatusCode != http.StatusOK {
 		return nil, types.NewHttpError(resp.StatusCode, resp.Status)

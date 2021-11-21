@@ -78,18 +78,19 @@ func NewSegmentWriter(
 // writeLoopAsLeader appends to the local file and sends to replicas
 func (s *SegmentWriter) writeLoopAsLeader() {
 	for dataItem := range s.Items {
-		item, ok := dataItem.(LocalWriteItem)
-		if !ok {
-			log.Panic().Msgf("Invalid type for writing as a leader: %v", dataItem)
-		}
 
 		if s.maybeFlush() {
 			s.maybeCloseSegment()
 		}
 
-		if item == nil {
+		if dataItem == nil {
 			// It was only a signal to flush the segment, no data, move on
 			continue
+		}
+
+		item, ok := dataItem.(LocalWriteItem)
+		if !ok {
+			log.Panic().Msgf("Invalid type for writing as a leader: %v", dataItem)
 		}
 
 		s.writeToBuffer(item)
@@ -113,15 +114,16 @@ func (s *SegmentWriter) writeLoopAsLeader() {
 // writeLoopAsReplica appends to local file as replica
 func (s *SegmentWriter) writeLoopAsReplica() {
 	for dataItem := range s.Items {
+		s.maybeFlush()
+
+		if dataItem == nil {
+			// It was only a signal to flush the segment, no data, move on
+			continue
+		}
+
 		item, ok := dataItem.(ReplicationDataItem)
 		if !ok {
 			log.Panic().Msgf("Invalid type for writing as a replica: %v", dataItem)
-		}
-
-		s.maybeFlush()
-		if item == nil {
-			// It was only a signal to flush the segment, no data, move on
-			continue
 		}
 
 		if s.segmentId != item.SegmentId() {
@@ -157,7 +159,7 @@ func (s *SegmentWriter) maybeFlush() bool {
 
 	if s.segmentFile == nil {
 		// Create new file
-		name := fmt.Sprintf("%20d.dlog", s.segmentId)
+		name := fmt.Sprintf("%020d.dlog", s.segmentId)
 		f, err := os.OpenFile(filepath.Join(s.basePath, name), conf.WriteFlags, FilePermissions)
 		if err != nil {
 			// Can't create segment

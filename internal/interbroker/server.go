@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/metrics"
 	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/jorgebay/soda/internal/utils"
 	"github.com/julienschmidt/httprouter"
@@ -34,7 +35,7 @@ func (g *gossiper) AcceptConnections() error {
 
 func (g *gossiper) acceptHttpConnections() error {
 	server := &http2.Server{
-		MaxConcurrentStreams: 2048,
+		MaxConcurrentStreams: 16384,
 	}
 	port := g.config.GossipPort()
 	address := GetServiceAddress(port, g.discoverer.LocalInfo(), g.config)
@@ -66,8 +67,10 @@ func (g *gossiper) acceptHttpConnections() error {
 			router.POST(fmt.Sprintf(conf.GossipGenerationCommmitUrl, ":token"), ToPostHandle(g.postGenCommitHandler))
 			router.GET(fmt.Sprintf(conf.GossipTokenInRange, ":token"), ToHandle(g.getTokenInRangeHandler))
 			router.GET(fmt.Sprintf(conf.GossipTokenHasHistoryUrl, ":token"), ToHandle(g.getTokenHasHistoryUrl))
-
 			router.POST(conf.GossipConsumerGroupsInfoUrl, ToPostHandle(g.postConsumerGroupInfo))
+
+			// Routing message is part of gossip but it's usually made using a different client connection
+			router.POST(fmt.Sprintf(conf.RoutingMessageUrl, ":topic"), ToPostHandle(g.postReroutingHandler))
 
 			// server.ServeConn() will block until the connection is not readable anymore
 			// start it in the background
@@ -171,4 +174,10 @@ func (g *gossiper) postConsumerGroupInfo(w http.ResponseWriter, r *http.Request,
 	// Use the registered listener
 	g.consumerInfoListener.OnConsumerInfoFromPeer(message.Origin, message.Groups)
 	return nil
+}
+
+func (g *gossiper) postReroutingHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	metrics.ReroutedReceived.Inc()
+	topic := ps.ByName("topic")
+	return g.reroutingListener.OnReroutedMessage(topic, r.URL.Query(), r.ContentLength, r.Body)
 }

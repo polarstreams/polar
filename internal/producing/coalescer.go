@@ -94,7 +94,6 @@ func (c *coalescer) add(group []record, item *record, length *int64) ([]record, 
 	}
 	*length += itemLength
 	item.offset = c.offset
-	item.timestamp = time.Now().UnixMicro()
 	c.offset++
 	metrics.CoalescerMessagesProcessed.Inc()
 	group = append(group, *item)
@@ -191,10 +190,16 @@ func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (c *coalescer) append(replication types.ReplicationInfo, length uint32, body io.ReadCloser) error {
+func (c *coalescer) append(
+	replication types.ReplicationInfo,
+	length uint32,
+	timestampMicros int64,
+	body io.ReadCloser,
+) error {
 	record := &record{
 		replication: replication,
 		length:      length,
+		timestamp:   timestampMicros,
 		body:        body,
 		response:    make(chan error, 1),
 	}
