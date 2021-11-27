@@ -11,8 +11,8 @@ const NotFoundIndex BrokerIndex = -1
 
 // Represents a topic offset for a given token.
 type Offset struct {
-	Offset     uint64
-	GenVersion uint32
+	Offset  uint64
+	Version GenVersion
 }
 
 // BrokerInfo contains information about a broker
@@ -38,6 +38,7 @@ type ConsumerGroup struct {
 //
 // e.g. in a cluster composed of {0, 3, 1, 4, 2, 3}, the index of 3 is 1.
 type BrokerIndex int
+type GenVersion uint32
 
 func (b *BrokerInfo) String() string {
 	return fmt.Sprintf("%s (%d)", b.HostName, b.Ordinal)

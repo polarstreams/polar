@@ -41,15 +41,17 @@ func (g *gossiper) OpenConnections() error {
 			wg.Add(1)
 			c := g.createClient(peer)
 			m[peer.Ordinal] = c
-			p := peer
+
+			// Captured in closure
+			broker := peer
 			go func() {
 				defer wg.Done()
-				log.Debug().Msgf("Creating initial peer request to %s", p.HostName)
-				_, err := c.gossipClient.Get(g.getPeerUrl(&p, conf.StatusUrl))
+				log.Debug().Msgf("Creating initial peer request to %s", broker.HostName)
+				_, err := c.gossipClient.Get(g.getPeerUrl(&broker, conf.StatusUrl))
 
 				if err != nil {
 					// Reconnection will continue in the background as part of transport logic
-					log.Err(err).Msgf("Initial connection to http peer %s failed", p.HostName)
+					log.Err(err).Msgf("Initial connection to http peer %s failed", broker.HostName)
 				}
 			}()
 		}

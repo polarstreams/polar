@@ -45,7 +45,7 @@ func (c *ConsumerInfo) key() consumerKey {
 	return consumerKey(fmt.Sprintf("%s-%s", c.Group, c.Id))
 }
 
-// A topology and group metadata of the consumers
+// A topology and group metadata of the consumer instances.
 type ConsumersMeta struct {
 	topologyGetter discovery.TopologyGetter
 	removeDelay    time.Duration
