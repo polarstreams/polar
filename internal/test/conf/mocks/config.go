@@ -142,6 +142,20 @@ func (_m *Config) HomePath() string {
 	return r0
 }
 
+// IndexFilePeriodBytes provides a mock function with given fields:
+func (_m *Config) IndexFilePeriodBytes() int {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
 // ListenOnAllAddresses provides a mock function with given fields:
 func (_m *Config) ListenOnAllAddresses() bool {
 	ret := _m.Called()

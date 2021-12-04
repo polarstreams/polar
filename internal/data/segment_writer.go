@@ -25,16 +25,18 @@ var alignmentBuffer = createAlignmentBuffer()
 
 // SegmentWriter contains the logic to write a segment on disk and replicate it.
 type SegmentWriter struct {
-	Items         chan SegmentChunk
-	segmentId     int64
-	buffer        *bytes.Buffer
-	lastFlush     time.Time
-	config        conf.DatalogConfig
-	segmentFile   *os.File
-	segmentLength int
-	basePath      string
-	topic         TopicDataId
-	replicator    Replicator
+	Items          chan SegmentChunk
+	segmentId      int64
+	buffer         *bytes.Buffer
+	lastFlush      time.Time
+	bufferedOffset uint64
+	config         conf.DatalogConfig
+	segmentFile    *os.File
+	indexFile      *indexFileWriter
+	segmentLength  uint64
+	basePath       string
+	topic          TopicDataId
+	replicator     Replicator
 }
 
 func NewSegmentWriter(
@@ -45,6 +47,10 @@ func NewSegmentWriter(
 ) (*SegmentWriter, error) {
 	basePath := config.DatalogPath(topic.Name, topic.Token, fmt.Sprint(topic.GenId))
 
+	if err := os.MkdirAll(basePath, DirectoryPermissions); err != nil {
+		return nil, err
+	}
+
 	s := &SegmentWriter{
 		// Limit's to 1 outstanding write (the current one)
 		// The next group can be generated while the previous is being flushed and sent
@@ -52,14 +58,11 @@ func NewSegmentWriter(
 		buffer:      utils.NewBufferCap(segmentMaxBufferSize),
 		config:      config,
 		segmentFile: nil,
+		indexFile:   newIndexFileWriter(basePath, config),
 		basePath:    basePath,
 		topic:       topic,
 		replicator:  gossiper,
 		segmentId:   segmentId,
-	}
-
-	if err := os.MkdirAll(basePath, DirectoryPermissions); err != nil {
-		return nil, err
 	}
 
 	if segmentId == 0 {
@@ -113,6 +116,7 @@ func (s *SegmentWriter) writeLoopAsLeader() {
 
 // writeLoopAsReplica appends to local file as replica
 func (s *SegmentWriter) writeLoopAsReplica() {
+
 	for dataItem := range s.Items {
 		s.maybeFlush()
 
@@ -186,7 +190,7 @@ func (s *SegmentWriter) flush(reason string) {
 		Str("reason", reason).
 		Msgf("Flushing segment file %d for topic '%s' and token %d", s.segmentId, s.topic.Name, s.topic.Token)
 
-	length := s.buffer.Len()
+	length := uint64(s.buffer.Len())
 
 	// Sync copy the buffer to the file
 	if _, err := s.segmentFile.Write(s.buffer.Bytes()); err != nil {
@@ -195,6 +199,7 @@ func (s *SegmentWriter) flush(reason string) {
 		panic(err)
 	}
 
+	s.indexFile.append(uint64(s.segmentId), s.bufferedOffset, s.segmentLength)
 	s.segmentLength += length
 	s.buffer.Reset()
 	s.lastFlush = time.Now()
@@ -203,7 +208,7 @@ func (s *SegmentWriter) flush(reason string) {
 
 // maybeCloseSegment determines whether the segment file should be closed.
 func (s *SegmentWriter) maybeCloseSegment() {
-	if s.segmentLength+segmentMaxBufferSize > s.config.MaxSegmentSize() {
+	if s.segmentLength+uint64(segmentMaxBufferSize) > uint64(s.config.MaxSegmentSize()) {
 		s.closeFile(time.Now().UnixNano())
 	}
 }
@@ -231,6 +236,7 @@ func (s *SegmentWriter) writeToBuffer(item SegmentChunk) {
 	if s.lastFlush.IsZero() || s.buffer.Len() == 0 {
 		// When the buffer was previously empty, we should reset the flush check logic
 		s.lastFlush = time.Now()
+		s.bufferedOffset = item.StartOffset()
 	}
 	headStartIndex := s.buffer.Len()
 	compressedBody := item.DataBlock()

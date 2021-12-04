@@ -35,6 +35,14 @@ type ReadItem interface {
 	SetResult(error, SegmentChunk)
 }
 
+// Represents a queued message to write to the index file.
+type indexFileItem struct {
+	segmentId  uint64
+	offset     uint64 // The message offset
+	fileOffset uint64
+	toClose    bool
+}
+
 type ReadSegmentChunk struct {
 	buffer []byte
 	start  uint64

@@ -47,8 +47,9 @@ type DatalogConfig interface {
 	DatalogPath(topic string, token types.Token, genId string) string
 	MaxSegmentSize() int
 	MaxMessageSize() int
-	MaxGroupSize() int  // MaxGroupSize is the maximum size of an uncompressed group of messages
-	ReadAheadSize() int // The amount of bytes to read each time from a segment file
+	MaxGroupSize() int         // MaxGroupSize is the maximum size of an uncompressed group of messages
+	ReadAheadSize() int        // The amount of bytes to read each time from a segment file
+	IndexFilePeriodBytes() int // How frequently write to the index file based on the segment size.
 }
 
 type DiscovererConfig interface {
@@ -149,6 +150,10 @@ func (c *config) MaxGroupSize() int {
 
 func (c *config) ReadAheadSize() int {
 	return c.MaxGroupSize() * 10
+}
+
+func (c *config) IndexFilePeriodBytes() int {
+	return int(0.05 * float64(c.MaxSegmentSize()))
 }
 
 func (c *config) MaxSegmentSize() int {
