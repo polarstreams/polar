@@ -163,7 +163,7 @@ func (s *peerDataServer) segmentWriter(d *dataRequest) (*data.SegmentWriter, err
 	segmentId := d.meta.SegmentId
 	key := getReplicaWriterKey(&topic)
 	writer, _, err := s.replicaWriters.LoadOrStore(key, func() (interface{}, error) {
-		return data.NewSegmentWriter(topic, nil, s.config, segmentId)
+		return data.NewSegmentWriter(topic, nil, s.config, &segmentId)
 	})
 
 	if err != nil {

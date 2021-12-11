@@ -81,6 +81,8 @@ func (w *indexFileWriter) writeLoop() {
 	}
 }
 
+// When conditions apply, it adds a line to the index file mapping file offset with message offset
+// in the background.
 func (w *indexFileWriter) append(segmentId uint64, offset uint64, fileOffset uint64) {
 	w.items <- indexFileItem{
 		segmentId:  segmentId,
@@ -89,6 +91,10 @@ func (w *indexFileWriter) append(segmentId uint64, offset uint64, fileOffset uin
 	}
 }
 
+// Closes the current file in the background
 func (w *indexFileWriter) closeFile(segmentId uint64) {
-	//TODO: Implement and call
+	w.items <- indexFileItem{
+		segmentId: segmentId,
+		toClose:   true,
+	}
 }

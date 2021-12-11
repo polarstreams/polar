@@ -15,7 +15,7 @@ type LocalWriteItem interface {
 
 type ReplicationDataItem interface {
 	SegmentChunk
-	SegmentId() int64
+	SegmentId() uint64
 	SetResult(error)
 }
 

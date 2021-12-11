@@ -66,7 +66,9 @@ func newCoalescer(
 	config conf.ProducerConfig,
 	replicator types.Replicator,
 ) (*coalescer, error) {
-	s, err := data.NewSegmentWriter(topic, replicator, config, 0)
+	// Start from offset 0 for this generation
+	offset := uint64(0)
+	s, err := data.NewSegmentWriter(topic, replicator, config, &offset)
 
 	if err != nil {
 		return nil, err
@@ -77,12 +79,12 @@ func newCoalescer(
 		topic:      topic,
 		config:     config,
 		replicator: replicator,
-		offset:     0, // TODO: Set the initial offset
+		offset:     offset,
 		buffers:    newBuffers(config),
 		segment:    s,
 	}
-	// Start receiving in the background
-	go c.receive()
+	// Start processing in the background
+	go c.process()
 	return c, nil
 }
 
@@ -100,7 +102,7 @@ func (c *coalescer) add(group []record, item *record, length *int64) ([]record, 
 	return group, nil
 }
 
-func (c *coalescer) receive() {
+func (c *coalescer) process() {
 	var item *record = nil
 	var index uint8
 	for {

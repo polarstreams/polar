@@ -41,7 +41,7 @@ const headerSize = 1 + // version
 
 type dataRequestMeta struct {
 	// Strict ordering, exported fields
-	SegmentId    int64
+	SegmentId    uint64
 	Token        types.Token
 	GenId        uint32
 	StartOffset  uint64
@@ -68,7 +68,7 @@ func (r *dataRequest) DataBlock() []byte {
 	return r.data
 }
 
-func (r *dataRequest) SegmentId() int64 {
+func (r *dataRequest) SegmentId() uint64 {
 	return r.meta.SegmentId
 }
 

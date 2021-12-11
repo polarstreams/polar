@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
+	"math"
 	"os"
 	"path/filepath"
 	"time"
@@ -18,18 +19,17 @@ import (
 
 const flushResolution = 200 * time.Millisecond
 const flushInterval = 5 * time.Second
-const segmentMaxBufferSize = 32 * conf.Mib
 const alignmentSize = 512
 
 var alignmentBuffer = createAlignmentBuffer()
 
-// SegmentWriter contains the logic to write a segment on disk and replicate it.
+// SegmentWriter contains the logic to write segments on disk and replicate them.
 type SegmentWriter struct {
 	Items          chan SegmentChunk
-	segmentId      int64
+	segmentId      uint64
 	buffer         *bytes.Buffer
 	lastFlush      time.Time
-	bufferedOffset uint64
+	bufferedOffset uint64 // Stores the offset of the first message buffered since it was buffered
 	config         conf.DatalogConfig
 	segmentFile    *os.File
 	indexFile      *indexFileWriter
@@ -43,7 +43,7 @@ func NewSegmentWriter(
 	topic TopicDataId,
 	gossiper Replicator,
 	config conf.DatalogConfig,
-	segmentId int64,
+	segmentId *uint64,
 ) (*SegmentWriter, error) {
 	basePath := config.DatalogPath(topic.Name, topic.Token, fmt.Sprint(topic.GenId))
 
@@ -55,22 +55,23 @@ func NewSegmentWriter(
 		// Limit's to 1 outstanding write (the current one)
 		// The next group can be generated while the previous is being flushed and sent
 		Items:       make(chan SegmentChunk, 0),
-		buffer:      utils.NewBufferCap(segmentMaxBufferSize),
+		buffer:      utils.NewBufferCap(config.SegmentBufferSize()),
 		config:      config,
 		segmentFile: nil,
 		indexFile:   newIndexFileWriter(basePath, config),
 		basePath:    basePath,
 		topic:       topic,
 		replicator:  gossiper,
-		segmentId:   segmentId,
 	}
 
-	if segmentId == 0 {
+	if segmentId == nil {
 		log.Debug().Msgf("Creating segment writer for token %d and topic '%s' as leader", topic.Token, topic.Name)
-		s.segmentId = time.Now().UnixNano()
+		// Start with a file at offset 0
+		s.createFile(0)
 		go s.writeLoopAsLeader()
 	} else {
 		log.Debug().Msgf("Creating segment writer for token %d and topic '%s' as replica", topic.Token, topic.Name)
+		s.createFile(*segmentId)
 		go s.writeLoopAsReplica()
 	}
 
@@ -80,8 +81,8 @@ func NewSegmentWriter(
 
 // writeLoopAsLeader appends to the local file and sends to replicas
 func (s *SegmentWriter) writeLoopAsLeader() {
-	for dataItem := range s.Items {
 
+	for dataItem := range s.Items {
 		if s.maybeFlush() {
 			s.maybeCloseSegment()
 		}
@@ -134,7 +135,7 @@ func (s *SegmentWriter) writeLoopAsReplica() {
 			if s.buffer.Len() > 0 {
 				s.flush("closing")
 			}
-			s.closeFile(item.SegmentId())
+			s.closeFile()
 		}
 
 		s.writeToBuffer(item)
@@ -154,23 +155,11 @@ func (s *SegmentWriter) maybeFlush() bool {
 		return false
 	}
 
-	canBufferNextGroup := s.buffer.Len()+s.config.MaxGroupSize() < segmentMaxBufferSize
+	canBufferNextGroup := s.buffer.Len()+s.config.MaxGroupSize() < s.config.SegmentBufferSize()
 	if canBufferNextGroup && time.Now().Sub(s.lastFlush) < flushInterval {
 		// Time has not passed and there's enough capacity
 		// in the buffer for the next group
 		return false
-	}
-
-	if s.segmentFile == nil {
-		// Create new file
-		name := fmt.Sprintf("%020d.dlog", s.segmentId)
-		f, err := os.OpenFile(filepath.Join(s.basePath, name), conf.WriteFlags, FilePermissions)
-		if err != nil {
-			// Can't create segment
-			log.Err(err).Msgf("Failed to create segment file at %s", s.basePath)
-			panic(err)
-		}
-		s.segmentFile = f
 	}
 
 	reason := "timer"
@@ -183,14 +172,31 @@ func (s *SegmentWriter) maybeFlush() bool {
 	return true
 }
 
+func (s *SegmentWriter) createFile(segmentId uint64) {
+	s.segmentId = segmentId
+	name := fmt.Sprintf("%020d.dlog", s.segmentId)
+	log.Debug().Msgf("Creating segment file %s on %s", name, s.basePath)
+
+	f, err := os.OpenFile(filepath.Join(s.basePath, name), conf.WriteFlags, FilePermissions)
+	if err != nil {
+		// Can't create segment
+		log.Err(err).Msgf("Failed to create segment file at %s", s.basePath)
+		panic(err)
+	}
+	s.segmentFile = f
+}
+
 func (s *SegmentWriter) flush(reason string) {
 	s.alignBuffer()
+	length := uint64(s.buffer.Len())
+
+	if s.segmentFile == nil {
+		s.createFile(s.bufferedOffset)
+	}
 
 	log.Debug().
 		Str("reason", reason).
-		Msgf("Flushing segment file %d for topic '%s' and token %d", s.segmentId, s.topic.Name, s.topic.Token)
-
-	length := uint64(s.buffer.Len())
+		Msgf("Flushing segment file %d on %s", s.segmentId, s.basePath)
 
 	// Sync copy the buffer to the file
 	if _, err := s.segmentFile.Write(s.buffer.Bytes()); err != nil {
@@ -199,7 +205,7 @@ func (s *SegmentWriter) flush(reason string) {
 		panic(err)
 	}
 
-	s.indexFile.append(uint64(s.segmentId), s.bufferedOffset, s.segmentLength)
+	s.indexFile.append(s.segmentId, s.bufferedOffset, s.segmentLength)
 	s.segmentLength += length
 	s.buffer.Reset()
 	s.lastFlush = time.Now()
@@ -208,27 +214,24 @@ func (s *SegmentWriter) flush(reason string) {
 
 // maybeCloseSegment determines whether the segment file should be closed.
 func (s *SegmentWriter) maybeCloseSegment() {
-	if s.segmentLength+uint64(segmentMaxBufferSize) > uint64(s.config.MaxSegmentSize()) {
-		s.closeFile(time.Now().UnixNano())
+	if s.segmentLength+uint64(s.config.SegmentBufferSize()) > uint64(s.config.MaxSegmentSize()) {
+		s.closeFile()
 	}
 }
 
-func (s *SegmentWriter) closeFile(newSegmentId int64) {
+func (s *SegmentWriter) closeFile() {
 	previousSegmentId := s.segmentId
 	previousFile := s.segmentFile
-	log.Debug().
-		Msgf("Closing segment file %d for topic '%s' and token %d", previousSegmentId, s.topic.Name, s.topic.Token)
+	log.Debug().Msgf("Closing segment file %d on %s", previousSegmentId, s.basePath)
 
 	// Close the file in the background
 	go func() {
-		log.
-			Err(previousFile.Close()).
-			Msgf("Segment file %d closed for topic '%s' and token %d",
-				previousSegmentId, s.topic.Name, s.topic.Token)
+		log.Err(previousFile.Close()).Msgf("Segment file %d closed on %s", previousSegmentId, s.basePath)
 	}()
 
+	s.indexFile.closeFile(previousSegmentId)
 	s.segmentFile = nil
-	s.segmentId = newSegmentId
+	s.segmentId = math.MaxUint64
 	s.segmentLength = 0
 }
 
@@ -275,7 +278,7 @@ func (s *SegmentWriter) alignBuffer() {
 
 func (s *SegmentWriter) send(
 	item LocalWriteItem,
-	segmentId int64,
+	segmentId uint64,
 	response chan error,
 ) {
 	err := s.replicator.SendToFollowers(

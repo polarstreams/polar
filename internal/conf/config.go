@@ -46,6 +46,7 @@ type LocalDbConfig interface {
 type DatalogConfig interface {
 	DatalogPath(topic string, token types.Token, genId string) string
 	MaxSegmentSize() int
+	SegmentBufferSize() int // The amount of bytes that the segment buffer can hold
 	MaxMessageSize() int
 	MaxGroupSize() int         // MaxGroupSize is the maximum size of an uncompressed group of messages
 	ReadAheadSize() int        // The amount of bytes to read each time from a segment file
@@ -158,6 +159,10 @@ func (c *config) IndexFilePeriodBytes() int {
 
 func (c *config) MaxSegmentSize() int {
 	return 1024 * Mib
+}
+
+func (c *config) SegmentBufferSize() int {
+	return 32 * Mib
 }
 
 func (c *config) MaxDataBodyLength() int {

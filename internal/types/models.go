@@ -198,7 +198,7 @@ type Replicator interface {
 	SendToFollowers(
 		replicationInfo ReplicationInfo,
 		topic TopicDataId,
-		segmentId int64,
+		segmentId uint64,
 		chunk SegmentChunk) error
 }
 

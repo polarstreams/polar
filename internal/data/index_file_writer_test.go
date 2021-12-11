@@ -41,6 +41,7 @@ var _ = Describe("indexFileWriter", func() {
 
 		segmentId := uint64(123)
 		w.append(segmentId, 0, 100)
+		assertStored(dir, segmentId, []indexOffset{}) // Nothing stored
 		w.append(segmentId, 150, 200)
 
 		expected := []indexOffset{{Offset: 150, FileOffset: 200}}
@@ -56,13 +57,50 @@ var _ = Describe("indexFileWriter", func() {
 
 		close(w.items)
 	})
+
+	It("should close the file and continue with the next", func() {
+		config := new(mocks.Config)
+		config.On("IndexFilePeriodBytes").Return(200)
+
+		dir, err := ioutil.TempDir("", "test_index_close")
+		Expect(err).NotTo(HaveOccurred())
+
+		w := &indexFileWriter{
+			items:    make(chan indexFileItem),
+			basePath: dir,
+			config:   config,
+		}
+
+		go w.writeLoop()
+
+		segmentId := uint64(123)
+		w.append(segmentId, 0, 100)
+		assertStored(dir, segmentId, []indexOffset{}) // Nothing stored
+		w.closeFile(segmentId)
+
+		// Noop
+		segmentId += 1
+		w.closeFile(segmentId)
+
+		segmentId += 1
+		w.append(segmentId, 352, 1001)
+		w.closeFile(segmentId)
+
+		assertStored(dir, segmentId, []indexOffset{{Offset: 352, FileOffset: 1001}})
+
+		close(w.items)
+	})
 })
 
 func assertStored(basePath string, segmentId uint64, values []indexOffset) {
 	expectedFileLength := utils.BinarySize(indexOffset{}) * len(values) // 8 + 8 + 4
 	var blob []byte
+	maxWaits := 100
+	if len(values) == 0 {
+		maxWaits = 10
+	}
 	// Wait for the data to be stored in the file
-	for i := 0; i < 30; i++ {
+	for i := 0; i < maxWaits; i++ {
 		time.Sleep(20)
 		name := fmt.Sprintf("%020d.index", segmentId)
 		b, err := os.ReadFile(filepath.Join(basePath, name))
