@@ -37,117 +37,117 @@ var _ = Describe("consumerBaseLength()", func() {
 	})
 })
 
-var _ = Describe("ConsumersMeta", func() {
+var _ = Describe("ConsumerState", func() {
 	Describe("Rebalance()", func() {
 		const brokerLength = 6
 
 		When("consumers of the same group have different topics", func() {
 			It("should merge topics", func() {
-				meta := newConsumerMeta(brokerLength)
-				id1 := addConnection(meta, "a", "g1", "tA")
-				id2 := addConnection(meta, "b", "g1", "tB")
-				id3 := addConnection(meta, "c", "g1", "tA", "tC")
+				state := newConsumerState(brokerLength)
+				id1 := addConnection(state, "a", "g1", "tA")
+				id2 := addConnection(state, "b", "g1", "tB")
+				id3 := addConnection(state, "c", "g1", "tA", "tC")
 
-				meta.Rebalance()
+				state.Rebalance()
 				expectedTopics := []string{"tA", "tB", "tC"}
-				assertTopics(meta, expectedTopics, id1, id2, id3)
+				assertTopics(state, expectedTopics, id1, id2, id3)
 
-				_, tokens1, _ := meta.CanConsume(id1)
+				_, tokens1, _ := state.CanConsume(id1)
 				Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
-				_, tokens2, _ := meta.CanConsume(id2)
+				_, tokens2, _ := state.CanConsume(id2)
 				Expect(tokens2).To(Equal(getTokens(brokerLength, 2, 2)))
-				_, tokens3, _ := meta.CanConsume(id3)
+				_, tokens3, _ := state.CanConsume(id3)
 				Expect(tokens3).To(Equal(getTokens(brokerLength, 4, 2)))
 
-				Expect(meta.GetInfoForPeers()).To(HaveLen(1))
-				Expect(meta.GetInfoForPeers()[0].Name).To(Equal("g1"))
-				Expect(meta.GetInfoForPeers()[0].Topics).To(ConsistOf(expectedTopics))
-				Expect(meta.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "b", "c"))
+				Expect(state.GetInfoForPeers()).To(HaveLen(1))
+				Expect(state.GetInfoForPeers()[0].Name).To(Equal("g1"))
+				Expect(state.GetInfoForPeers()[0].Topics).To(ConsistOf(expectedTopics))
+				Expect(state.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "b", "c"))
 			})
 		})
 
 		When("multiple connections have the same id", func() {
 			It("should merge the consumer info", func() {
-				meta := newConsumerMeta(brokerLength)
-				id1a := addConnection(meta, "a", "g1", "topic1")
-				id1b := addConnection(meta, "a", "g1", "topic1")
-				id2 := addConnection(meta, "b", "g1", "topic1")
-				id3 := addConnection(meta, "c", "g1", "topic1")
+				state := newConsumerState(brokerLength)
+				id1a := addConnection(state, "a", "g1", "topic1")
+				id1b := addConnection(state, "a", "g1", "topic1")
+				id2 := addConnection(state, "b", "g1", "topic1")
+				id3 := addConnection(state, "c", "g1", "topic1")
 
-				meta.Rebalance()
-				assertTopics(meta, []string{"topic1"}, id1a, id1b, id2, id3)
+				state.Rebalance()
+				assertTopics(state, []string{"topic1"}, id1a, id1b, id2, id3)
 
-				_, tokens1, _ := meta.CanConsume(id1a)
+				_, tokens1, _ := state.CanConsume(id1a)
 				Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
-				_, tokens2, _ := meta.CanConsume(id2)
+				_, tokens2, _ := state.CanConsume(id2)
 				Expect(tokens2).To(Equal(getTokens(brokerLength, 2, 2)))
-				_, tokens3, _ := meta.CanConsume(id3)
+				_, tokens3, _ := state.CanConsume(id3)
 				Expect(tokens3).To(Equal(getTokens(brokerLength, 4, 2)))
 
-				Expect(meta.GetInfoForPeers()).To(HaveLen(1))
-				Expect(meta.GetInfoForPeers()[0].Name).To(Equal("g1"))
-				Expect(meta.GetInfoForPeers()[0].Topics).To(ConsistOf("topic1"))
-				Expect(meta.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "b", "c"))
+				Expect(state.GetInfoForPeers()).To(HaveLen(1))
+				Expect(state.GetInfoForPeers()[0].Name).To(Equal("g1"))
+				Expect(state.GetInfoForPeers()[0].Topics).To(ConsistOf("topic1"))
+				Expect(state.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "b", "c"))
 			})
 		})
 
 		When("all connections to a consumer are removed", func() {
 			When("before the remove delay", func() {
 				It("should still include it", func() {
-					meta := newConsumerMeta(brokerLength)
-					id1 := addConnection(meta, "a", "g1", "topic1")
-					id2 := addConnection(meta, "b", "g1", "topic1")
-					id3 := addConnection(meta, "c", "g1", "topic1")
+					state := newConsumerState(brokerLength)
+					id1 := addConnection(state, "a", "g1", "topic1")
+					id2 := addConnection(state, "b", "g1", "topic1")
+					id3 := addConnection(state, "c", "g1", "topic1")
 
 					// Remove b
-					meta.RemoveConnection(id2)
+					state.RemoveConnection(id2)
 
-					meta.Rebalance()
+					state.Rebalance()
 
-					_, tokens1, _ := meta.CanConsume(id1)
+					_, tokens1, _ := state.CanConsume(id1)
 					Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
-					_, tokens2, _ := meta.CanConsume(id2)
+					_, tokens2, _ := state.CanConsume(id2)
 					// The id does not map to any tokens
 					Expect(tokens2).To(HaveLen(0))
-					_, tokens3, _ := meta.CanConsume(id3)
+					_, tokens3, _ := state.CanConsume(id3)
 					Expect(tokens3).To(Equal(getTokens(brokerLength, 4, 2)))
 
-					Expect(meta.GetInfoForPeers()).To(HaveLen(1))
-					Expect(meta.GetInfoForPeers()[0].Name).To(Equal("g1"))
-					Expect(meta.GetInfoForPeers()[0].Topics).To(ConsistOf("topic1"))
+					Expect(state.GetInfoForPeers()).To(HaveLen(1))
+					Expect(state.GetInfoForPeers()[0].Name).To(Equal("g1"))
+					Expect(state.GetInfoForPeers()[0].Topics).To(ConsistOf("topic1"))
 					// b should still be there
-					Expect(meta.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "b", "c"))
+					Expect(state.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "b", "c"))
 				})
 			})
 
 			When("after the remove delay", func() {
 				It("should not include it", func() {
-					meta := newConsumerMeta(brokerLength)
-					meta.removeDelay = 2 * time.Millisecond
-					id1 := addConnection(meta, "a", "g1", "topic1")
-					id2 := addConnection(meta, "b", "g1", "topic1")
-					id3 := addConnection(meta, "c", "g1", "topic1")
+					state := newConsumerState(brokerLength)
+					state.removeDelay = 2 * time.Millisecond
+					id1 := addConnection(state, "a", "g1", "topic1")
+					id2 := addConnection(state, "b", "g1", "topic1")
+					id3 := addConnection(state, "c", "g1", "topic1")
 
 					// Remove b
-					meta.RemoveConnection(id2)
+					state.RemoveConnection(id2)
 
 					time.Sleep(20 * time.Millisecond)
 
-					meta.Rebalance()
+					state.Rebalance()
 
-					_, tokens2, _ := meta.CanConsume(id2)
+					_, tokens2, _ := state.CanConsume(id2)
 					Expect(tokens2).To(HaveLen(0))
 
-					_, tokens1, _ := meta.CanConsume(id1)
+					_, tokens1, _ := state.CanConsume(id1)
 					Expect(tokens1).To(HaveLen(3))
-					_, tokens3, _ := meta.CanConsume(id3)
+					_, tokens3, _ := state.CanConsume(id3)
 					Expect(tokens3).To(HaveLen(3))
 
-					Expect(meta.GetInfoForPeers()).To(HaveLen(1))
-					Expect(meta.GetInfoForPeers()[0].Name).To(Equal("g1"))
+					Expect(state.GetInfoForPeers()).To(HaveLen(1))
+					Expect(state.GetInfoForPeers()[0].Name).To(Equal("g1"))
 					// b should be gone
-					Expect(meta.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "c"))
-					Expect(meta.GetInfoForPeers()[0].Topics).To(ConsistOf("topic1"))
+					Expect(state.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "c"))
+					Expect(state.GetInfoForPeers()[0].Topics).To(ConsistOf("topic1"))
 				})
 			})
 		})
@@ -277,12 +277,12 @@ var _ = Describe("setConsumerAssignment()", func() {
 	})
 })
 
-func newConsumerMeta(brokerLength int) *ConsumersMeta {
+func newConsumerState(brokerLength int) *ConsumerState {
 	topology := newTestTopology(brokerLength, 3)
 	discoverer := new(mocks.Discoverer)
 	discoverer.On("Topology").Return(&topology)
 
-	return NewConsumersMeta(discoverer)
+	return NewConsumerState(discoverer)
 }
 
 func newTestTopology(length int, ordinal int) TopologyInfo {
@@ -324,16 +324,16 @@ func getTokens(brokerLength int, index int, n int) []Token {
 	return result
 }
 
-func assertTopics(meta *ConsumersMeta, topics []string, consumerIds ...uuid.UUID) {
+func assertTopics(state *ConsumerState, topics []string, consumerIds ...uuid.UUID) {
 	for _, id := range consumerIds {
-		_, _, topics := meta.CanConsume(id)
+		_, _, topics := state.CanConsume(id)
 		Expect(topics).To(ConsistOf(topics))
 	}
 }
 
-func addConnection(meta *ConsumersMeta, consumerId string, group string, topics ...string) uuid.UUID {
+func addConnection(state *ConsumerState, consumerId string, group string, topics ...string) uuid.UUID {
 	id := uuid.New()
-	meta.AddConnection(id, ConsumerInfo{
+	state.AddConnection(id, ConsumerInfo{
 		Id:     consumerId,
 		Group:  group,
 		Topics: topics,

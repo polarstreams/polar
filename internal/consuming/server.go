@@ -39,7 +39,7 @@ func NewConsumer(
 		config:         config,
 		topologyGetter: topologyGetter,
 		gossiper:       gossiper,
-		meta:           NewConsumersMeta(topologyGetter),
+		meta:           NewConsumerState(topologyGetter),
 	}
 }
 
@@ -47,7 +47,7 @@ type consumer struct {
 	config         conf.ConsumerConfig
 	topologyGetter discovery.TopologyGetter
 	gossiper       interbroker.Gossiper
-	meta           *ConsumersMeta
+	meta           *ConsumerState
 }
 
 func (c *consumer) Init() error {
