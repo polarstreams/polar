@@ -66,9 +66,7 @@ func newCoalescer(
 	config conf.ProducerConfig,
 	replicator types.Replicator,
 ) (*coalescer, error) {
-	// Start from offset 0 for this generation
-	offset := uint64(0)
-	s, err := data.NewSegmentWriter(topic, replicator, config, &offset)
+	s, err := data.NewSegmentWriter(topic, replicator, config, nil)
 
 	if err != nil {
 		return nil, err
@@ -79,7 +77,7 @@ func newCoalescer(
 		topic:      topic,
 		config:     config,
 		replicator: replicator,
-		offset:     offset,
+		offset:     0,
 		buffers:    newBuffers(config),
 		segment:    s,
 	}

@@ -104,7 +104,7 @@ func (g *gossiper) getGenHandler(w http.ResponseWriter, r *http.Request, ps http
 		result[0] = *committed
 	}
 	if proposed != nil {
-		result[1] = *committed
+		result[1] = *proposed
 	}
 
 	PanicIfErr(json.NewEncoder(w).Encode(result), "Unexpected error when serializing generation")

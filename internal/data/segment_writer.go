@@ -65,12 +65,12 @@ func NewSegmentWriter(
 	}
 
 	if segmentId == nil {
-		log.Debug().Msgf("Creating segment writer for token %d and topic '%s' as leader", topic.Token, topic.Name)
+		log.Info().Msgf("Creating segment writer for token %d and topic '%s' as leader", topic.Token, topic.Name)
 		// Start with a file at offset 0
 		s.createFile(0)
 		go s.writeLoopAsLeader()
 	} else {
-		log.Debug().Msgf("Creating segment writer for token %d and topic '%s' as replica", topic.Token, topic.Name)
+		log.Info().Msgf("Creating segment writer for token %d and topic '%s' as replica", topic.Token, topic.Name)
 		s.createFile(*segmentId)
 		go s.writeLoopAsReplica()
 	}
