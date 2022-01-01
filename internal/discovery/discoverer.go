@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	envReplicas    = "SODA_REPLICAS"
 	envOrdinal     = "SODA_ORDINAL"
 	envBrokerNames = "SODA_BROKER_NAMES"
 )
@@ -67,6 +66,7 @@ func NewDiscoverer(config conf.DiscovererConfig, localDb localdb.Client) Discove
 		config:      config,
 		localDb:     localDb,
 		listeners:   make([]TopologyChangeHandler, 0),
+		k8sClient:   newK8sClient(),
 		generations: generations,
 		genProposed: genMap{},
 	}
@@ -77,6 +77,7 @@ type discoverer struct {
 	localDb     localdb.Client
 	listeners   []TopologyChangeHandler
 	topology    TopologyInfo // Gets the current brokers, index and ring
+	k8sClient   k8sClient
 	genMutex    sync.Mutex
 	genProposed genMap
 	generations atomic.Value // copy on write semantics
@@ -87,8 +88,15 @@ func (d *discoverer) Init() error {
 		d.topology = createFixedTopology(fixedOrdinal)
 	} else {
 		// Use normal discovery
+		if err := d.k8sClient.init(); err != nil {
+			return err
+		}
+
 		// TODO: Validate and round to 3*2^n
-		totalBrokers, _ := strconv.Atoi(os.Getenv(envReplicas))
+		totalBrokers, err := d.k8sClient.getDesiredReplicas()
+		if err != nil {
+			return err
+		}
 		d.topology = createTopology(totalBrokers, d.config)
 	}
 

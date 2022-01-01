@@ -10,6 +10,8 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const envReplicas = "SODA_REPLICAS"
+
 func Test(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Discovery Suite")
@@ -17,7 +19,6 @@ func Test(t *testing.T) {
 
 var _ = Describe("discoverer", func() {
 	AfterEach(func() {
-		os.Setenv(envReplicas, "")
 		os.Setenv(envBrokerNames, "")
 		os.Setenv(envOrdinal, "")
 	})
@@ -47,13 +48,13 @@ var _ = Describe("discoverer", func() {
 			}))
 		})
 
-		It("should parse 3 real brokers", func() {
-			os.Setenv(envReplicas, "3")
+		It("should set topology for 3 desired replicas", func() {
 			d := &discoverer{
 				config: &configFake{
 					ordinal:      1,
 					baseHostName: "soda-",
 				},
+				k8sClient: &k8sClientFake{3},
 			}
 
 			d.Init()
@@ -67,12 +68,12 @@ var _ = Describe("discoverer", func() {
 		})
 
 		It("should parse 6 real brokers", func() {
-			os.Setenv(envReplicas, "6")
 			d := &discoverer{
 				config: &configFake{
 					ordinal:      2,
 					baseHostName: "soda-",
 				},
+				k8sClient: &k8sClientFake{6},
 			}
 
 			d.Init()
@@ -92,12 +93,12 @@ var _ = Describe("discoverer", func() {
 
 	Describe("Peers()", func() {
 		It("should return all brokers except self", func() {
-			os.Setenv(envReplicas, "3")
 			d := &discoverer{
 				config: &configFake{
 					ordinal:      1,
 					baseHostName: "soda-",
 				},
+				k8sClient: &k8sClientFake{3},
 			}
 
 			d.Init()
@@ -186,9 +187,9 @@ var _ = Describe("discoverer", func() {
 
 	Describe("Leader()", func() {
 		It("should default to the current token when not partition key is provided", func() {
-			os.Setenv(envReplicas, "6")
 			ordinal := 1
 			d := NewDiscoverer(newConfigFake(ordinal), nil).(*discoverer)
+			d.k8sClient = &k8sClientFake{6}
 
 			d.Init()
 
@@ -210,9 +211,9 @@ var _ = Describe("discoverer", func() {
 		})
 
 		It("should calculate the primary token and get the generation", func() {
-			os.Setenv(envReplicas, "6")
 			ordinal := 1
 			d := NewDiscoverer(newConfigFake(ordinal), nil).(*discoverer)
+			d.k8sClient = &k8sClientFake{6}
 
 			d.Init()
 
@@ -235,8 +236,8 @@ var _ = Describe("discoverer", func() {
 		})
 
 		It("should set it to the natural owner when there's no information", func() {
-			os.Setenv(envReplicas, "6")
 			d := NewDiscoverer(newConfigFake(1), nil).(*discoverer)
+			d.k8sClient = &k8sClientFake{6}
 
 			d.Init()
 
@@ -268,4 +269,16 @@ func newConfigFake(ordinal int) *configFake {
 		ordinal:      ordinal,
 		baseHostName: "soda-",
 	}
+}
+
+type k8sClientFake struct {
+	desiredReplicas int
+}
+
+func (c *k8sClientFake) init() error {
+	return nil
+}
+
+func (c *k8sClientFake) getDesiredReplicas() (int, error) {
+	return c.desiredReplicas, nil
 }

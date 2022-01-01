@@ -12,5 +12,7 @@ require (
 	github.com/prometheus/client_golang v1.10.0
 	github.com/rs/zerolog v1.20.0
 	github.com/stretchr/testify v1.7.0
-	golang.org/x/net v0.0.0-20210220033124-5f55cee0dc0d
+	golang.org/x/net v0.0.0-20211209124913-491a49abca63
+	k8s.io/apimachinery v0.23.1
+	k8s.io/client-go v0.23.1
 )
