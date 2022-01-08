@@ -69,7 +69,7 @@ var _ = Describe("SegmentWriter", func() {
 				config:     config,
 				indexFile:  newIndexFileWriter(dir, config),
 				basePath:   dir,
-				topic:      TopicDataId{Name: "abc"},
+				Topic:      TopicDataId{Name: "abc"},
 				replicator: replicator,
 			}
 

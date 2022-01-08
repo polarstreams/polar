@@ -24,8 +24,12 @@ const alignmentSize = 512
 var alignmentBuffer = createAlignmentBuffer()
 
 // SegmentWriter contains the logic to write segments on disk and replicate them.
+//
+// There should be an instance per topic+token+generation. When the generation is
+// no longer the current one, the channel should be closed.
 type SegmentWriter struct {
 	Items          chan SegmentChunk
+	Topic          TopicDataId
 	segmentId      uint64
 	buffer         *bytes.Buffer
 	lastFlush      time.Time
@@ -35,7 +39,6 @@ type SegmentWriter struct {
 	indexFile      *indexFileWriter
 	segmentLength  uint64
 	basePath       string
-	topic          TopicDataId
 	replicator     Replicator
 }
 
@@ -55,22 +58,22 @@ func NewSegmentWriter(
 		// Limit's to 1 outstanding write (the current one)
 		// The next group can be generated while the previous is being flushed and sent
 		Items:       make(chan SegmentChunk, 0),
+		Topic:       topic,
 		buffer:      utils.NewBufferCap(config.SegmentBufferSize()),
 		config:      config,
 		segmentFile: nil,
 		indexFile:   newIndexFileWriter(basePath, config),
 		basePath:    basePath,
-		topic:       topic,
 		replicator:  gossiper,
 	}
 
 	if segmentId == nil {
-		log.Info().Msgf("Creating segment writer for token %d and topic '%s' as leader", topic.Token, topic.Name)
+		log.Info().Msgf("Creating segment writer as leader for %s", &topic)
 		// Start with a file at offset 0
 		s.createFile(0)
 		go s.writeLoopAsLeader()
 	} else {
-		log.Info().Msgf("Creating segment writer for token %d and topic '%s' as replica", topic.Token, topic.Name)
+		log.Info().Msgf("Creating segment writer as replica for %s", &topic)
 		s.createFile(*segmentId)
 		go s.writeLoopAsReplica()
 	}
@@ -81,7 +84,6 @@ func NewSegmentWriter(
 
 // writeLoopAsLeader appends to the local file and sends to replicas
 func (s *SegmentWriter) writeLoopAsLeader() {
-
 	for dataItem := range s.Items {
 		if s.maybeFlush() {
 			s.maybeCloseSegment()
@@ -113,11 +115,12 @@ func (s *SegmentWriter) writeLoopAsLeader() {
 
 		item.SetResult(<-response)
 	}
+
+	s.close()
 }
 
 // writeLoopAsReplica appends to local file as replica
 func (s *SegmentWriter) writeLoopAsReplica() {
-
 	for dataItem := range s.Items {
 		s.maybeFlush()
 
@@ -145,6 +148,15 @@ func (s *SegmentWriter) writeLoopAsReplica() {
 
 		item.SetResult(nil)
 	}
+
+	s.close()
+}
+
+func (s *SegmentWriter) close() {
+	if s.buffer.Len() > 0 {
+		s.flush("closing writer")
+	}
+	s.closeFile()
 }
 
 // maybeFlush will write to the file when the next group doesn't fit in memory
@@ -224,12 +236,15 @@ func (s *SegmentWriter) closeFile() {
 	previousFile := s.segmentFile
 	log.Debug().Msgf("Closing segment file %d on %s", previousSegmentId, s.basePath)
 
-	// Close the file in the background
+	// Close the segment file in the background
 	go func() {
-		log.Err(previousFile.Close()).Msgf("Segment file %d closed on %s", previousSegmentId, s.basePath)
+		err := previousFile.Close()
+		log.Err(err).Msgf("Segment file %d closed on %s", previousSegmentId, s.basePath)
 	}()
 
+	// Close the index file
 	s.indexFile.closeFile(previousSegmentId)
+
 	s.segmentFile = nil
 	s.segmentId = math.MaxUint64
 	s.segmentLength = 0
@@ -283,7 +298,7 @@ func (s *SegmentWriter) send(
 ) {
 	err := s.replicator.SendToFollowers(
 		item.Replication(),
-		s.topic,
+		s.Topic,
 		segmentId,
 		item)
 	response <- err

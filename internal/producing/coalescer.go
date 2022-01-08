@@ -8,6 +8,7 @@ import (
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/data"
+	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/metrics"
 	"github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
@@ -21,14 +22,22 @@ const writeConcurrencyLevel = 2
 
 var lengthBuffer []byte = []byte{0, 0, 0, 0}
 
+// Groups records into compressed chunks and dispatches them in order
+// to the segment writers.
+//
+// There should be one instance of the coalescer per topic+token (regardless of the
+// generation).
+// The coalescer is responsible for managing the lifetime of the segment writers.
 type coalescer struct {
-	items      chan *record
-	topic      types.TopicDataId
-	config     conf.ProducerConfig
-	replicator types.Replicator
-	offset     uint64
-	buffers    buffers
-	segment    *data.SegmentWriter
+	items           chan *record
+	topicName       string
+	token           types.Token
+	generationState discovery.GenerationState
+	replicator      types.Replicator
+	config          conf.ProducerConfig
+	offset          uint64
+	buffers         buffers
+	writer          *data.SegmentWriter
 }
 
 type record struct {
@@ -62,28 +71,26 @@ func newBuffers(config conf.ProducerConfig) buffers {
 }
 
 func newCoalescer(
-	topic types.TopicDataId,
-	config conf.ProducerConfig,
+	topicName string,
+	token types.Token,
+	generationState discovery.GenerationState,
 	replicator types.Replicator,
-) (*coalescer, error) {
-	s, err := data.NewSegmentWriter(topic, replicator, config, nil)
-
-	if err != nil {
-		return nil, err
-	}
-
+	config conf.ProducerConfig,
+) *coalescer {
 	c := &coalescer{
-		items:      make(chan *record, 0),
-		topic:      topic,
-		config:     config,
-		replicator: replicator,
-		offset:     0,
-		buffers:    newBuffers(config),
-		segment:    s,
+		items:           make(chan *record, 0),
+		topicName:       topicName,
+		token:           token,
+		generationState: generationState,
+		replicator:      replicator,
+		config:          config,
+		offset:          0,
+		buffers:         newBuffers(config),
+		writer:          nil,
 	}
 	// Start processing in the background
 	go c.process()
-	return c, nil
+	return c
 }
 
 func (c *coalescer) add(group []record, item *record, length *int64) ([]record, *record) {
@@ -106,10 +113,45 @@ func (c *coalescer) process() {
 	for {
 		group := make([]record, 0)
 		length := int64(0)
+		var err error
 
 		// Block receiving the first item or when there isn't a buffered item
 		if item == nil {
 			item = <-c.items
+		}
+
+		gen := c.generationState.Generation(c.token)
+
+		if gen == nil {
+			log.Error().Msgf("Coalescer was not able to retrieve generation for token %d", c.token)
+			item.response <- types.NewNoWriteAttemptedError("Coalescer was not able to retrieve generation")
+			item = nil
+			continue
+		}
+
+		if c.writer == nil {
+			// Use generation to create a new writer
+			topic := types.TopicDataId{
+				Name:  c.topicName,
+				Token: c.token,
+				GenId: types.GenVersion(gen.Version),
+			}
+			if c.writer, err = data.NewSegmentWriter(topic, c.replicator, c.config, nil); err != nil {
+				log.Err(err).Msg("There was an error while creating the segment writer")
+				item.response <- types.NewNoWriteAttemptedError("SegmentWriter could not be created")
+				item = nil
+				continue
+			}
+		}
+
+		if c.writer.Topic.GenId != types.GenVersion(gen.Version) {
+			// There was a generational change since the last write
+			// Close existing writer and open a new one
+			close(c.writer.Items)
+			c.writer = nil
+
+			// Reuse the writer setup logic, the current item will be handled in the next iteration
+			continue
 		}
 
 		// Either there was a buffered item or we just received it
@@ -146,10 +188,12 @@ func (c *coalescer) process() {
 		metrics.CoalescerMessagesPerGroup.Observe(float64(len(group)))
 
 		// Send in the background while the next block is generated in the foreground
-		c.segment.Items <- &localDataItem{
+		c.writer.Items <- &localDataItem{
 			data:  data,
 			group: group,
 		}
+
+		// TODO: close segment writer by closing the
 	}
 }
 

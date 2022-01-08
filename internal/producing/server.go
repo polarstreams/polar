@@ -135,11 +135,6 @@ func (p *producer) handleMessage(topic string, querystring url.Values, contentLe
 		return p.gossiper.SendToLeader(replicationInfo, topic, querystring, contentLength, body)
 	}
 
-	coalescer, err := p.getCoalescer(topic, replicationInfo.Token)
-	if err != nil {
-		return err
-	}
-
 	timestampMicros := time.Now().UnixMicro()
 	if timestamp := querystring.Get("timestamp"); timestamp != "" {
 		if n, err := strconv.ParseInt(timestamp, 10, 64); err != nil {
@@ -147,32 +142,21 @@ func (p *producer) handleMessage(topic string, querystring url.Values, contentLe
 		}
 	}
 
+	coalescer := p.getCoalescer(topic, replicationInfo.Token)
 	if err := coalescer.append(replicationInfo, uint32(contentLength), timestampMicros, body); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (p *producer) getCoalescer(topicName string, token types.Token) (*coalescer, error) {
-	topic := types.TopicDataId{
-		Name:  topicName,
-		Token: token,
-		// TODO: Define genId (i.e: v1)
-		GenId: 0,
-	}
-	// TODO: Use TopicDataId as coalescer key (per generation)
-	c, loaded, err := p.coalescerMap.LoadOrStore(topicName, func() (interface{}, error) {
-		// Creating the appender is a blocking call
-		return newCoalescer(topic, p.config, p.gossiper)
+func (p *producer) getCoalescer(topicName string, token types.Token) *coalescer {
+	c, loaded, _ := p.coalescerMap.LoadOrStore(topicName, func() (interface{}, error) {
+		return newCoalescer(topicName, token, p.leaderGetter, p.gossiper, p.config), nil
 	})
-
-	if err != nil {
-		return nil, err
-	}
 
 	if !loaded {
 		log.Debug().Msgf("Created coalescer for topic '%s'", topicName)
 	}
 
-	return c.(*coalescer), nil
+	return c.(*coalescer)
 }

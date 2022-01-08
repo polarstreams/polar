@@ -205,7 +205,7 @@ type Replicator interface {
 type Generation struct {
 	Start     Token     `json:"start"`
 	End       Token     `json:"end"`
-	Version   int       `json:"version"`
+	Version   int       `json:"version"`   // TODO: Use GenVersion type
 	Timestamp int64     `json:"timestamp"` // In unix micros
 	Leader    int       `json:"leader"`    // Leader ordinal
 	Followers []int     `json:"followers"` // Follower ordinals
