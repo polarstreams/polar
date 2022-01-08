@@ -2,11 +2,6 @@ package consuming
 
 import . "github.com/jorgebay/soda/internal/types"
 
-// Represents a local view of the consumer group offsets
-type OffsetState interface {
-	Get(group string, token Token) Offset
-}
-
 type ConsumerGroupQueries interface {
 	// Determines whether the consumer group can be served with token data.
 	// It navigates through the generation tree, looking for parents.

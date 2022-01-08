@@ -29,14 +29,18 @@ type groupReadQueue struct {
 }
 
 func newGroupReadQueue(
-	group string, state *ConsumerState,
+	group string,
+	state *ConsumerState,
+	offsetState OffsetState,
 	topologyGetter discovery.TopologyGetter,
 	config conf.DatalogConfig,
 ) *groupReadQueue {
 	queue := &groupReadQueue{
 		items:          make(chan readQueueItem),
+		readers:        make(map[Token]map[string]*SegmentReader),
 		group:          group,
 		state:          state,
+		offsetState:    offsetState,
 		topologyGetter: topologyGetter,
 		config:         config,
 	}
@@ -47,7 +51,8 @@ func newGroupReadQueue(
 type readQueueItem struct {
 	connId  UUID
 	writer  http.ResponseWriter
-	refresh bool // Determines whether the item was meant for the read queue to re-evaluate internal maps
+	done    chan bool // Gets a single value when it's done writing the response
+	refresh bool      // Determines whether the item was meant for the read queue to re-evaluate internal maps
 }
 
 func (q *groupReadQueue) process() {
@@ -59,13 +64,16 @@ func (q *groupReadQueue) process() {
 		}
 
 		group, tokens, topics := logsToServe(q.state, q.topologyGetter, item.connId)
+		log.Debug().Msgf("Group read queue %s handling item %s %v %v", q.group, group, tokens, topics)
 		if group != q.group {
 			// There was a change in topology, tell the client to poll again
 			utils.NoContentResponse(item.writer, 0)
+			item.done <- true
 			continue
 		}
 		if len(tokens) == 0 || len(topics) == 0 {
 			utils.NoContentResponse(item.writer, consumerNoOwnedDataDelay)
+			item.done <- true
 			continue
 		}
 
@@ -98,6 +106,7 @@ func (q *groupReadQueue) process() {
 				// TODO: Store the position of the consumer group
 			}
 		}
+		item.done <- true
 	}
 
 	// normal read
@@ -111,15 +120,6 @@ func (q *groupReadQueue) process() {
 	// TODO: Check can consume from local token data
 	// When there's an split token range, it should check with previous broker
 	// To see whether it can serve to this consumer group (e.g. B3 should check with B0 about T3 for consumer group X)
-
-	// TODO: Define single thread per consumer group? shared?
-	// for _, topic := range topics {
-	// 	for _, token := range tokens {
-	// 		// TODO: get or create readers per group/topic/token
-	// 		// Most likely issue reads in a single channel
-	// 		fmt.Println("--Temp", token, topic, group)
-	// 	}
-	// }
 }
 
 func marshalResponse(w http.ResponseWriter, responseItems []consumerResponseItem) error {
@@ -139,10 +139,14 @@ func marshalResponse(w http.ResponseWriter, responseItems []consumerResponseItem
 }
 
 func (q *groupReadQueue) readNext(connId UUID, w http.ResponseWriter) {
+	done := make(chan bool, 1)
 	q.items <- readQueueItem{
 		connId: connId,
 		writer: w,
+		done:   done,
 	}
+
+	<-done
 }
 
 // Gets the readers, creating them if necessary
@@ -153,7 +157,7 @@ func (q *groupReadQueue) getReaders(tokens []Token, topics []string) []*SegmentR
 		readersByToken, found := q.readers[token]
 		if !found {
 			readersByToken = make(map[string]*SegmentReader)
-			q.readers[token] = q.readers[token]
+			q.readers[token] = readersByToken
 		}
 
 		for _, topic := range topics {
@@ -220,10 +224,3 @@ func (i *consumerResponseItem) Marshal(w io.Writer) error {
 	}
 	return nil
 }
-
-// func (r *dataRequest) Marshal(w types.StringWriter, header *header) {
-// 	writeHeader(w, header)
-// 	binary.Write(w, conf.Endianness, r.meta)
-// 	w.WriteString(r.topic)
-// 	w.Write(r.data)
-// }

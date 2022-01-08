@@ -93,10 +93,17 @@ func (c *consumer) AcceptConnections() error {
 				fmt.Fprintf(w, "Consumer server listening on %d\n", port)
 			})
 
+			router.GET("/test/delay", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+				time.Sleep(10 * time.Second)
+				fmt.Fprintln(w, "Delayed response after 10s")
+			})
+
 			trackedConn := NewTrackedConnection(conn, func(trackedConn *TrackedConnection) {
 				log.Info().Msgf("Connection from consumer client %s closed", trackedConn.LocalAddr().String())
 				c.unRegister(trackedConn)
 			})
+
+			log.Debug().Msgf("Consumer client connection open with assigned id '%s'", trackedConn.Id())
 
 			router.POST(conf.ConsumerRegisterUrl, toPostHandler(trackedConn, c.postRegister))
 
@@ -110,6 +117,9 @@ func (c *consumer) AcceptConnections() error {
 				server.ServeConn(conn, &http2.ServeConnOpts{
 					Handler: h2c.NewHandler(router, server),
 				})
+				log.Debug().Msgf(
+					"Connection from consumer client with id '%s' is not readable anymore", trackedConn.Id())
+				trackedConn.Close()
 			}()
 		}
 	}()
@@ -130,11 +140,22 @@ func (c *consumer) postRegister(
 	if err := json.NewDecoder(r.Body).Decode(&consumerInfo); err != nil {
 		return err
 	}
-	c.state.AddConnection(conn.Id(), consumerInfo)
+	added := c.state.AddConnection(conn.Id(), consumerInfo)
+
+	if !added {
+		return nil
+	}
+
+	log.Info().
+		Stringer("connId", conn.Id()).
+		Msgf("Registering new connection to consumer '%s' of group '%s' for topics %v",
+			consumerInfo.Id, consumerInfo.Group, consumerInfo.Topics)
 
 	addDebouncer(func() {
 		if c.state.Rebalance() {
-			log.Info().Msg("Consumer topology was rebalanced after adding a new consumer")
+			log.Info().Msg("Consumer topology was rebalanced after adding a new consumer connection registered")
+			log.Debug().Msgf("Consumer topology contains consumer groups %v and consumers by connection: %v)",
+				c.state.groups, c.state.consumers)
 		}
 	})
 
@@ -149,7 +170,7 @@ func (c *consumer) unRegister(conn *TrackedConnection) {
 	// We shouldn't rush to rebalance
 	removeDebouncer(func() {
 		if c.state.Rebalance() {
-			log.Info().Msg("Consumer topology was rebalanced after adding a new consumer")
+			log.Info().Msg("Consumer topology was rebalanced after removing a connection to a consumer client")
 		}
 	})
 }
@@ -157,12 +178,17 @@ func (c *consumer) unRegister(conn *TrackedConnection) {
 func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter) {
 	group, tokens, _ := logsToServe(c.state, c.topologyGetter, conn.Id())
 	if len(tokens) == 0 {
+		log.Debug().Msgf("Received consumer client poll from connection '%s' with no assigned tokens", conn.Id())
 		NoContentResponse(w, consumerNoOwnedDataDelay)
 		return
 	}
 
+	log.Debug().Msgf("Received consumer client poll from connection '%s'", conn.Id())
+	// TODO: implement offset state
+	offsetState := &defaultOffsetState{}
+
 	grq, _, _ := c.readQueues.LoadOrStore(group, func() (interface{}, error) {
-		return newGroupReadQueue(group, c.state, c.topologyGetter, c.config), nil
+		return newGroupReadQueue(group, c.state, offsetState, c.topologyGetter, c.config), nil
 	})
 
 	groupReadQueue := grq.(*groupReadQueue)
@@ -244,6 +270,8 @@ func (c *consumer) sendConsumerGroupsToPeers() {
 				}()
 			}
 			logEvent.Int("groups", len(groups)).Msgf("Sending consumer group snapshot to peers")
+		} else {
+			log.Debug().Msgf("No consumer groups to send to peers")
 		}
 		time.Sleep(Jitter(consumerGroupsToPeersDelay))
 	}

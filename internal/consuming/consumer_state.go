@@ -61,11 +61,15 @@ func NewConsumerState(topologyGetter discovery.TopologyGetter) *ConsumerState {
 	}
 }
 
-func (m *ConsumerState) AddConnection(id UUID, consumer ConsumerInfo) {
+func (m *ConsumerState) AddConnection(id UUID, consumer ConsumerInfo) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	_, found := m.connections[id]
+
 	m.connections[id] = consumer
+
+	return !found
 }
 
 func (m *ConsumerState) RemoveConnection(id UUID) bool {
