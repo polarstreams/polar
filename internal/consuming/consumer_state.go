@@ -191,7 +191,6 @@ func (m *ConsumerState) Rebalance() bool {
 					consumerGroups[info.Group] = keys
 				}
 			}
-
 		}
 	}
 

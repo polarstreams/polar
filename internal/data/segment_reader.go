@@ -18,7 +18,7 @@ type SegmentReader struct {
 	Items       chan ReadItem
 	basePath    string
 	config      conf.DatalogConfig
-	topic       TopicDataId
+	Topic       TopicDataId
 	offset      uint64
 	fileName    string
 	pollDelay   time.Duration
@@ -43,7 +43,7 @@ func NewSegmentReader(
 		config:    config,
 		basePath:  basePath,
 		Items:     make(chan ReadItem, 16),
-		topic:     topic,
+		Topic:     topic,
 		pollDelay: defaultPollDelay,
 	}
 
@@ -57,7 +57,7 @@ func (s *SegmentReader) startReading() {
 
 	//TODO: read as leader or replica per generation
 
-	log.Info().Msgf("Start reading for topic: %s", s.topic.String())
+	log.Info().Msgf("Start reading for topic: %s", s.Topic.String())
 
 	// Read in loop
 	s.read()
@@ -144,7 +144,7 @@ func (s *SegmentReader) pollFile(buffer []byte) (int, error) {
 
 // closes the current file and saves the current state
 func (s *SegmentReader) close(err error) {
-	log.Info().Msgf("Closing segment reader for topic: %s", s.topic.String())
+	log.Info().Msgf("Closing segment reader for topic: %s", s.Topic.String())
 	if err != nil {
 		for item := range s.Items {
 			// TODO: Make sure to close channel after receiving an error

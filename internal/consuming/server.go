@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	. "github.com/google/uuid"
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/interbroker"
@@ -19,6 +20,10 @@ import (
 )
 
 const consumerGroupsToPeersDelay = 10 * time.Second
+const consumerNoDataDelay = 5      // Seconds
+const consumerNoOwnedDataDelay = 5 // Seconds
+
+const contentType = "application/vnd.soda.consumermessage"
 
 var addDebouncer = Debounce(10*time.Second, 0)
 var removeDebouncer = Debounce(removeDelay, 0.4) // Debounce events that occurred in the following 2 minutes
@@ -39,7 +44,8 @@ func NewConsumer(
 		config:         config,
 		topologyGetter: topologyGetter,
 		gossiper:       gossiper,
-		meta:           NewConsumerState(topologyGetter),
+		state:          NewConsumerState(topologyGetter),
+		readQueues:     NewCopyOnWriteMap(),
 	}
 }
 
@@ -47,7 +53,8 @@ type consumer struct {
 	config         conf.ConsumerConfig
 	topologyGetter discovery.TopologyGetter
 	gossiper       interbroker.Gossiper
-	meta           *ConsumerState
+	state          *ConsumerState
+	readQueues     *CopyOnWriteMap
 }
 
 func (c *consumer) Init() error {
@@ -72,7 +79,7 @@ func (c *consumer) AcceptConnections() error {
 	go func() {
 		startChan <- true
 		for {
-			// HTTP/2 only server (prior knowledge)
+			// HTTP/2-only server (prior knowledge)
 			conn, err := listener.Accept()
 			if err != nil {
 				log.Err(err).Msgf("Failed to accept new connections")
@@ -92,7 +99,10 @@ func (c *consumer) AcceptConnections() error {
 			})
 
 			router.POST(conf.ConsumerRegisterUrl, toPostHandler(trackedConn, c.postRegister))
-			router.POST(conf.ConsumerPollUrl, toPostHandler(trackedConn, c.postPoll))
+
+			router.POST(conf.ConsumerPollUrl, func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+				c.postPoll(trackedConn, w)
+			})
 
 			// server.ServeConn() will block until the connection is not readable anymore
 			// start it in the background to accept further connections
@@ -120,10 +130,10 @@ func (c *consumer) postRegister(
 	if err := json.NewDecoder(r.Body).Decode(&consumerInfo); err != nil {
 		return err
 	}
-	c.meta.AddConnection(conn.Id(), consumerInfo)
+	c.state.AddConnection(conn.Id(), consumerInfo)
 
 	addDebouncer(func() {
-		if c.meta.Rebalance() {
+		if c.state.Rebalance() {
 			log.Info().Msg("Consumer topology was rebalanced after adding a new consumer")
 		}
 	})
@@ -134,60 +144,56 @@ func (c *consumer) postRegister(
 }
 
 func (c *consumer) unRegister(conn *TrackedConnection) {
-	c.meta.RemoveConnection(conn.Id())
+	c.state.RemoveConnection(conn.Id())
 
 	// We shouldn't rush to rebalance
 	removeDebouncer(func() {
-		if c.meta.Rebalance() {
+		if c.state.Rebalance() {
 			log.Info().Msg("Consumer topology was rebalanced after adding a new consumer")
 		}
 	})
 }
 
-func (c *consumer) postPoll(
-	conn *TrackedConnection,
-	w http.ResponseWriter,
-	r *http.Request,
-	ps httprouter.Params,
-) error {
-	group, tokens, topics := c.meta.CanConsume(conn.Id())
+func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter) {
+	group, tokens, _ := logsToServe(c.state, c.topologyGetter, conn.Id())
 	if len(tokens) == 0 {
-		// TODO: Write the response
-		_, _ = w.Write([]byte("NO TOKENS"))
-		return nil
+		NoContentResponse(w, consumerNoOwnedDataDelay)
+		return
 	}
 
-	myOrdinal := c.topologyGetter.Topology().MyOrdinal()
-	ownedTokens := make([]Token, 0)
+	grq, _, _ := c.readQueues.LoadOrStore(group, func() (interface{}, error) {
+		return newGroupReadQueue(group, c.state, c.topologyGetter, c.config), nil
+	})
 
-	for _, token := range tokens {
-		gen := c.topologyGetter.Generation(token)
-		if gen != nil && gen.Leader == myOrdinal {
-			ownedTokens = append(ownedTokens, token)
-		}
-	}
-
-	if len(ownedTokens) == 0 {
-		_, _ = w.Write([]byte("NO OWNED TOKENS"))
-		return nil
-	}
-
-	// TODO: Check can consume from local token data
-	// When there's an split token range, it should check with previous broker
-	// To see whether it can serve to this consumer group (e.g. B3 should check with B0 about T3 for consumer group X)
-
-	for _, topic := range topics {
-		for _, token := range tokens {
-			// TODO: get or create readers per group/topic/token
-			// Most likely issue reads in a single channel
-			fmt.Println("--Temp", token, topic, group)
-		}
-	}
-
-	return nil
+	groupReadQueue := grq.(*groupReadQueue)
+	groupReadQueue.readNext(conn.Id(), w)
 }
 
 type ConnAwareHandle func(*TrackedConnection, http.ResponseWriter, *http.Request, httprouter.Params) error
+
+// Gets the tokens and topics to serve, given a connection.
+func logsToServe(
+	state *ConsumerState,
+	topologyGetter discovery.TopologyGetter,
+	connId UUID,
+) (string, []Token, []string) {
+	group, tokens, topics := state.CanConsume(connId)
+	if len(tokens) == 0 {
+		return "", nil, nil
+	}
+
+	myOrdinal := topologyGetter.Topology().MyOrdinal()
+	leaderTokens := make([]Token, 0, len(tokens))
+
+	for _, token := range tokens {
+		gen := topologyGetter.Generation(token)
+		if gen != nil && gen.Leader == myOrdinal {
+			leaderTokens = append(leaderTokens, token)
+		}
+	}
+
+	return group, leaderTokens, topics
+}
 
 func toPostHandler(c *TrackedConnection, h ConnAwareHandle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -212,13 +218,13 @@ func adaptHttpErr(err error, w http.ResponseWriter) {
 }
 
 func (c *consumer) OnConsumerInfoFromPeer(ordinal int, groups []ConsumerGroup) {
-	c.meta.SetInfoFromPeer(ordinal, groups)
+	c.state.SetInfoFromPeer(ordinal, groups)
 }
 
 func (c *consumer) sendConsumerGroupsToPeers() {
 	const sendPeriod = 1000
 	for i := 0; ; i++ {
-		groups := c.meta.GetInfoForPeers()
+		groups := c.state.GetInfoForPeers()
 		if len(groups) > 0 {
 			topology := c.topologyGetter.Topology()
 			brokers := topology.NextBrokers(topology.LocalIndex, 2)

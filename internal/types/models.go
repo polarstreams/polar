@@ -185,7 +185,7 @@ func (t *TopologyInfo) PrimaryToken(token Token) (Token, BrokerIndex) {
 type TopicDataId struct {
 	Name  string
 	Token Token
-	GenId uint32
+	GenId GenVersion
 }
 
 func (t *TopicDataId) String() string {

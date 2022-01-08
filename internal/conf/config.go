@@ -69,7 +69,9 @@ type ProducerConfig interface {
 
 type ConsumerConfig interface {
 	BasicConfig
+	DatalogConfig
 	ConsumerPort() int
+	ConsumerReadThreshold() int // The amount of bytes used as threshold, once reached the consumer poll is fullfilled
 }
 
 type GossipConfig interface {
@@ -151,6 +153,10 @@ func (c *config) MaxGroupSize() int {
 
 func (c *config) ReadAheadSize() int {
 	return c.MaxGroupSize() * 10
+}
+
+func (c *config) ConsumerReadThreshold() int {
+	return c.MaxGroupSize()
 }
 
 func (c *config) IndexFilePeriodBytes() int {

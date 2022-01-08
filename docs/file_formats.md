@@ -1,5 +1,7 @@
 # File formats
 
+All file encoding is big-endian.
+
 ## Log segment
 
 The log segment is composed of compressed chunks.

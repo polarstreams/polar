@@ -16,6 +16,8 @@ const (
 	envPodNamespace = "POD_NAMESPACE"
 )
 
+const appNameLabel = "app.kubernetes.io/name"
+
 // Represents a wrapper around k8s api calls
 type k8sClient interface {
 	init() error
@@ -63,12 +65,12 @@ func (c *k8sClientImpl) init() error {
 	}
 
 	c.client = client
-	c.appName = pod.Labels["app.kubernetes.io/name"]
+	c.appName = pod.Labels[appNameLabel]
 	return nil
 }
 
 func (c *k8sClientImpl) getDesiredReplicas() (int, error) {
-	labelSelector := fmt.Sprintf("app.kubernetes.io/name=%s", c.appName)
+	labelSelector := fmt.Sprintf("%s=%s", appNameLabel, c.appName)
 	stsInfo := fmt.Sprintf("label selector '%s' in namespace '%s'", labelSelector, c.namespace)
 	log.Debug().Msgf("Querying statefulset with %s", stsInfo)
 	list, err := c.client.AppsV1().StatefulSets(c.namespace).List(context.TODO(), metav1.ListOptions{
