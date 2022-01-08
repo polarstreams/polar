@@ -192,8 +192,6 @@ func (c *coalescer) process() {
 			data:  data,
 			group: group,
 		}
-
-		// TODO: close segment writer by closing the
 	}
 }
 

@@ -10,9 +10,11 @@ import (
 )
 
 const (
-	Mib                = 1024 * 1024
-	allocationPoolSize = 100 * Mib
-	filePermissions    = 0755
+	Mib                  = 1024 * 1024
+	allocationPoolSize   = 100 * Mib
+	filePermissions      = 0755
+	SegmentFileExtension = "dlog"
+	IndexFileExtension   = "index"
 )
 
 const (
@@ -198,7 +200,7 @@ func (c *config) LocalDbPath() string {
 }
 
 func (c *config) DatalogPath(topic string, token types.Token, genId string) string {
-	// Pattern: /var/lib/soda/data/datalog/{topic}/{token}/{genId}/
+	// Pattern: /var/lib/soda/data/datalog/{topic}/{token}/{genId}
 	return filepath.Join(c.dataPath(), "datalog", topic, token.String(), genId)
 }
 

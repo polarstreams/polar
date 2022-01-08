@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
@@ -23,21 +26,24 @@ type SegmentReader struct {
 	fileName    string
 	pollDelay   time.Duration
 	segmentFile *os.File
+	lastSeek    time.Time
 }
 
 const pollTimes = 10
 const defaultPollDelay = 500 * time.Millisecond
+const minSeekIntervals = 2 * time.Second
 
 // Returns a log file reader.
 //
 // The segment reader instance is valid for a single generation, closed when the generation ends.
 //
 // It aggressively reads ahead and maintains local cache, so there should there
-// should be a different reader per consumer group.
+// should be a different reader instance per consumer group.
 func NewSegmentReader(
 	topic TopicDataId,
 	config conf.DatalogConfig,
 ) *SegmentReader {
+	// From the same base folder, the SegmentReader will continue reading through the files in order
 	basePath := config.DatalogPath(topic.Name, topic.Token, fmt.Sprint(topic.GenId))
 	s := &SegmentReader{
 		config:    config,
@@ -57,7 +63,7 @@ func (s *SegmentReader) startReading() {
 
 	//TODO: read as leader or replica per generation
 
-	log.Info().Msgf("Start reading for topic: %s", s.Topic.String())
+	log.Info().Msgf("Start reading for %s", &s.Topic)
 
 	// Read in loop
 	s.read()
@@ -84,6 +90,10 @@ func (s *SegmentReader) read() {
 			remainingReader.Read(buf)
 		}
 
+		if s.fileName == "" {
+			s.fullSeek()
+		}
+
 		n, err := s.pollFile(buf[writeIndex:])
 
 		if err != nil {
@@ -95,7 +105,6 @@ func (s *SegmentReader) read() {
 		if n == 0 {
 			// TODO:
 			// check if there's a newer file ->
-			// check if there's a newer generation ->
 			item.SetResult(nil, NewEmptyChunk(s.offset))
 			continue
 		}
@@ -115,6 +124,46 @@ func (s *SegmentReader) read() {
 	}
 
 	s.close(closeError)
+}
+
+func (s *SegmentReader) fullSeek() (string, uint64) {
+	if time.Since(s.lastSeek) < minSeekIntervals {
+		return "", 0
+	}
+
+	s.lastSeek = time.Now()
+	log.Debug().Msgf("Segment reader seeking on %s", s.basePath)
+
+	entries, err := filepath.Glob(fmt.Sprintf("%s/*.%s", s.basePath, conf.SegmentFileExtension))
+	if err != nil {
+		log.Err(err).Msgf("There was an error while seeking")
+		return "", 0
+	}
+	if len(entries) == 0 {
+		log.Debug().Msgf("Reader can not find any files in %s", s.basePath)
+		return "", 0
+	}
+
+	dlogFilePrefix := ""
+	for _, entry := range entries {
+		filePrefix := strings.Split(entry, ".")[0]
+		startOffset, err := strconv.ParseUint(filePrefix, 10, 64)
+		if err != nil {
+			continue
+		}
+		if startOffset > s.offset {
+			break
+		}
+		dlogFilePrefix = filePrefix
+	}
+
+	if dlogFilePrefix == "" {
+		return "", 0
+	}
+
+	fileOffset := tryReadIndexFile(s.basePath, dlogFilePrefix, s.offset)
+
+	return fmt.Sprintf("%s.%s", dlogFilePrefix, conf.SegmentFileExtension), fileOffset
 }
 
 // Returns the number of bytes read since index

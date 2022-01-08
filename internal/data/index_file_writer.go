@@ -53,7 +53,7 @@ func (w *indexFileWriter) writeLoop() {
 		}
 
 		if segmentId == nil {
-			name := fmt.Sprintf("%020d.index", item.segmentId)
+			name := fmt.Sprintf("%020d.%s", item.segmentId, conf.IndexFileExtension)
 			f, err := os.OpenFile(filepath.Join(w.basePath, name), conf.IndexFileWriteFlags, FilePermissions)
 			if err != nil {
 				log.Err(err).Msgf("Index file %s could not be created on path %s", w.basePath, name)

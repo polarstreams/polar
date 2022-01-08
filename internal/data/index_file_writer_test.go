@@ -17,12 +17,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type indexOffset struct {
-	Offset     uint64
-	FileOffset uint64
-	Checksum   uint32
-}
-
 var _ = Describe("indexFileWriter", func() {
 	It("should write only when its above threshold", func() {
 		config := new(mocks.Config)

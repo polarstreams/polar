@@ -186,7 +186,7 @@ func (s *SegmentWriter) maybeFlush() bool {
 
 func (s *SegmentWriter) createFile(segmentId uint64) {
 	s.segmentId = segmentId
-	name := fmt.Sprintf("%020d.dlog", s.segmentId)
+	name := fmt.Sprintf("%020d.%s", s.segmentId, conf.SegmentFileExtension)
 	log.Debug().Msgf("Creating segment file %s on %s", name, s.basePath)
 
 	f, err := os.OpenFile(filepath.Join(s.basePath, name), conf.WriteFlags, FilePermissions)
