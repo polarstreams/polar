@@ -19,15 +19,15 @@ var _ = Describe("tryReadIndexFile()", func() {
 
 		// Should find the message offset 50 with fileOffset 500
 		fileOffset := tryReadIndexFile(dir, filePrefix, 57)
-		Expect(fileOffset).To(Equal(uint64(500)))
+		Expect(fileOffset).To(Equal(int64(500)))
 
 		// Equal
 		fileOffset = tryReadIndexFile(dir, filePrefix, 100)
-		Expect(fileOffset).To(Equal(uint64(1000)))
+		Expect(fileOffset).To(Equal(int64(1000)))
 
 		// Should find the last message offset 490 with fileOffset 4900
 		fileOffset = tryReadIndexFile(dir, filePrefix, 60*10)
-		Expect(fileOffset).To(Equal(uint64(4900)))
+		Expect(fileOffset).To(Equal(int64(4900)))
 	})
 })
 
@@ -45,7 +45,7 @@ func writeIndexFile(basePath string, steps int) {
 	go w.writeLoop()
 
 	for i := 0; i < steps; i++ {
-		w.append(0, uint64(i*10), uint64(i*100))
+		w.append(0, uint64(i*10), int64(i*100))
 	}
 
 	defer close(w.items)

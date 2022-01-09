@@ -37,7 +37,7 @@ type SegmentWriter struct {
 	config         conf.DatalogConfig
 	segmentFile    *os.File
 	indexFile      *indexFileWriter
-	segmentLength  uint64
+	segmentLength  int64
 	basePath       string
 	replicator     Replicator
 }
@@ -200,7 +200,7 @@ func (s *SegmentWriter) createFile(segmentId uint64) {
 
 func (s *SegmentWriter) flush(reason string) {
 	s.alignBuffer()
-	length := uint64(s.buffer.Len())
+	length := int64(s.buffer.Len())
 
 	if s.segmentFile == nil {
 		s.createFile(s.bufferedOffset)
@@ -226,7 +226,7 @@ func (s *SegmentWriter) flush(reason string) {
 
 // maybeCloseSegment determines whether the segment file should be closed.
 func (s *SegmentWriter) maybeCloseSegment() {
-	if s.segmentLength+uint64(s.config.SegmentBufferSize()) > uint64(s.config.MaxSegmentSize()) {
+	if s.segmentLength+int64(s.config.SegmentBufferSize()) > int64(s.config.MaxSegmentSize()) {
 		s.closeFile()
 	}
 }

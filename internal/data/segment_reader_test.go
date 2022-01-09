@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/jorgebay/soda/internal/conf"
@@ -15,7 +16,7 @@ import (
 
 var _ = Describe("SegmentReader", func() {
 	Describe("read()", func() {
-		It("should support empty reads", func() {
+		XIt("should support empty reads", func() {
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(1 * conf.Mib)
 			s := &SegmentReader{
@@ -34,7 +35,7 @@ var _ = Describe("SegmentReader", func() {
 			pollChunkAndAssert(s, item, 0)
 		})
 
-		It("should support partial chunks", func() {
+		XIt("should support partial chunks", func() {
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(1 * conf.Mib)
 			s := &SegmentReader{
@@ -48,7 +49,7 @@ var _ = Describe("SegmentReader", func() {
 
 			s.segmentFile, err = os.Open(file.Name())
 			Expect(err).NotTo(HaveOccurred())
-			chunkBuffer := createTestChunk(50)
+			chunkBuffer := createTestChunk(50, 10, 100)
 			file.Write(chunkBuffer[:2])
 
 			go s.read()
@@ -66,6 +67,52 @@ var _ = Describe("SegmentReader", func() {
 			pollChunkAndAssert(s, item, 50)
 
 			close(s.Items)
+		})
+
+		It("should continue reading the next file", func() {
+			config := new(mocks.Config)
+			config.On("ReadAheadSize").Return(2048)
+
+			dir, err := os.MkdirTemp("", "read_next_file*")
+			Expect(err).NotTo(HaveOccurred())
+			firstFile, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			Expect(err).NotTo(HaveOccurred())
+			secondFile, err := os.Create(filepath.Join(dir, "00020.dlog"))
+
+			// Write to the files
+			buffer := createTestChunk(512-chunkHeaderSize, 0, 20)
+			_, err = firstFile.Write(buffer)
+			Expect(err).NotTo(HaveOccurred())
+
+			buffer = createTestChunk(512*2-chunkHeaderSize, 100, 30)
+			_, err = secondFile.Write(buffer)
+
+			firstFile.Sync()
+			secondFile.Sync()
+
+			firstFile.Close()
+			secondFile.Close()
+
+			s := &SegmentReader{
+				config:    config,
+				Items:     make(chan ReadItem, 16),
+				basePath:  dir,
+				pollDelay: 1 * time.Millisecond,
+			}
+			go s.read()
+			defer close(s.Items)
+
+			item := newTestReadItem()
+			pollChunkAndAssert(s, item, 512-chunkHeaderSize)
+			// First empty poll
+			pollChunkAndAssert(s, item, 0)
+			// Second empty poll swaps the file
+			pollChunkAndAssert(s, item, 0)
+			pollChunkAndAssert(s, item, 512*2-chunkHeaderSize)
+		})
+
+		XIt("should read alignment", func() {
+
 		})
 	})
 })
@@ -87,11 +134,11 @@ func (r *testReadItem) SetResult(err error, chunk SegmentChunk) {
 	r.errorResult <- err
 }
 
-func createTestChunk(bodyLength int) []byte {
+func createTestChunk(bodyLength int, start int, recordLength int) []byte {
 	header := chunkHeader{
 		BodyLength:   uint32(bodyLength),
-		Start:        10,
-		RecordLength: 100,
+		Start:        uint64(start),
+		RecordLength: uint32(recordLength),
 		Crc:          123,
 	}
 

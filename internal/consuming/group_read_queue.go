@@ -170,7 +170,12 @@ func (q *groupReadQueue) getReaders(tokens []Token, topics []string) []*SegmentR
 					Token: token,
 					GenId: offset.Version,
 				}
-				reader = NewSegmentReader(topicId, q.config)
+				var err error
+				reader, err = NewSegmentReader(topicId, q.config)
+				if err != nil {
+					// reader could not be initialized, skip for now
+					continue
+				}
 				readersByToken[topic] = reader
 			}
 			result = append(result, reader)

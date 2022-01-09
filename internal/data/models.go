@@ -21,8 +21,8 @@ type ReplicationDataItem interface {
 
 type chunkHeader struct {
 	// Strict ordering, exported fields
-	BodyLength   uint32
-	Start        uint64 // The start offset
+	BodyLength   uint32 // The amount of bytes of the body
+	Start        uint64 // The offset of the first message
 	RecordLength uint32 // The amount of messages contained in the chunk
 	Crc          int32
 }
@@ -39,14 +39,14 @@ type ReadItem interface {
 type indexFileItem struct {
 	segmentId  uint64
 	offset     uint64 // The message offset
-	fileOffset uint64
+	fileOffset int64
 	toClose    bool
 }
 
 type ReadSegmentChunk struct {
 	buffer []byte
-	start  uint64
-	length uint32
+	start  uint64 // The offset of the first message
+	length uint32 // The amount of messages in the chunk
 }
 
 func NewEmptyChunk(start uint64) SegmentChunk {

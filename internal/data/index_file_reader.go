@@ -15,20 +15,20 @@ import (
 
 type indexOffset struct {
 	Offset     uint64
-	FileOffset uint64
+	FileOffset int64
 	Checksum   uint32
 }
 
 var indexItemSize = utils.BinarySize(indexOffset{})
 
 // Reads the file offset from the index file
-func tryReadIndexFile(basePath string, filePrefix string, messageOffset uint64) uint64 {
+func tryReadIndexFile(basePath string, filePrefix string, messageOffset uint64) int64 {
 	// Use the OS page cache for reading index file
 	// as it will simplify the logic needed. The page cache usage should be neglegible for this
 	// sporadic small files
 	indexFileName := filepath.Join(basePath, fmt.Sprintf("%s.%s", filePrefix, conf.IndexFileExtension))
 	file, err := os.Open(indexFileName)
-	fileOffset := uint64(0)
+	fileOffset := int64(0)
 
 	if err != nil {
 		// No index file
