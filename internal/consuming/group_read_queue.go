@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net/http"
+	"time"
 
 	. "github.com/google/uuid"
 	"github.com/jorgebay/soda/internal/conf"
@@ -12,6 +13,11 @@ import (
 	. "github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
+)
+
+const (
+	fetchMaxWait = 1 * time.Second
+	requeueDelay = 200 * time.Millisecond
 )
 
 // Receives read requests on a single thread and dispatches them
@@ -23,7 +29,7 @@ type groupReadQueue struct {
 	state          *ConsumerState
 	offsetState    OffsetState
 	topologyGetter discovery.TopologyGetter
-	config         conf.DatalogConfig
+	config         conf.ConsumerConfig
 	readerIndex    uint16
 	readers        map[Token]map[string]*SegmentReader // Readers per token and topic
 }
@@ -33,7 +39,7 @@ func newGroupReadQueue(
 	state *ConsumerState,
 	offsetState OffsetState,
 	topologyGetter discovery.TopologyGetter,
-	config conf.DatalogConfig,
+	config conf.ConsumerConfig,
 ) *groupReadQueue {
 	queue := &groupReadQueue{
 		items:          make(chan readQueueItem),
@@ -49,13 +55,15 @@ func newGroupReadQueue(
 }
 
 type readQueueItem struct {
-	connId  UUID
-	writer  http.ResponseWriter
-	done    chan bool // Gets a single value when it's done writing the response
-	refresh bool      // Determines whether the item was meant for the read queue to re-evaluate internal maps
+	connId    UUID
+	writer    http.ResponseWriter
+	timestamp time.Time
+	done      chan bool // Gets a single value when it's done writing the response
+	refresh   bool      // Determines whether the item was meant for the read queue to re-evaluate internal maps
 }
 
 func (q *groupReadQueue) process() {
+	failedResponseItems := make([]consumerResponseItem, 0)
 	for item := range q.items {
 		if item.refresh {
 			// TODO: Implement
@@ -77,34 +85,89 @@ func (q *groupReadQueue) process() {
 			continue
 		}
 
-		readers := q.getReaders(tokens, topics)
 		responseItems := make([]consumerResponseItem, 0, 1)
-		for i := 0; i < len(readers); i++ {
-			// Use an incremental index to try to be fair between calls by round robin through readers
-			reader := readers[int(q.readerIndex)%len(readers)]
-			q.readerIndex++
-			segmentReadItem := newSegmentReadItem()
-			reader.Items <- segmentReadItem
-			err, chunk := segmentReadItem.result()
+		errors := make([]error, 0)
 
-			if err != nil {
-				log.Warn().Err(err).Msgf("There was an error reading for %s", &reader.Topic)
-				continue
+		if len(failedResponseItems) > 0 {
+			// There was an error writing the previous response to a consumer in this group
+			// If the tokens and topic match, give the response to the consumer
+			for i := len(failedResponseItems) - 1; i >= 0; i-- {
+				r := failedResponseItems[i]
+				// Use sequential search, there should be a single (or two) tokens and a handful of topics
+				if utils.ContainsToken(tokens, r.topic.Token) && utils.ContainsString(topics, r.topic.Name) {
+					// Remove it from failed
+					failedResponseItems = append(failedResponseItems[:i], failedResponseItems[i+1:]...)
+					if offset := q.offsetState.Get(q.group, r.topic.Token); offset.Version != r.topic.GenId {
+						// Since it failed, there were topology changes and the offset state for the group changed
+						// It can be safely ignored
+						continue
+					}
+					responseItems = append(responseItems, r)
+				}
 			}
-			responseItems = append(responseItems, consumerResponseItem{chunk: chunk, topic: reader.Topic})
 		}
 
 		if len(responseItems) == 0 {
-			// No data to poll
-			utils.NoContentResponse(item.writer, 0)
-		} else {
-			err := marshalResponse(item.writer, responseItems)
-			if err != nil {
-				// There was an error writing the response to the consumer
-				// TODO: Do not move forward, use this responseItems for the next call
-			} else {
-				// TODO: Store the position of the consumer group
+			readers := q.getReaders(tokens, topics)
+			totalSize := 0
+
+			for i := 0; i < len(readers) && totalSize < q.config.ConsumerReadThreshold(); i++ {
+				// Use an incremental index to try to be fair between calls by round robin through readers
+				reader := readers[int(q.readerIndex)%len(readers)]
+				q.readerIndex++
+				segmentReadItem := newSegmentReadItem()
+				reader.Items <- segmentReadItem
+				err, chunk := segmentReadItem.result()
+
+				if err != nil {
+					log.Warn().Err(err).Msgf("There was an error reading for %s", &reader.Topic)
+					errors = append(errors, err)
+					continue
+				}
+
+				size := len(chunk.DataBlock())
+				if size > 0 {
+					// A non-empty data block
+					responseItems = append(responseItems, consumerResponseItem{chunk: chunk, topic: reader.Topic})
+					totalSize += size
+				}
 			}
+		}
+
+		if len(responseItems) == 0 {
+			if len(errors) > 0 {
+				http.Error(item.writer, "Internal server error", 500)
+			} else if time.Since(item.timestamp) < fetchMaxWait-requeueDelay {
+				// We can requeue it to await for new data and move on
+				go func() {
+					time.Sleep(requeueDelay)
+					q.items <- item
+				}()
+				continue
+			} else {
+				// Fetch can't wait any more
+				utils.NoContentResponse(item.writer, 0)
+			}
+
+			item.done <- true
+			continue
+		}
+
+		err := marshalResponse(item.writer, responseItems)
+		if err != nil {
+			if len(failedResponseItems) > 0 {
+				log.Warn().
+					Int("length", len(failedResponseItems)).
+					Msgf("New failed responses appended while there are previous failed responses")
+			}
+
+			// There was an error writing the response to the consumer
+			// Use this responseItems for the next call
+			failedResponseItems = append(failedResponseItems, responseItems...)
+			// Set the status at least (unlikely it will be set but worth a try)
+			item.writer.WriteHeader(http.StatusInternalServerError)
+		} else {
+			// TODO: Store the position of the consumer group
 		}
 		item.done <- true
 	}
@@ -126,11 +189,13 @@ func marshalResponse(w http.ResponseWriter, responseItems []consumerResponseItem
 	w.Header().Add("Content-Type", contentType)
 	if err := binary.Write(w, conf.Endianness, uint16(len(responseItems))); err != nil {
 		// There was an issue writing to the wire
+		log.Err(err).Msgf("There was an error while trying to write the consumer response")
 		return err
 	}
 	for _, item := range responseItems {
 		err := item.Marshal(w)
 		if err != nil {
+			log.Err(err).Msgf("There was an error while trying to write the consumer response items")
 			return err
 		}
 	}
@@ -141,9 +206,10 @@ func marshalResponse(w http.ResponseWriter, responseItems []consumerResponseItem
 func (q *groupReadQueue) readNext(connId UUID, w http.ResponseWriter) {
 	done := make(chan bool, 1)
 	q.items <- readQueueItem{
-		connId: connId,
-		writer: w,
-		done:   done,
+		connId:    connId,
+		writer:    w,
+		done:      done,
+		timestamp: time.Now(),
 	}
 
 	<-done

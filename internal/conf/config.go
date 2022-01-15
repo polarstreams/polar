@@ -73,7 +73,7 @@ type ConsumerConfig interface {
 	BasicConfig
 	DatalogConfig
 	ConsumerPort() int
-	ConsumerReadThreshold() int // The amount of bytes used as threshold, once reached the consumer poll is fullfilled
+	ConsumerReadThreshold() int // The minimum amount of bytes once reached the consumer poll is fullfilled
 }
 
 type GossipConfig interface {

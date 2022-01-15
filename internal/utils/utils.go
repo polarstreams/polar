@@ -148,3 +148,21 @@ func NoContentResponse(w http.ResponseWriter, retryAfter int) {
 		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 	}
 }
+
+func ContainsString(values []string, key string) bool {
+	for _, v := range values {
+		if v == key {
+			return true
+		}
+	}
+	return false
+}
+
+func ContainsToken(values []types.Token, key types.Token) bool {
+	for _, v := range values {
+		if v == key {
+			return true
+		}
+	}
+	return false
+}
