@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -16,7 +15,6 @@ var _ = Describe("utils", func() {
 			lastValue := Jitter(d)
 			for i := 0; i < 15; i++ {
 				v := Jitter(d)
-				fmt.Println("--v", v)
 				if v != lastValue {
 					allEqual = false
 				}

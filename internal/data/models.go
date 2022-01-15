@@ -21,6 +21,7 @@ type ReplicationDataItem interface {
 
 type chunkHeader struct {
 	// Strict ordering, exported fields
+	Flags        byte
 	BodyLength   uint32 // The amount of bytes of the body
 	Start        uint64 // The offset of the first message
 	RecordLength uint32 // The amount of messages contained in the chunk

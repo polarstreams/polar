@@ -98,6 +98,7 @@ func (s *SegmentReader) read() {
 		}
 
 		if remainingReader.Len() > 0 {
+			// Consume all the read-ahead data
 			chunk := readChunk(remainingReader)
 			if chunk != nil {
 				item.SetResult(nil, chunk)
@@ -105,9 +106,11 @@ func (s *SegmentReader) read() {
 			}
 
 			// There isn't enough data remaining for a chunk.
-			// Drain the remaining reader and copy the bytes to the beginning of the buffer
-			writeIndex = remainingReader.Len()
-			remainingReader.Read(buf)
+			if remainingReader.Len() > 0 {
+				writeIndex = remainingReader.Len()
+				// Drain the remaining reader and copy the bytes to the beginning of the buffer
+				remainingReader.Read(buf)
+			}
 		}
 
 		n, err := s.pollFile(buf[writeIndex:])
@@ -202,7 +205,6 @@ func (s *SegmentReader) fullSeek() (string, int64, error) {
 	for _, entry := range entries {
 		filePrefix := strings.Split(filepath.Base(entry), ".")[0]
 		startOffset, err := strconv.ParseUint(filePrefix, 10, 64)
-		fmt.Println("start offset", startOffset, err)
 		if err != nil {
 			continue
 		}
@@ -302,11 +304,25 @@ func (s *SegmentReader) close(err error) {
 }
 
 func readChunk(reader *bytes.Reader) SegmentChunk {
+	header := chunkHeader{}
+	// Peek the next chunk flags for alignment
+	for {
+		flag, err := reader.ReadByte()
+		if err == io.EOF {
+			return nil
+		}
+		utils.PanicIfErr(err, "Unexpected error when reading chunk header")
+		if flag != alignmentFlag {
+			// It's a valid header
+			_ = reader.UnreadByte()
+			break
+		}
+	}
+
 	if reader.Len() < chunkHeaderSize {
 		return nil
 	}
 
-	header := chunkHeader{}
 	err := binary.Read(reader, conf.Endianness, &header)
 	utils.PanicIfErr(err, "Unexpected EOF when reading chunk header")
 

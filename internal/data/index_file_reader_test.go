@@ -40,6 +40,7 @@ func writeIndexFile(basePath string, steps int) {
 		items:    make(chan indexFileItem),
 		basePath: basePath,
 		config:   config,
+		closed:   make(chan bool, 1),
 	}
 
 	go w.writeLoop()
@@ -48,5 +49,7 @@ func writeIndexFile(basePath string, steps int) {
 		w.append(0, uint64(i*10), int64(i*100))
 	}
 
-	defer close(w.items)
+	close(w.items)
+
+	<-w.closed
 }

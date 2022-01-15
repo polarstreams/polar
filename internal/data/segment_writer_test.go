@@ -29,9 +29,9 @@ var _ = Describe("SegmentWriter", func() {
 			Expect(s.buffer.Len()).To(Equal(alignment))
 			Expect(s.buffer.Bytes()[:3]).To(Equal([]byte{0, 0, 0}))
 
-			// Followed by 0xff
+			// Followed by 0x80
 			for i := 3; i < alignment; i++ {
-				Expect(s.buffer.Bytes()[i]).To(Equal(byte(0xff)))
+				Expect(s.buffer.Bytes()[i]).To(Equal(alignmentFlag))
 			}
 
 			// It's aligned, no effect
@@ -43,9 +43,9 @@ var _ = Describe("SegmentWriter", func() {
 			Expect(s.buffer.Len()).To(Equal(alignment * 2))
 			Expect(s.buffer.Bytes()[alignment]).To(Equal(byte(1)))
 
-			// Filled with 0xff
+			// Filled with 0x80
 			for i := 1; i < alignment; i++ {
-				Expect(s.buffer.Bytes()[alignment+i]).To(Equal(byte(0xff)))
+				Expect(s.buffer.Bytes()[alignment+i]).To(Equal(alignmentFlag))
 			}
 		})
 	})

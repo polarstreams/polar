@@ -20,6 +20,7 @@ import (
 const flushResolution = 200 * time.Millisecond
 const flushInterval = 5 * time.Second
 const alignmentSize = 512
+const alignmentFlag = byte(1 << 7)
 
 var alignmentBuffer = createAlignmentBuffer()
 
@@ -258,8 +259,10 @@ func (s *SegmentWriter) writeToBuffer(item SegmentChunk) {
 	}
 	headStartIndex := s.buffer.Len()
 	compressedBody := item.DataBlock()
+	const flags = byte(0) // Only valid flag is alignment 0x80 (10000000)
 
 	// Write head
+	binary.Write(s.buffer, conf.Endianness, flags)
 	binary.Write(s.buffer, conf.Endianness, uint32(len(compressedBody)))
 	binary.Write(s.buffer, conf.Endianness, item.StartOffset())
 	binary.Write(s.buffer, conf.Endianness, item.RecordLength())
@@ -307,7 +310,7 @@ func (s *SegmentWriter) send(
 func createAlignmentBuffer() []byte {
 	b := make([]byte, alignmentSize-1)
 	for i := range b {
-		b[i] = 0xff
+		b[i] = alignmentFlag
 	}
 	return b
 }

@@ -17,6 +17,7 @@ type indexFileWriter struct {
 	items    chan indexFileItem
 	basePath string
 	config   conf.DatalogConfig
+	closed   chan bool
 }
 
 func newIndexFileWriter(basePath string, config conf.DatalogConfig) *indexFileWriter {
@@ -24,6 +25,7 @@ func newIndexFileWriter(basePath string, config conf.DatalogConfig) *indexFileWr
 		items:    make(chan indexFileItem, 1), // Try not to block when sending
 		config:   config,
 		basePath: basePath,
+		closed:   make(chan bool, 1),
 	}
 	go w.writeLoop()
 	return w
@@ -79,6 +81,8 @@ func (w *indexFileWriter) writeLoop() {
 			lastStoredFileOffset = item.fileOffset
 		}
 	}
+
+	w.closed <- true
 }
 
 // When conditions apply, it adds a line to the index file mapping file offset with message offset

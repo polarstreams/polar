@@ -16,7 +16,7 @@ import (
 
 var _ = Describe("SegmentReader", func() {
 	Describe("read()", func() {
-		XIt("should support empty reads", func() {
+		It("should support empty reads", func() {
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(1 * conf.Mib)
 			s := &SegmentReader{
@@ -35,7 +35,7 @@ var _ = Describe("SegmentReader", func() {
 			pollChunkAndAssert(s, item, 0)
 		})
 
-		XIt("should support partial chunks", func() {
+		It("should support partial chunks", func() {
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(1 * conf.Mib)
 			s := &SegmentReader{
@@ -80,18 +80,59 @@ var _ = Describe("SegmentReader", func() {
 			secondFile, err := os.Create(filepath.Join(dir, "00020.dlog"))
 
 			// Write to the files
-			buffer := createTestChunk(512-chunkHeaderSize, 0, 20)
-			_, err = firstFile.Write(buffer)
+			_, err = firstFile.Write(createTestChunk(512-chunkHeaderSize, 0, 20))
 			Expect(err).NotTo(HaveOccurred())
 
-			buffer = createTestChunk(512*2-chunkHeaderSize, 100, 30)
-			_, err = secondFile.Write(buffer)
+			// buffer = createTestChunk(512-chunkHeaderSize, 50, 40)
+			_, err = secondFile.Write(createTestChunk(512*2-chunkHeaderSize, 20, 30))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = secondFile.Write(createTestChunk(512-chunkHeaderSize, 50, 40))
+			Expect(err).NotTo(HaveOccurred())
 
 			firstFile.Sync()
 			secondFile.Sync()
 
-			firstFile.Close()
-			secondFile.Close()
+			s := &SegmentReader{
+				config:    config,
+				Items:     make(chan ReadItem, 16),
+				basePath:  dir,
+				pollDelay: 1 * time.Millisecond,
+			}
+			go s.read()
+			defer firstFile.Close()
+			defer secondFile.Close()
+			defer close(s.Items)
+
+			item := newTestReadItem()
+			pollChunkAndAssert(s, item, 512-chunkHeaderSize)
+			// First empty poll
+			pollChunkAndAssert(s, item, 0)
+			// Second empty poll swaps the file
+			pollChunkAndAssert(s, item, 0)
+			pollChunkAndAssert(s, item, 512*2-chunkHeaderSize)
+			pollChunkAndAssert(s, item, 512-chunkHeaderSize)
+		})
+
+		It("should read alignment", func() {
+			config := new(mocks.Config)
+			config.On("ReadAheadSize").Return(1024)
+
+			dir, err := os.MkdirTemp("", "read_alignment*")
+			Expect(err).NotTo(HaveOccurred())
+			file, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			Expect(err).NotTo(HaveOccurred())
+			defer file.Close()
+
+			// Write a chunk, followed by an alignment buffer
+			_, err = file.Write(createTestChunk(510-chunkHeaderSize, 0, 20))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = file.Write([]byte{0x80, 0x80})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = file.Write(createTestChunk(512*2-3-chunkHeaderSize, 20, 15))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = file.Write([]byte{0x80, 0x80, 0x80})
+
+			file.Sync()
 
 			s := &SegmentReader{
 				config:    config,
@@ -103,16 +144,51 @@ var _ = Describe("SegmentReader", func() {
 			defer close(s.Items)
 
 			item := newTestReadItem()
-			pollChunkAndAssert(s, item, 512-chunkHeaderSize)
+			pollChunkAndAssert(s, item, 510-chunkHeaderSize)
 			// First empty poll
+			pollChunkAndAssert(s, item, 512*2-3-chunkHeaderSize)
 			pollChunkAndAssert(s, item, 0)
-			// Second empty poll swaps the file
-			pollChunkAndAssert(s, item, 0)
-			pollChunkAndAssert(s, item, 512*2-chunkHeaderSize)
 		})
 
-		XIt("should read alignment", func() {
+		It("should poll until there's new data", func() {
+			config := new(mocks.Config)
+			config.On("ReadAheadSize").Return(1024)
 
+			dir, err := os.MkdirTemp("", "poll_new_data*")
+			Expect(err).NotTo(HaveOccurred())
+			file, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			Expect(err).NotTo(HaveOccurred())
+			defer file.Close()
+
+			// Write a chunk, followed by an alignment buffer
+			_, err = file.Write(createTestChunk(510-chunkHeaderSize, 0, 20))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = file.Write([]byte{0x80, 0x80})
+			Expect(err).NotTo(HaveOccurred())
+
+			file.Sync()
+
+			s := &SegmentReader{
+				config:    config,
+				Items:     make(chan ReadItem, 16),
+				basePath:  dir,
+				pollDelay: 1 * time.Millisecond,
+			}
+			go s.read()
+			defer close(s.Items)
+
+			item := newTestReadItem()
+			pollChunkAndAssert(s, item, 510-chunkHeaderSize)
+			pollChunkAndAssert(s, item, 0)
+			pollChunkAndAssert(s, item, 0)
+			pollChunkAndAssert(s, item, 0)
+
+			// New data
+			_, err = file.Write(createTestChunk(512-chunkHeaderSize, 20, 30))
+			Expect(err).NotTo(HaveOccurred())
+			file.Sync()
+
+			pollChunkAndAssert(s, item, 512-chunkHeaderSize)
 		})
 	})
 })
@@ -134,8 +210,9 @@ func (r *testReadItem) SetResult(err error, chunk SegmentChunk) {
 	r.errorResult <- err
 }
 
-func createTestChunk(bodyLength int, start int, recordLength int) []byte {
+func createTestChunk(bodyLength, start, recordLength int) []byte {
 	header := chunkHeader{
+		Flags:        0,
 		BodyLength:   uint32(bodyLength),
 		Start:        uint64(start),
 		RecordLength: uint32(recordLength),
