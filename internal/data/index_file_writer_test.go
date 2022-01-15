@@ -89,7 +89,7 @@ var _ = Describe("indexFileWriter", func() {
 func assertStored(basePath string, segmentId uint64, values []indexOffset) {
 	expectedFileLength := utils.BinarySize(indexOffset{}) * len(values) // 8 + 8 + 4
 	var blob []byte
-	maxWaits := 100
+	maxWaits := 500
 	if len(values) == 0 {
 		maxWaits = 10
 	}

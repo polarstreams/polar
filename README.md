@@ -1,6 +1,6 @@
-# Soda Streams
+# Barco Streams
 
-Soda is a lightweight, elastic, kubernetes-native event streaming software.
+Barco is a lightweight, elastic, kubernetes-native event streaming software.
 
 ## Features
 
@@ -25,6 +25,14 @@ data.
 
 -----
 
+## Building
+
+```bash
+go build ./...
+
+go test -v ./...
+```
+
 ## Design Principles
 
 ### Act as safe buffer between services
@@ -41,9 +49,4 @@ be handled smoothly. For example, when a consumer is being restarted due to an u
 the data assignment among consumers as it's very likely that the consumer will be ready in a few seconds. Querying the
 Kubernetes API can provide valuable insights to understand what is occurring and what to expect.
 
-TODO: Dynamo Consistent Hashing and Gossip-based membership protocol
-
-## Limitations
-
-- No log compaction: data is kept after is consumed for a fixed period of time or
-when the log reaches some predetermined size.
+TODO: Document Dynamo Consistent Hashing and Gossip-based membership protocol
