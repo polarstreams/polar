@@ -56,6 +56,34 @@ func (_m *Config) ConsumerPort() int {
 	return r0
 }
 
+// ConsumerRanges provides a mock function with given fields:
+func (_m *Config) ConsumerRanges() int {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
+// ConsumerReadThreshold provides a mock function with given fields:
+func (_m *Config) ConsumerReadThreshold() int {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
 // CreateAllDirs provides a mock function with given fields:
 func (_m *Config) CreateAllDirs() error {
 	ret := _m.Called()
@@ -70,13 +98,13 @@ func (_m *Config) CreateAllDirs() error {
 	return r0
 }
 
-// DatalogPath provides a mock function with given fields: topic, token, genId
-func (_m *Config) DatalogPath(topic string, token types.Token, genId string) string {
-	ret := _m.Called(topic, token, genId)
+// DatalogPath provides a mock function with given fields: topicDataId
+func (_m *Config) DatalogPath(topicDataId *types.TopicDataId) string {
+	ret := _m.Called(topicDataId)
 
 	var r0 string
-	if rf, ok := ret.Get(0).(func(string, types.Token, string) string); ok {
-		r0 = rf(topic, token, genId)
+	if rf, ok := ret.Get(0).(func(*types.TopicDataId) string); ok {
+		r0 = rf(topicDataId)
 	} else {
 		r0 = ret.Get(0).(string)
 	}

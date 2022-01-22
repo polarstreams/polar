@@ -13,6 +13,8 @@ const NotFoundIndex BrokerIndex = -1
 type Offset struct {
 	Offset  uint64
 	Version GenVersion
+
+	Source GenVersion // The point-in-time when the offset was made.
 }
 
 // BrokerInfo contains information about a broker
@@ -44,14 +46,19 @@ func (b *BrokerInfo) String() string {
 	return fmt.Sprintf("%s (%d)", b.HostName, b.Ordinal)
 }
 
+func (v GenVersion) String() string {
+	return fmt.Sprintf("%d", v)
+}
+
 type TopicInfo struct {
 	Name string
 }
 
 type ReplicationInfo struct {
-	Leader    *BrokerInfo
-	Followers []BrokerInfo
-	Token     Token
+	Leader     *BrokerInfo
+	Followers  []BrokerInfo
+	Token      Token
+	RangeIndex RangeIndex
 }
 
 // SegmentChunk represents a group of compressed records.
@@ -173,23 +180,24 @@ func (t *TopologyInfo) NaturalFollowers() []int {
 	}
 }
 
-// Returns the primary token (start of the range) and BrokerIndex for a given token
-func (t *TopologyInfo) PrimaryToken(token Token) (Token, BrokerIndex) {
-	brokerIndex := GetPrimaryTokenIndex(token, len(t.Brokers))
-	return t.GetToken(brokerIndex), brokerIndex
+// Returns the primary token (start of the range), BrokerIndex and Range index for a given token
+func (t *TopologyInfo) PrimaryToken(token Token, ranges int) (Token, BrokerIndex, RangeIndex) {
+	brokerIndex, rangeIndex := GetPrimaryTokenIndex(token, len(t.Brokers), ranges)
+	return t.GetToken(brokerIndex), brokerIndex, rangeIndex
 }
 
 // TopicDataId contains information to locate a certain piece of data.
 //
 // Specifies a topic, for a token, for a defined gen id.
 type TopicDataId struct {
-	Name  string
-	Token Token
-	GenId GenVersion
+	Name       string
+	Token      Token
+	GenId      GenVersion
+	RangeIndex RangeIndex
 }
 
 func (t *TopicDataId) String() string {
-	return fmt.Sprintf("'%s' %d v%d", t.Name, t.Token, t.GenId)
+	return fmt.Sprintf("'%s' %d/%d v%d", t.Name, t.Token, t.RangeIndex, t.GenId)
 }
 
 // Replicator contains logic to send data to replicas
@@ -207,7 +215,7 @@ type Generation struct {
 	End       Token     `json:"end"`
 	Version   int       `json:"version"`   // TODO: Use GenVersion type
 	Timestamp int64     `json:"timestamp"` // In unix micros
-	Leader    int       `json:"leader"`    // Leader ordinal
+	Leader    int       `json:"leader"`    // The ordinal of the leader
 	Followers []int     `json:"followers"` // Follower ordinals
 	TxLeader  int       `json:"txLeader"`  // The originator of the transaction
 	Tx        uuid.UUID `json:"tx"`

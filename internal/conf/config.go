@@ -6,12 +6,12 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/jorgebay/soda/internal/types"
+	. "github.com/jorgebay/soda/internal/types"
 )
 
 const (
 	Mib                  = 1024 * 1024
-	allocationPoolSize   = 100 * Mib
+	allocationPoolSize   = 32 * Mib
 	filePermissions      = 0755
 	SegmentFileExtension = "dlog"
 	IndexFileExtension   = "index"
@@ -39,6 +39,7 @@ type Config interface {
 
 type BasicConfig interface {
 	ListenOnAllAddresses() bool
+	ConsumerRanges() int // The number of ranges to partition any token range.
 }
 
 type LocalDbConfig interface {
@@ -46,7 +47,7 @@ type LocalDbConfig interface {
 }
 
 type DatalogConfig interface {
-	DatalogPath(topic string, token types.Token, genId string) string
+	DatalogPath(topicDataId *TopicDataId) string
 	MaxSegmentSize() int
 	SegmentBufferSize() int // The amount of bytes that the segment buffer can hold
 	MaxMessageSize() int
@@ -56,6 +57,7 @@ type DatalogConfig interface {
 }
 
 type DiscovererConfig interface {
+	BasicConfig
 	Ordinal() int
 	// BaseHostName is name prefix that should be concatenated with the ordinal to
 	// return the host name of a replica
@@ -145,6 +147,10 @@ func (c *config) ListenOnAllAddresses() bool {
 	return os.Getenv(envListenOnAllAddresses) != "false"
 }
 
+func (c *config) ConsumerRanges() int {
+	return 8
+}
+
 func (c *config) MaxMessageSize() int {
 	return Mib
 }
@@ -170,7 +176,7 @@ func (c *config) MaxSegmentSize() int {
 }
 
 func (c *config) SegmentBufferSize() int {
-	return 32 * Mib
+	return 8 * Mib
 }
 
 func (c *config) MaxDataBodyLength() int {
@@ -199,9 +205,9 @@ func (c *config) LocalDbPath() string {
 	return filepath.Join(c.dataPath(), "local.db")
 }
 
-func (c *config) DatalogPath(topic string, token types.Token, genId string) string {
-	// Pattern: /var/lib/soda/data/datalog/{topic}/{token}/{genId}
-	return filepath.Join(c.dataPath(), "datalog", topic, token.String(), genId)
+func (c *config) DatalogPath(t *TopicDataId) string {
+	// Pattern: /var/lib/soda/data/datalog/{topic}/{token}/{rangeIndex}/{genId}
+	return filepath.Join(c.dataPath(), "datalog", t.Name, t.Token.String(), t.RangeIndex.String(), t.GenId.String())
 }
 
 func (c *config) CreateAllDirs() error {

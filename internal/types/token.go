@@ -6,14 +6,22 @@ import (
 	"sort"
 )
 
-const startToken = math.MinInt64
+const startToken Token = math.MinInt64
 
+// Represents a partition token
 type Token int64
+
+// Represents an index in the token range
+type RangeIndex uint8
 
 const maxRingSize = 12288 // 3*math.Pow(2, 12)
 const chunkSizeUnit = math.MaxUint64 / maxRingSize
 
 func (t Token) String() string {
+	return fmt.Sprintf("%d", t)
+}
+
+func (t RangeIndex) String() string {
 	return fmt.Sprintf("%d", t)
 }
 
@@ -23,12 +31,21 @@ func HashToken(key string) Token {
 }
 
 // GetPrimaryTokenIndex returns the broker index of the start token in a given range
-func GetPrimaryTokenIndex(token Token, tokenRangeLength int) BrokerIndex {
+func GetPrimaryTokenIndex(token Token, tokenRangeLength int, ranges int) (BrokerIndex, RangeIndex) {
 	i := sort.Search(tokenRangeLength, func(i int) bool {
 		return GetTokenAtIndex(tokenRangeLength, i) > token
 	})
 
-	return BrokerIndex(i - 1)
+	index := i - 1
+	rangeSize := chunkSizeUnit * getRingFactor(tokenRangeLength) / int64(ranges)
+	tokenDiff := absInt64(token - GetTokenAtIndex(tokenRangeLength, index))
+	rangeIndex := RangeIndex(tokenDiff / rangeSize)
+
+	if int(rangeIndex) >= ranges {
+		// The last range is larger than chunkSize*factor
+		rangeIndex = 0
+	}
+	return BrokerIndex(index), rangeIndex
 }
 
 func GetTokenAtIndex(length int, index int) Token {
@@ -37,4 +54,11 @@ func GetTokenAtIndex(length int, index int) Token {
 
 func getRingFactor(ringSize int) int64 {
 	return int64(maxRingSize / ringSize)
+}
+
+func absInt64(num Token) int64 {
+	if num < 0 {
+		return -int64(num)
+	}
+	return int64(num)
 }

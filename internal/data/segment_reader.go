@@ -46,7 +46,7 @@ func NewSegmentReader(
 	config conf.DatalogConfig,
 ) (*SegmentReader, error) {
 	// From the same base folder, the SegmentReader will continue reading through the files in order
-	basePath := config.DatalogPath(topic.Name, topic.Token, fmt.Sprint(topic.GenId))
+	basePath := config.DatalogPath(&topic)
 	s := &SegmentReader{
 		config:    config,
 		basePath:  basePath,

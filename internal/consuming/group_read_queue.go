@@ -20,7 +20,7 @@ const (
 	requeueDelay = 200 * time.Millisecond
 )
 
-// Receives read requests on a single thread and dispatches them
+// Receives read requests per group on a single thread and dispatches them
 // track outstanding per topic/group
 // close segments / groups
 type groupReadQueue struct {
@@ -97,6 +97,7 @@ func (q *groupReadQueue) process() {
 				if utils.ContainsToken(tokens, r.topic.Token) && utils.ContainsString(topics, r.topic.Name) {
 					// Remove it from failed
 					failedResponseItems = append(failedResponseItems[:i], failedResponseItems[i+1:]...)
+					// TODO: Revisit offset gen vs current gen
 					if offset := q.offsetState.Get(q.group, r.topic.Token); offset.Version != r.topic.GenId {
 						// Since it failed, there were topology changes and the offset state for the group changed
 						// It can be safely ignored

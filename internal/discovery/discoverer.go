@@ -19,6 +19,8 @@ const (
 	envBrokerNames = "SODA_BROKER_NAMES"
 )
 
+var roundRobinRangeIndex uint32 = 0
+
 // Discoverer provides the cluster topology information.
 //
 // It emits events that others like Gossipper listens to.
@@ -175,10 +177,14 @@ func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 	topology := d.topology
 	token := topology.MyToken()
 	brokerIndex := topology.LocalIndex
+	rangeIndex := RangeIndex(0)
 
 	if partitionKey != "" {
 		// Calculate the token based on the partition key
-		token, brokerIndex = topology.PrimaryToken(HashToken(partitionKey))
+		token, brokerIndex, rangeIndex = topology.PrimaryToken(HashToken(partitionKey), d.config.ConsumerRanges())
+	} else {
+		// Use round robin to avoid overloading a range
+		rangeIndex = RangeIndex(atomic.AddUint32(&roundRobinRangeIndex, 1) % uint32(d.config.ConsumerRanges()))
 	}
 
 	gen := d.Generation(token)
@@ -187,16 +193,18 @@ func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 		// We don't have information about it and it's OK
 		// Send it to the natural owner or the natural owner followers
 		return ReplicationInfo{
-			Leader:    &topology.Brokers[brokerIndex],
-			Followers: topology.NextBrokers(brokerIndex, 2),
-			Token:     token,
+			Leader:     &topology.Brokers[brokerIndex],
+			Followers:  topology.NextBrokers(brokerIndex, 2),
+			Token:      token,
+			RangeIndex: rangeIndex,
 		}
 	}
 
 	return ReplicationInfo{
-		Leader:    topology.BrokerByOrdinal(gen.Leader),
-		Followers: topology.BrokerByOrdinalList(gen.Followers),
-		Token:     token,
+		Leader:     topology.BrokerByOrdinal(gen.Leader),
+		Followers:  topology.BrokerByOrdinalList(gen.Followers),
+		Token:      token,
+		RangeIndex: rangeIndex,
 	}
 }
 

@@ -120,8 +120,8 @@ func (p *producer) handleMessage(topic string, querystring url.Values, contentLe
 	}
 
 	partitionKey := querystring.Get("partitionKey")
-	replicationInfo := p.leaderGetter.Leader(partitionKey)
-	leader := replicationInfo.Leader
+	replication := p.leaderGetter.Leader(partitionKey)
+	leader := replication.Leader
 
 	if leader == nil {
 		return fmt.Errorf("Leader was not found")
@@ -132,7 +132,7 @@ func (p *producer) handleMessage(topic string, querystring url.Values, contentLe
 
 	if !leader.IsSelf {
 		// Route the message as-is
-		return p.gossiper.SendToLeader(replicationInfo, topic, querystring, contentLength, body)
+		return p.gossiper.SendToLeader(replication, topic, querystring, contentLength, body)
 	}
 
 	timestampMicros := time.Now().UnixMicro()
@@ -142,21 +142,28 @@ func (p *producer) handleMessage(topic string, querystring url.Values, contentLe
 		}
 	}
 
-	coalescer := p.getCoalescer(topic, replicationInfo.Token)
-	if err := coalescer.append(replicationInfo, uint32(contentLength), timestampMicros, body); err != nil {
+	coalescer := p.getCoalescer(topic, replication.Token, replication.RangeIndex)
+	if err := coalescer.append(replication, uint32(contentLength), timestampMicros, body); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (p *producer) getCoalescer(topicName string, token types.Token) *coalescer {
-	c, loaded, _ := p.coalescerMap.LoadOrStore(topicName, func() (interface{}, error) {
-		return newCoalescer(topicName, token, p.leaderGetter, p.gossiper, p.config), nil
+func (p *producer) getCoalescer(topicName string, token types.Token, rangeIndex types.RangeIndex) *coalescer {
+	key := coalescerKey{topicName, token, rangeIndex}
+	c, loaded, _ := p.coalescerMap.LoadOrStore(key, func() (interface{}, error) {
+		return newCoalescer(topicName, token, rangeIndex, p.leaderGetter, p.gossiper, p.config), nil
 	})
 
 	if !loaded {
-		log.Debug().Msgf("Created coalescer for topic '%s'", topicName)
+		log.Debug().Msgf("Created coalescer for topic '%s' (%d-%d)", topicName, token, rangeIndex)
 	}
 
 	return c.(*coalescer)
+}
+
+type coalescerKey struct {
+	topicName  string
+	token      types.Token
+	rangeIndex types.RangeIndex
 }

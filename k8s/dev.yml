@@ -66,6 +66,9 @@ spec:
       app.kubernetes.io/name: soda
   serviceName: soda-dev
   replicas: 3
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete
+    whenScaled: Delete
   template:
     metadata:
       labels:

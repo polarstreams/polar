@@ -264,6 +264,14 @@ func (c *configFake) BaseHostName() string {
 	return c.baseHostName
 }
 
+func (c *configFake) ConsumerRanges() int {
+	return 8
+}
+
+func (c *configFake) ListenOnAllAddresses() bool {
+	return true
+}
+
 func newConfigFake(ordinal int) *configFake {
 	return &configFake{
 		ordinal:      ordinal,

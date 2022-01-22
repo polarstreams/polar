@@ -207,8 +207,8 @@ func (m *ConsumerState) Rebalance() bool {
 		keySet := consumerGroups[group]
 		topicSet := topics[group]
 
-		keys := keySet.ToSlice()
-		topics := topicSet.ToSlice()
+		keys := keySet.ToSortedSlice()
+		topics := topicSet.ToSortedSlice()
 
 		setConsumerAssignment(fullConsumerInfo, topology, keys, topics, consumers)
 
@@ -225,13 +225,19 @@ func (m *ConsumerState) Rebalance() bool {
 		consumersByConnection[id] = fullConsumerInfo[info.key()]
 	}
 
+	sort.Slice(groupsForPeers, func(i, j int) bool {
+		return groupsForPeers[i].Name < groupsForPeers[j].Name
+	})
+
+	//TODO: Before swapping, if hasChanged, reset offset to lastStoredPosition
+
 	prevGroups := m.groups.Swap(groupsForPeers)
 	m.consumers.Swap(consumersByConnection)
 
 	// Determine if there was a change
-	result := reflect.DeepEqual(prevGroups, groupsForPeers)
+	hasChanged := !reflect.DeepEqual(prevGroups, groupsForPeers)
 
-	return result
+	return hasChanged
 }
 
 func toIds(keys []string, consumers map[consumerKey]ConsumerInfo) []string {

@@ -74,7 +74,8 @@ var _ = Describe("ConsumerState", func() {
 				id2 := addConnection(state, "b", "g1", "topic1")
 				id3 := addConnection(state, "c", "g1", "topic1")
 
-				state.Rebalance()
+				rebalanced := state.Rebalance()
+				Expect(rebalanced).To(BeTrue())
 				assertTopics(state, []string{"topic1"}, id1a, id1b, id2, id3)
 
 				_, tokens1, _ := state.CanConsume(id1a)
@@ -89,6 +90,47 @@ var _ = Describe("ConsumerState", func() {
 				Expect(state.GetInfoForPeers()[0].Topics).To(ConsistOf("topic1"))
 				Expect(state.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "b", "c"))
 			})
+
+			It("should return true/false depending when there's a change in consumer topology", func() {
+				state := newConsumerState(brokerLength)
+				id1a := addConnection(state, "a", "g1", "topic1")
+				id1b := addConnection(state, "a", "g1", "topic1")
+				id2 := addConnection(state, "b", "g1", "topic1")
+				id3 := addConnection(state, "c", "g1", "topic1")
+
+				rebalanced := state.Rebalance()
+				Expect(rebalanced).To(BeTrue())
+				assertTopics(state, []string{"topic1"}, id1a, id1b, id2, id3)
+
+				_, tokens1, _ := state.CanConsume(id1a)
+				Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
+				_, tokens2, _ := state.CanConsume(id2)
+				Expect(tokens2).To(Equal(getTokens(brokerLength, 2, 2)))
+				_, tokens3, _ := state.CanConsume(id3)
+				Expect(tokens3).To(Equal(getTokens(brokerLength, 4, 2)))
+
+				state.RemoveConnection(id1b)
+
+				rebalanced = state.Rebalance()
+				Expect(rebalanced).To(BeFalse()) // No change
+
+				_, tokens1, _ = state.CanConsume(id1a)
+				Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
+
+				id1b = addConnection(state, "a", "g1", "topic1")
+				rebalanced = state.Rebalance()
+				Expect(rebalanced).To(BeFalse()) // No change
+
+				// Add a new consumer to group g1
+				addConnection(state, "d", "g1", "topic1", "topic2")
+				rebalanced = state.Rebalance()
+				Expect(rebalanced).To(BeTrue()) // There's a change
+
+				// Add a new group g2
+				addConnection(state, "e", "g2", "topic1")
+				rebalanced = state.Rebalance()
+				Expect(rebalanced).To(BeTrue()) // There's a change
+			})
 		})
 
 		When("all connections to a consumer are removed", func() {
@@ -102,7 +144,8 @@ var _ = Describe("ConsumerState", func() {
 					// Remove b
 					state.RemoveConnection(id2)
 
-					state.Rebalance()
+					rebalanced := state.Rebalance()
+					Expect(rebalanced).To(BeTrue())
 
 					_, tokens1, _ := state.CanConsume(id1)
 					Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))

@@ -1,5 +1,7 @@
 package types
 
+import "sort"
+
 type StringSet map[string]bool
 
 func (s *StringSet) Add(values ...string) {
@@ -15,6 +17,13 @@ func (s *StringSet) ToSlice() []string {
 	for t := range set {
 		result = append(result, t)
 	}
+
+	return result
+}
+
+func (s *StringSet) ToSortedSlice() []string {
+	result := s.ToSlice()
+	sort.Strings(result)
 
 	return result
 }

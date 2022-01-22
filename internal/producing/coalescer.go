@@ -32,7 +32,8 @@ type coalescer struct {
 	items           chan *record
 	topicName       string
 	token           types.Token
-	generationState discovery.GenerationState
+	rangeIndex      types.RangeIndex
+	generationState discovery.TopologyGetter
 	replicator      types.Replicator
 	config          conf.ProducerConfig
 	offset          uint64
@@ -73,7 +74,8 @@ func newBuffers(config conf.ProducerConfig) buffers {
 func newCoalescer(
 	topicName string,
 	token types.Token,
-	generationState discovery.GenerationState,
+	rangeIndex types.RangeIndex,
+	generationState discovery.TopologyGetter,
 	replicator types.Replicator,
 	config conf.ProducerConfig,
 ) *coalescer {
@@ -81,6 +83,7 @@ func newCoalescer(
 		items:           make(chan *record, 0),
 		topicName:       topicName,
 		token:           token,
+		rangeIndex:      rangeIndex,
 		generationState: generationState,
 		replicator:      replicator,
 		config:          config,
@@ -129,12 +132,19 @@ func (c *coalescer) process() {
 			continue
 		}
 
+		if gen.Leader != c.generationState.Topology().MyOrdinal() {
+			item.response <- types.NewNoWriteAttemptedError("Coalescer can not write as it's no longer the leader")
+			item = nil
+			continue
+		}
+
 		if c.writer == nil {
 			// Use generation to create a new writer
 			topic := types.TopicDataId{
-				Name:  c.topicName,
-				Token: c.token,
-				GenId: types.GenVersion(gen.Version),
+				Name:       c.topicName,
+				Token:      c.token,
+				RangeIndex: c.rangeIndex,
+				GenId:      types.GenVersion(gen.Version),
 			}
 			if c.writer, err = data.NewSegmentWriter(topic, c.replicator, c.config, nil); err != nil {
 				log.Err(err).Msg("There was an error while creating the segment writer")

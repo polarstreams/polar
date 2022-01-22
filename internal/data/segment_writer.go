@@ -26,8 +26,8 @@ var alignmentBuffer = createAlignmentBuffer()
 
 // SegmentWriter contains the logic to write segments on disk and replicate them.
 //
-// There should be an instance per topic+token+generation. When the generation is
-// no longer the current one, the channel should be closed.
+// There should be an instance per topic+token+generation. When the generation changes for
+// a token, the channel should be closed.
 type SegmentWriter struct {
 	Items          chan SegmentChunk
 	Topic          TopicDataId
@@ -49,7 +49,7 @@ func NewSegmentWriter(
 	config conf.DatalogConfig,
 	segmentId *uint64,
 ) (*SegmentWriter, error) {
-	basePath := config.DatalogPath(topic.Name, topic.Token, fmt.Sprint(topic.GenId))
+	basePath := config.DatalogPath(&topic)
 
 	if err := os.MkdirAll(basePath, DirectoryPermissions); err != nil {
 		return nil, err

@@ -58,6 +58,30 @@ var _ = Describe("Token", func() {
 		})
 	})
 
+	Describe("GetPrimaryTokenIndex()", func() {
+		It("Should calculate the RangeIndex", func() {
+			brokerIndex, rangeIndex := GetPrimaryTokenIndex(startToken, 6, 8)
+			Expect(brokerIndex).To(Equal(BrokerIndex(0)))
+			Expect(rangeIndex).To(Equal(RangeIndex(0)))
+
+			brokerIndex, rangeIndex = GetPrimaryTokenIndex(Token(math.MaxInt64), 6, 8)
+			Expect(brokerIndex).To(Equal(BrokerIndex(5)))
+			Expect(rangeIndex).To(Equal(RangeIndex(0)))
+
+			brokerIndex, rangeIndex = GetPrimaryTokenIndex(Token(math.MaxInt64)-10000, 6, 8)
+			Expect(brokerIndex).To(Equal(BrokerIndex(5)))
+			Expect(rangeIndex).To(Equal(RangeIndex(7)))
+
+			brokerIndex, rangeIndex = GetPrimaryTokenIndex(Token(math.MaxInt64)-999999999999999999, 6, 8)
+			Expect(brokerIndex).To(Equal(BrokerIndex(5)))
+			Expect(rangeIndex).To(Equal(RangeIndex(5)))
+
+			brokerIndex, rangeIndex = GetPrimaryTokenIndex(startToken+Token(chunkSizeUnit*getRingFactor(6)/2), 6, 8)
+			Expect(brokerIndex).To(Equal(BrokerIndex(0)))
+			Expect(rangeIndex).To(Equal(RangeIndex(4)))
+		})
+	})
+
 	Describe("HashToken()", func() {
 		It("Should return the expected values", func() {
 			// Taken from Cassandra token() function
