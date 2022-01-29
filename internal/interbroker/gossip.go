@@ -54,6 +54,9 @@ type Gossiper interface {
 	// Sends a message to the broker with the ordinal number containing the local snapshot of consumers
 	SendConsumerGroups(ordinal int, groups []ConsumerGroup) error
 
+	// Sends a message to the broker with the committed offset of a consumer group
+	SendCommittedOffset(ordinal int, group string, topic string, token Token, rangeIndex RangeIndex, value Offset) error
+
 	// Adds a listener for consumer information
 	RegisterConsumerInfoListener(listener ConsumerInfoListener)
 
@@ -371,4 +374,16 @@ func (g *gossiper) SendConsumerGroups(ordinal int, groups []ConsumerGroup) error
 	r, err := g.requestPost(ordinal, conf.GossipConsumerGroupsInfoUrl, jsonBody)
 	defer r.Body.Close()
 	return err
+}
+
+func (g *gossiper) SendCommittedOffset(
+	ordinal int,
+	group string,
+	topic string,
+	token Token,
+	rangeIndex RangeIndex,
+	value Offset,
+) error {
+	// TODO: Implement SendCommittedOffset
+	return nil
 }

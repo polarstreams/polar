@@ -11,6 +11,7 @@ import (
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/interbroker"
+	"github.com/jorgebay/soda/internal/localdb"
 	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/jorgebay/soda/internal/utils"
 	"github.com/julienschmidt/httprouter"
@@ -37,6 +38,7 @@ type Consumer interface {
 
 func NewConsumer(
 	config conf.ConsumerConfig,
+	localDb localdb.Client,
 	topologyGetter discovery.TopologyGetter,
 	gossiper interbroker.Gossiper,
 ) Consumer {
@@ -45,6 +47,7 @@ func NewConsumer(
 		topologyGetter: topologyGetter,
 		gossiper:       gossiper,
 		state:          NewConsumerState(config, topologyGetter),
+		offsetState:    newDefaultOffsetState(localDb, topologyGetter, gossiper),
 		readQueues:     NewCopyOnWriteMap(),
 	}
 }
@@ -54,6 +57,7 @@ type consumer struct {
 	topologyGetter discovery.TopologyGetter
 	gossiper       interbroker.Gossiper
 	state          *ConsumerState
+	offsetState    OffsetState
 	readQueues     *CopyOnWriteMap
 }
 

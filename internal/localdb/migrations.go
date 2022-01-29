@@ -30,4 +30,15 @@ const ddl01 = `
 		timestamp BIGINT NOT NULL,
 		status INT NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS offsets (
+		group_name TEXT NOT NULL,
+		topic TEXT NOT NULL,
+		token BIGINT NOT NULL,
+		range_index INT NOT NULL,
+		version INT NOT NULL,
+		offset INT NOT NULL,
+		source INT NOT NULL,
+		PRIMARY KEY (group_name, topic, token, range_index)
+	);
 `

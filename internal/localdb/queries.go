@@ -14,6 +14,7 @@ type queries struct {
 	selectGenerations *sql.Stmt
 	insertGeneration  *sql.Stmt
 	insertTransaction *sql.Stmt
+	insertOffset      *sql.Stmt
 }
 
 func (c *client) prepareQueries() {
@@ -27,6 +28,10 @@ func (c *client) prepareQueries() {
 
 	c.queries.insertTransaction = c.prepare(
 		`INSERT INTO transactions (tx, origin, timestamp, status) VALUES (?, ?, ?, ?)`)
+
+	c.queries.insertOffset = c.prepare(
+		`INSERT INTO offsets (group_name, topic, token, range_index, version, offset, source)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`)
 }
 
 func (c *client) prepare(query string) *sql.Stmt {
@@ -125,4 +130,9 @@ func (c *client) CommitGeneration(gen *Generation) error {
 	}
 
 	return tx.Commit()
+}
+
+func (c *client) SaveOffset(group string, topic string, token Token, rangeIndex RangeIndex, value Offset) error {
+	_, err := c.queries.insertOffset.Exec(group, topic, token, rangeIndex, value.Version, value.Offset, value.Source)
+	return err
 }

@@ -23,6 +23,7 @@ type SegmentReader struct {
 	basePath      string
 	config        conf.DatalogConfig
 	Topic         TopicDataId
+	offsetState   OffsetState
 	messageOffset uint64
 	fileName      string
 	nextFileName  string
@@ -43,16 +44,18 @@ const minSeekIntervals = 2 * time.Second
 // should be a different reader instance per consumer group.
 func NewSegmentReader(
 	topic TopicDataId,
+	offsetState OffsetState,
 	config conf.DatalogConfig,
 ) (*SegmentReader, error) {
 	// From the same base folder, the SegmentReader will continue reading through the files in order
 	basePath := config.DatalogPath(&topic)
 	s := &SegmentReader{
-		config:    config,
-		basePath:  basePath,
-		Items:     make(chan ReadItem, 16),
-		Topic:     topic,
-		pollDelay: defaultPollDelay,
+		config:      config,
+		basePath:    basePath,
+		Items:       make(chan ReadItem, 16),
+		Topic:       topic,
+		offsetState: offsetState,
+		pollDelay:   defaultPollDelay,
 	}
 
 	if err := s.initRead(); err != nil {
@@ -81,6 +84,8 @@ func (s *SegmentReader) read() {
 	remainingReader := bytes.NewReader(emptyBuffer)
 
 	for item := range s.Items {
+		// Check
+
 		writeIndex := 0
 		if s.segmentFile == nil {
 			// Segment file might be nil when there was no data at the beginning

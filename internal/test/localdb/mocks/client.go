@@ -81,3 +81,17 @@ func (_m *Client) Init() error {
 
 	return r0
 }
+
+// SaveOffset provides a mock function with given fields: group, topic, token, rangeIndex, value
+func (_m *Client) SaveOffset(group string, topic string, token types.Token, rangeIndex types.RangeIndex, value types.Offset) error {
+	ret := _m.Called(group, topic, token, rangeIndex, value)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, string, types.Token, types.RangeIndex, types.Offset) error); ok {
+		r0 = rf(group, topic, token, rangeIndex, value)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}

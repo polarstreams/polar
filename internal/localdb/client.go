@@ -4,23 +4,26 @@ import (
 	"database/sql"
 
 	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/types"
+	. "github.com/jorgebay/soda/internal/types"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/zerolog/log"
 )
 
 // Client represents a local db client.
 type Client interface {
-	types.Initializer
-	types.Closer
+	Initializer
+	Closer
 
 	// Determines whether the local db was not present and had to be created
 	DbWasNewlyCreated() bool
 
-	CommitGeneration(generation *types.Generation) error
+	CommitGeneration(generation *Generation) error
+
+	// Stores the group offset for a topic and token+index
+	SaveOffset(group string, topic string, token Token, rangeIndex RangeIndex, value Offset) error
 
 	// TODO: convert to history
-	GetGenerationsByToken(token types.Token) ([]types.Generation, error)
+	GetGenerationsByToken(token Token) ([]Generation, error)
 }
 
 // NewClient creates a new instance of Client.

@@ -134,6 +134,20 @@ func (_m *Gossiper) RegisterReroutedMessageListener(listener interbroker.Rerouti
 	_m.Called(listener)
 }
 
+// SendCommittedOffset provides a mock function with given fields: ordinal, group, topic, token, rangeIndex, value
+func (_m *Gossiper) SendCommittedOffset(ordinal int, group string, topic string, token types.Token, rangeIndex types.RangeIndex, value types.Offset) error {
+	ret := _m.Called(ordinal, group, topic, token, rangeIndex, value)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int, string, string, types.Token, types.RangeIndex, types.Offset) error); ok {
+		r0 = rf(ordinal, group, topic, token, rangeIndex, value)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SendConsumerGroups provides a mock function with given fields: ordinal, groups
 func (_m *Gossiper) SendConsumerGroups(ordinal int, groups []types.ConsumerGroup) error {
 	ret := _m.Called(ordinal, groups)
@@ -149,11 +163,11 @@ func (_m *Gossiper) SendConsumerGroups(ordinal int, groups []types.ConsumerGroup
 }
 
 // SendToFollowers provides a mock function with given fields: replicationInfo, topic, segmentId, chunk
-func (_m *Gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId int64, chunk types.SegmentChunk) error {
+func (_m *Gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId uint64, chunk types.SegmentChunk) error {
 	ret := _m.Called(replicationInfo, topic, segmentId, chunk)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(types.ReplicationInfo, types.TopicDataId, int64, types.SegmentChunk) error); ok {
+	if rf, ok := ret.Get(0).(func(types.ReplicationInfo, types.TopicDataId, uint64, types.SegmentChunk) error); ok {
 		r0 = rf(replicationInfo, topic, segmentId, chunk)
 	} else {
 		r0 = ret.Error(0)

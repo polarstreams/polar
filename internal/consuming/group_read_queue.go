@@ -101,7 +101,7 @@ func (q *groupReadQueue) process() {
 					failedResponseItems = append(failedResponseItems[:i], failedResponseItems[i+1:]...)
 
 					offset := q.offsetState.Get(q.group, r.topic.Name, r.topic.Token, r.topic.RangeIndex)
-					if offset.Version != r.topic.GenId {
+					if offset != nil && offset.Version != r.topic.GenId {
 						// Since it failed, there were topology changes and the offset state for the group changed
 						// It can be safely ignored
 						continue
@@ -257,7 +257,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 						GenId:      offset.Version,
 					}
 					var err error
-					reader, err = NewSegmentReader(topicId, q.config)
+					reader, err = NewSegmentReader(topicId, q.offsetState, q.config)
 					if err != nil {
 						// reader could not be initialized, skip for now
 						continue

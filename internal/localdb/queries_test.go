@@ -86,6 +86,30 @@ var _ = Describe("Client", func() {
 			expectTransactionStored(client, gen)
 		})
 	})
+
+	Describe("SaveOffset", func() {
+		It("should insert a record in offsets table", func() {
+			client := newTestClient()
+			value := Offset{
+				Offset:  1001,
+				Version: 3,
+				Source:  4,
+			}
+			err := client.SaveOffset("group1", "topic1", -123, 7, value)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify stored
+			query := `
+				SELECT version, offset, source FROM offsets
+				WHERE group_name = ? AND topic = ? AND token = ? AND range_index = ?`
+			obtained := Offset{}
+			err = client.db.
+				QueryRow(query, "group1", "topic1", -123, 7).
+				Scan(&obtained.Version, &obtained.Offset, &obtained.Source)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(obtained).To(Equal(value))
+		})
+	})
 })
 
 func newTestClient() *client {
