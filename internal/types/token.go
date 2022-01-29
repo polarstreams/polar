@@ -14,6 +14,12 @@ type Token int64
 // Represents an index in the token range
 type RangeIndex uint8
 
+// Represents slices of the token range between two tokens
+type TokenRanges struct {
+	Token   Token
+	Indices []RangeIndex
+}
+
 const maxRingSize = 12288 // 3*math.Pow(2, 12)
 const chunkSizeUnit = math.MaxUint64 / maxRingSize
 

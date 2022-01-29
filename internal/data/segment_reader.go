@@ -173,9 +173,12 @@ func (s *SegmentReader) initRead() error {
 	s.fileName = foundFileName
 
 	if fileOffset > 0 {
+		log.Info().Msgf("Seeking position %d for reading in file %s", fileOffset, foundFileName)
 		// The file offset is expected to be aligned by the writer
 		_, err = s.segmentFile.Seek(fileOffset, io.SeekStart)
 		log.Warn().Err(err).Msgf("Segment file could not be seeked")
+	} else {
+		log.Info().Msgf("Started reading file %s from position 0", foundFileName)
 	}
 
 	return nil

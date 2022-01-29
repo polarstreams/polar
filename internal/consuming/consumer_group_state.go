@@ -3,12 +3,6 @@ package consuming
 import . "github.com/jorgebay/soda/internal/types"
 
 type ConsumerGroupQueries interface {
-	// Determines whether the consumer group can be served with token data.
-	// It navigates through the generation tree, looking for parents.
-	//
-	// Only called one per consumer group reader.
-	CanConsumeToken(group string, token Token, version GenVersion) bool
-
 	// Locally stores the offset of a given group.
 	SetOffset(group string, token Token, offset Offset)
 

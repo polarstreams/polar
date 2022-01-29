@@ -39,7 +39,7 @@ var _ = Describe("Client", func() {
 				insertGeneration(client, Generation{
 					Start:     start,
 					End:       end,
-					Version:   i,
+					Version:   GenVersion(i),
 					Timestamp: utils.ToUnixMillis(time.Now()),
 					Tx:        tx,
 					Status:    StatusAccepted,
@@ -51,7 +51,7 @@ var _ = Describe("Client", func() {
 			result, err := client.GetGenerationsByToken(Token(start))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(HaveLen(2))
-			Expect([]int{result[0].Version, result[1].Version}).To(Equal([]int{10, 9}))
+			Expect([]GenVersion{result[0].Version, result[1].Version}).To(Equal([]GenVersion{10, 9}))
 			for i := 0; i < 2; i++ {
 				Expect(result[i].Start).To(Equal(Token(start)))
 				Expect(result[i].End).To(Equal(Token(end)))

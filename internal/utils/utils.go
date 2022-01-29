@@ -31,8 +31,8 @@ func ToHandle(he HandleWithError) httprouter.Handle {
 
 // MaxVersion gets the maximum version value of the non-nil generations provided.
 // Defaults to zero.
-func MaxVersion(values ...*types.Generation) int {
-	result := 0
+func MaxVersion(values ...*types.Generation) types.GenVersion {
+	result := types.GenVersion(0)
 	for _, v := range values {
 		if v != nil && v.Version > result {
 			result = v.Version
@@ -158,9 +158,9 @@ func ContainsString(values []string, key string) bool {
 	return false
 }
 
-func ContainsToken(values []types.Token, key types.Token) bool {
+func ContainsToken(values []types.TokenRanges, key types.Token) bool {
 	for _, v := range values {
-		if v == key {
+		if v.Token == key {
 			return true
 		}
 	}

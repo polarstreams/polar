@@ -36,6 +36,7 @@ func (g *gossiper) SendToFollowers(
 			SegmentId:    segmentId,
 			Token:        topic.Token,
 			GenId:        topic.GenId,
+			RangeIndex:   topic.RangeIndex,
 			StartOffset:  chunk.StartOffset(),
 			RecordLength: chunk.RecordLength(),
 			TopicLength:  uint8(len(topic.Name)),

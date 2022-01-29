@@ -9,7 +9,6 @@ import (
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/metrics"
-	"github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
 )
@@ -161,8 +160,7 @@ func (s *peerDataServer) append(d *dataRequest, requestHeader *header) dataRespo
 func (s *peerDataServer) segmentWriter(d *dataRequest) (*data.SegmentWriter, error) {
 	topic := d.topicId()
 	segmentId := d.meta.SegmentId
-	key := getReplicaWriterKey(&topic)
-	writer, _, err := s.replicaWriters.LoadOrStore(key, func() (interface{}, error) {
+	writer, _, err := s.replicaWriters.LoadOrStore(topic, func() (interface{}, error) {
 		return data.NewSegmentWriter(topic, nil, s.config, &segmentId)
 	})
 
@@ -171,10 +169,6 @@ func (s *peerDataServer) segmentWriter(d *dataRequest) (*data.SegmentWriter, err
 	}
 
 	return writer.(*data.SegmentWriter), nil
-}
-
-func getReplicaWriterKey(topic *types.TopicDataId) string {
-	return fmt.Sprintf("%s|%d|%d", topic.Name, topic.Token, topic.GenId)
 }
 
 func (s *peerDataServer) writeResponses() {

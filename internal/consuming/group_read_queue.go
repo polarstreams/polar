@@ -20,10 +20,12 @@ const (
 	requeueDelay = 200 * time.Millisecond
 )
 
-// Receives read requests per group on a single thread and dispatches them
-// track outstanding per topic/group
-// close segments / groups
+// Receives read requests per group on a single thread.
+//
+// It should close unused readers
 type groupReadQueue struct {
+	// TODO: In the future, we should look into writing responses in parallel while
+	// continue to have the ability to close unused readers.
 	items          chan readQueueItem
 	group          string
 	state          *ConsumerState
@@ -31,7 +33,7 @@ type groupReadQueue struct {
 	topologyGetter discovery.TopologyGetter
 	config         conf.ConsumerConfig
 	readerIndex    uint16
-	readers        map[Token]map[string]*SegmentReader // Readers per token and topic
+	readers        map[readerKey]map[string]*SegmentReader // Readers per token and topic
 }
 
 func newGroupReadQueue(
@@ -43,7 +45,7 @@ func newGroupReadQueue(
 ) *groupReadQueue {
 	queue := &groupReadQueue{
 		items:          make(chan readQueueItem),
-		readers:        make(map[Token]map[string]*SegmentReader),
+		readers:        make(map[readerKey]map[string]*SegmentReader),
 		group:          group,
 		state:          state,
 		offsetState:    offsetState,
@@ -97,8 +99,9 @@ func (q *groupReadQueue) process() {
 				if utils.ContainsToken(tokens, r.topic.Token) && utils.ContainsString(topics, r.topic.Name) {
 					// Remove it from failed
 					failedResponseItems = append(failedResponseItems[:i], failedResponseItems[i+1:]...)
-					// TODO: Revisit offset gen vs current gen
-					if offset := q.offsetState.Get(q.group, r.topic.Token); offset.Version != r.topic.GenId {
+
+					offset := q.offsetState.Get(q.group, r.topic.Name, r.topic.Token, r.topic.RangeIndex)
+					if offset.Version != r.topic.GenId {
 						// Since it failed, there were topology changes and the offset state for the group changed
 						// It can be safely ignored
 						continue
@@ -173,17 +176,7 @@ func (q *groupReadQueue) process() {
 		item.done <- true
 	}
 
-	// normal read
-	// check generation
-	// recheck new segment file for new file within the same generation
-	// look for generation after X (parent)
-	// for item := range q.items {
-	// 	// find the appropriate file
-	// }
-
-	// TODO: Check can consume from local token data
-	// When there's an split token range, it should check with previous broker
-	// To see whether it can serve to this consumer group (e.g. B3 should check with B0 about T3 for consumer group X)
+	// TODO:  look for generation after X (child when reading)
 }
 
 func marshalResponse(w http.ResponseWriter, responseItems []consumerResponseItem) error {
@@ -217,35 +210,62 @@ func (q *groupReadQueue) readNext(connId UUID, w http.ResponseWriter) {
 }
 
 // Gets the readers, creating them if necessary
-func (q *groupReadQueue) getReaders(tokens []Token, topics []string) []*SegmentReader {
-	result := make([]*SegmentReader, 0, len(tokens)*len(topics))
+func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) []*SegmentReader {
+	result := make([]*SegmentReader, 0, len(tokenRanges)*len(topics))
 
-	for _, token := range tokens {
-		readersByToken, found := q.readers[token]
-		if !found {
-			readersByToken = make(map[string]*SegmentReader)
-			q.readers[token] = readersByToken
+	for _, t := range tokenRanges {
+		currentGen := q.topologyGetter.Generation(t.Token)
+		if currentGen == nil {
+			log.Warn().Msgf("Information about the generation of token %d could not be found", t.Token)
+			continue
 		}
-
-		for _, topic := range topics {
-			reader, found := readersByToken[topic]
+		for _, index := range t.Indices {
+			key := readerKey{t.Token, index}
+			readersByToken, found := q.readers[key]
 			if !found {
-				log.Info().Msgf("Creating reader for token %d and topic '%s'", token, topic)
-				offset := q.offsetState.Get(q.group, token)
-				topicId := TopicDataId{
-					Name:  topic,
-					Token: token,
-					GenId: offset.Version,
-				}
-				var err error
-				reader, err = NewSegmentReader(topicId, q.config)
-				if err != nil {
-					// reader could not be initialized, skip for now
-					continue
-				}
-				readersByToken[topic] = reader
+				readersByToken = make(map[string]*SegmentReader)
+				q.readers[key] = readersByToken
 			}
-			result = append(result, reader)
+
+			for _, topic := range topics {
+				reader, found := readersByToken[topic]
+				if !found {
+					log.Info().Msgf("Creating reader for token %d/%d and topic '%s'", t, index, topic)
+					offset := q.offsetState.Get(q.group, topic, t.Token, index)
+					if offset == nil {
+						// We have no information of this group
+						//TODO: Verify that we have loaded from other brokers
+
+						offset = &Offset{
+							Offset:  0,
+							Version: 1,
+							Source:  currentGen.Version,
+						}
+					}
+
+					if !q.offsetState.CanConsumeToken(q.group, topic, *currentGen) {
+						log.Debug().Msgf(
+							"Group %s can't consume topic %s for token %d v%d yet",
+							q.group, topic, key.token, currentGen.Version)
+						continue
+					}
+
+					topicId := TopicDataId{
+						Name:       topic,
+						Token:      t.Token,
+						RangeIndex: index,
+						GenId:      offset.Version,
+					}
+					var err error
+					reader, err = NewSegmentReader(topicId, q.config)
+					if err != nil {
+						// reader could not be initialized, skip for now
+						continue
+					}
+					readersByToken[topic] = reader
+				}
+				result = append(result, reader)
+			}
 		}
 	}
 
@@ -259,8 +279,8 @@ type segmentReadItem struct {
 
 func newSegmentReadItem() *segmentReadItem {
 	return &segmentReadItem{
-		chunkResult: make(chan SegmentChunk),
-		errorResult: make(chan error),
+		chunkResult: make(chan SegmentChunk, 1),
+		errorResult: make(chan error, 1),
 	}
 }
 
@@ -295,4 +315,9 @@ func (i *consumerResponseItem) Marshal(w io.Writer) error {
 		return err
 	}
 	return nil
+}
+
+type readerKey struct {
+	token      Token
+	rangeIndex RangeIndex
 }

@@ -211,16 +211,22 @@ type Replicator interface {
 }
 
 type Generation struct {
-	Start     Token     `json:"start"`
-	End       Token     `json:"end"`
-	Version   int       `json:"version"`   // TODO: Use GenVersion type
-	Timestamp int64     `json:"timestamp"` // In unix micros
-	Leader    int       `json:"leader"`    // The ordinal of the leader
-	Followers []int     `json:"followers"` // Follower ordinals
-	TxLeader  int       `json:"txLeader"`  // The originator of the transaction
-	Tx        uuid.UUID `json:"tx"`
-	Status    GenStatus `json:"status"`
-	ToDelete  bool      `json:"toDelete"`
+	Start     Token       `json:"start"`
+	End       Token       `json:"end"`
+	Version   GenVersion  `json:"version"`   // TODO: Use GenVersion type
+	Timestamp int64       `json:"timestamp"` // In unix micros
+	Leader    int         `json:"leader"`    // The ordinal of the leader
+	Followers []int       `json:"followers"` // Follower ordinals
+	TxLeader  int         `json:"txLeader"`  // The originator of the transaction
+	Tx        uuid.UUID   `json:"tx"`
+	Status    GenStatus   `json:"status"`
+	ToDelete  bool        `json:"toDelete"`
+	Parents   []GenParent `json:"parents"`
+}
+
+type GenParent struct {
+	Start   Token      `json:"start"`
+	Version GenVersion `json:"version"`
 }
 
 // Time() returns the timestamp expressed as a time.Time

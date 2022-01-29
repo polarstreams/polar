@@ -43,6 +43,7 @@ type dataRequestMeta struct {
 	// Strict ordering, exported fields
 	SegmentId    uint64
 	Token        types.Token
+	RangeIndex   types.RangeIndex
 	GenId        types.GenVersion
 	StartOffset  uint64
 	RecordLength uint32
@@ -93,9 +94,10 @@ func (r *dataRequest) Marshal(w types.StringWriter, header *header) {
 
 func (r *dataRequest) topicId() types.TopicDataId {
 	return types.TopicDataId{
-		Name:  r.topic,
-		Token: r.meta.Token,
-		GenId: r.meta.GenId,
+		Name:       r.topic,
+		Token:      r.meta.Token,
+		GenId:      r.meta.GenId,
+		RangeIndex: r.meta.RangeIndex,
 	}
 }
 

@@ -44,7 +44,7 @@ func NewConsumer(
 		config:         config,
 		topologyGetter: topologyGetter,
 		gossiper:       gossiper,
-		state:          NewConsumerState(topologyGetter),
+		state:          NewConsumerState(config, topologyGetter),
 		readQueues:     NewCopyOnWriteMap(),
 	}
 }
@@ -202,19 +202,19 @@ func logsToServe(
 	state *ConsumerState,
 	topologyGetter discovery.TopologyGetter,
 	connId UUID,
-) (string, []Token, []string) {
-	group, tokens, topics := state.CanConsume(connId)
-	if len(tokens) == 0 {
+) (string, []TokenRanges, []string) {
+	group, tokenRanges, topics := state.CanConsume(connId)
+	if len(tokenRanges) == 0 {
 		return "", nil, nil
 	}
 
 	myOrdinal := topologyGetter.Topology().MyOrdinal()
-	leaderTokens := make([]Token, 0, len(tokens))
+	leaderTokens := make([]TokenRanges, 0, len(tokenRanges))
 
-	for _, token := range tokens {
-		gen := topologyGetter.Generation(token)
+	for _, ranges := range tokenRanges {
+		gen := topologyGetter.Generation(ranges.Token)
 		if gen != nil && gen.Leader == myOrdinal {
-			leaderTokens = append(leaderTokens, token)
+			leaderTokens = append(leaderTokens, ranges)
 		}
 	}
 
@@ -275,4 +275,9 @@ func (c *consumer) sendConsumerGroupsToPeers() {
 		}
 		time.Sleep(Jitter(consumerGroupsToPeersDelay))
 	}
+}
+
+type readQueueKey struct {
+	group string
+	topic string
 }

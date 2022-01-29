@@ -6,11 +6,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	. "github.com/jorgebay/soda/internal/test/conf/mocks"
 	"github.com/jorgebay/soda/internal/test/discovery/mocks"
 	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+const consumerRanges = 8
 
 func Test(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -324,8 +327,10 @@ func newConsumerState(brokerLength int) *ConsumerState {
 	topology := newTestTopology(brokerLength, 3)
 	discoverer := new(mocks.Discoverer)
 	discoverer.On("Topology").Return(&topology)
+	config := new(Config)
+	config.On("ConsumerRanges").Return(8)
 
-	return NewConsumerState(discoverer)
+	return NewConsumerState(config, discoverer)
 }
 
 func newTestTopology(length int, ordinal int) TopologyInfo {
@@ -357,11 +362,16 @@ func createTestConsumers(length int) ([]string, map[consumerKey]ConsumerInfo) {
 	return keys, consumers
 }
 
-func getTokens(brokerLength int, index int, n int) []Token {
-	result := []Token{}
+func getTokens(brokerLength int, index int, n int) []TokenRanges {
+	result := []TokenRanges{}
 
 	for i := 0; i < n; i++ {
-		result = append(result, GetTokenAtIndex(brokerLength, index+i))
+		t := GetTokenAtIndex(brokerLength, index+i)
+		indices := make([]RangeIndex, 0, consumerRanges)
+		for j := 0; j < consumerRanges; j++ {
+			indices = append(indices, RangeIndex(j))
+		}
+		result = append(result, TokenRanges{Token: t, Indices: indices})
 	}
 
 	return result

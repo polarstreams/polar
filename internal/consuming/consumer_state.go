@@ -10,6 +10,7 @@ import (
 	"time"
 
 	. "github.com/google/uuid"
+	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/discovery"
 	. "github.com/jorgebay/soda/internal/types"
 )
@@ -22,6 +23,7 @@ type consumerKey string
 
 // Represents a local view of the consumer instances.
 type ConsumerState struct {
+	config         conf.BasicConfig
 	topologyGetter discovery.TopologyGetter
 	removeDelay    time.Duration
 
@@ -50,8 +52,9 @@ func (c *ConsumerInfo) key() consumerKey {
 	return consumerKey(fmt.Sprintf("%s-%s", c.Group, c.Id))
 }
 
-func NewConsumerState(topologyGetter discovery.TopologyGetter) *ConsumerState {
+func NewConsumerState(config conf.BasicConfig, topologyGetter discovery.TopologyGetter) *ConsumerState {
 	return &ConsumerState{
+		config:          config,
 		topologyGetter:  topologyGetter,
 		mu:              sync.Mutex{},
 		connections:     map[UUID]ConsumerInfo{},
@@ -109,7 +112,7 @@ func (m *ConsumerState) GetInfoForPeers() []ConsumerGroup {
 }
 
 // Returns the tokens and topics that a consumer should read
-func (m *ConsumerState) CanConsume(id UUID) (string, []Token, []string) {
+func (m *ConsumerState) CanConsume(id UUID) (string, []TokenRanges, []string) {
 	value := m.consumers.Load()
 
 	if value == nil {
@@ -123,7 +126,19 @@ func (m *ConsumerState) CanConsume(id UUID) (string, []Token, []string) {
 	}
 
 	info := connections[id]
-	return info.Group, info.assignedTokens, info.Topics
+
+	// TODO: Revisit token/ranges assignment algorithm
+	// Assign all ranges to the same consumer for now
+	ranges := make([]TokenRanges, 0, len(info.assignedTokens))
+	for _, t := range info.assignedTokens {
+		indices := make([]RangeIndex, 0, m.config.ConsumerRanges())
+		for i := 0; i < m.config.ConsumerRanges(); i++ {
+			indices = append(indices, RangeIndex(i))
+		}
+		ranges = append(ranges, TokenRanges{Token: t, Indices: indices})
+	}
+
+	return info.Group, ranges, info.Topics
 }
 
 func (m *ConsumerState) Rebalance() bool {
