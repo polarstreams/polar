@@ -82,13 +82,36 @@ func (_m *Client) Init() error {
 	return r0
 }
 
-// SaveOffset provides a mock function with given fields: group, topic, token, rangeIndex, value
-func (_m *Client) SaveOffset(group string, topic string, token types.Token, rangeIndex types.RangeIndex, value types.Offset) error {
-	ret := _m.Called(group, topic, token, rangeIndex, value)
+// Offsets provides a mock function with given fields:
+func (_m *Client) Offsets() ([]types.OffsetStoreKeyValue, error) {
+	ret := _m.Called()
+
+	var r0 []types.OffsetStoreKeyValue
+	if rf, ok := ret.Get(0).(func() []types.OffsetStoreKeyValue); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]types.OffsetStoreKeyValue)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// SaveOffset provides a mock function with given fields: offsetKv
+func (_m *Client) SaveOffset(offsetKv *types.OffsetStoreKeyValue) error {
+	ret := _m.Called(offsetKv)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string, string, types.Token, types.RangeIndex, types.Offset) error); ok {
-		r0 = rf(group, topic, token, rangeIndex, value)
+	if rf, ok := ret.Get(0).(func(*types.OffsetStoreKeyValue) error); ok {
+		r0 = rf(offsetKv)
 	} else {
 		r0 = ret.Error(0)
 	}

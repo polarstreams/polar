@@ -20,7 +20,10 @@ type Client interface {
 	CommitGeneration(generation *Generation) error
 
 	// Stores the group offset for a topic and token+index
-	SaveOffset(group string, topic string, token Token, rangeIndex RangeIndex, value Offset) error
+	SaveOffset(offsetKv *OffsetStoreKeyValue) error
+
+	// Retrieves all the stored offsets
+	Offsets() ([]OffsetStoreKeyValue, error)
 
 	// TODO: convert to history
 	GetGenerationsByToken(token Token) ([]Generation, error)

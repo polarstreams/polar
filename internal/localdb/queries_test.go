@@ -87,15 +87,25 @@ var _ = Describe("Client", func() {
 		})
 	})
 
-	Describe("SaveOffset", func() {
+	Describe("SaveOffset()", func() {
 		It("should insert a record in offsets table", func() {
 			client := newTestClient()
+			key := OffsetStoreKey{
+				Group:      "group1",
+				Topic:      "topic1",
+				Token:      -123,
+				RangeIndex: 7,
+			}
 			value := Offset{
 				Offset:  1001,
 				Version: 3,
 				Source:  4,
 			}
-			err := client.SaveOffset("group1", "topic1", -123, 7, value)
+			kv := OffsetStoreKeyValue{
+				Key:   key,
+				Value: value,
+			}
+			err := client.SaveOffset(&kv)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify stored
@@ -104,10 +114,15 @@ var _ = Describe("Client", func() {
 				WHERE group_name = ? AND topic = ? AND token = ? AND range_index = ?`
 			obtained := Offset{}
 			err = client.db.
-				QueryRow(query, "group1", "topic1", -123, 7).
+				QueryRow(query, key.Group, key.Topic, key.Token, key.RangeIndex).
 				Scan(&obtained.Version, &obtained.Offset, &obtained.Source)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obtained).To(Equal(value))
+
+			// Quick test Offsets() method
+			offsets, err := client.Offsets()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(offsets).To(ContainElement(kv))
 		})
 	})
 })

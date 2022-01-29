@@ -9,14 +9,6 @@ import (
 
 const NotFoundIndex BrokerIndex = -1
 
-// Represents a topic offset for a given token.
-type Offset struct {
-	Offset  uint64
-	Version GenVersion
-
-	Source GenVersion // The point-in-time when the offset was recorded.
-}
-
 // BrokerInfo contains information about a broker
 type BrokerInfo struct {
 	// IsSelf determines whether the broker refers to this instance
@@ -258,19 +250,3 @@ const (
 	TransactionStatusCancelled TransactionStatus = iota
 	TransactionStatusCommitted
 )
-
-// Represents a local view of the consumer group offsets
-type OffsetState interface {
-	// Gets the offset value for a given group and token.
-	// Returns nil when not found
-	Get(group string, topic string, token Token, rangeIndex RangeIndex) *Offset
-
-	// Sets the known offset value in memory, optionally commiting it to the data store
-	Set(group string, topic string, token Token, rangeIndex RangeIndex, value Offset, commit bool)
-
-	// Determines whether the consumer group can be served with token data.
-	// It navigates through the generation tree, looking for parents.
-	//
-	// Only called one per consumer group reader.
-	CanConsumeToken(group string, topic string, gen Generation) bool
-}

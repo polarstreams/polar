@@ -63,6 +63,9 @@ type consumer struct {
 
 func (c *consumer) Init() error {
 	c.gossiper.RegisterConsumerInfoListener(c)
+	if err := c.offsetState.Init(); err != nil {
+		return err
+	}
 
 	// Send info in the background
 	go c.sendConsumerGroupsToPeers()

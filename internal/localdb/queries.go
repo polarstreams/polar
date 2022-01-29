@@ -14,6 +14,7 @@ type queries struct {
 	selectGenerations *sql.Stmt
 	insertGeneration  *sql.Stmt
 	insertTransaction *sql.Stmt
+	selectOffsets     *sql.Stmt
 	insertOffset      *sql.Stmt
 }
 
@@ -32,6 +33,9 @@ func (c *client) prepareQueries() {
 	c.queries.insertOffset = c.prepare(
 		`INSERT INTO offsets (group_name, topic, token, range_index, version, offset, source)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`)
+
+	c.queries.selectOffsets = c.prepare(
+		`SELECT group_name, topic, token, range_index, version, offset, source FROM offsets`)
 }
 
 func (c *client) prepare(query string) *sql.Stmt {
@@ -132,7 +136,32 @@ func (c *client) CommitGeneration(gen *Generation) error {
 	return tx.Commit()
 }
 
-func (c *client) SaveOffset(group string, topic string, token Token, rangeIndex RangeIndex, value Offset) error {
-	_, err := c.queries.insertOffset.Exec(group, topic, token, rangeIndex, value.Version, value.Offset, value.Source)
+func (c *client) SaveOffset(kv *OffsetStoreKeyValue) error {
+	key := kv.Key
+	value := kv.Value
+	_, err := c.queries.
+		insertOffset.
+		Exec(key.Group, key.Topic, key.Token, key.RangeIndex, value.Version, value.Offset, value.Source)
 	return err
+}
+
+func (c *client) Offsets() ([]OffsetStoreKeyValue, error) {
+	rows, err := c.queries.selectOffsets.Query()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]OffsetStoreKeyValue, 0)
+	defer rows.Close()
+	for rows.Next() {
+		kv := OffsetStoreKeyValue{}
+		err = rows.Scan(
+			&kv.Key.Group, &kv.Key.Topic, &kv.Key.Token, &kv.Key.RangeIndex, &kv.Value.Version, &kv.Value.Offset,
+			&kv.Value.Source)
+		if err != nil {
+			return result, err
+		}
+		result = append(result, kv)
+	}
+	return result, nil
 }

@@ -55,7 +55,7 @@ type Gossiper interface {
 	SendConsumerGroups(ordinal int, groups []ConsumerGroup) error
 
 	// Sends a message to the broker with the committed offset of a consumer group
-	SendCommittedOffset(ordinal int, group string, topic string, token Token, rangeIndex RangeIndex, value Offset) error
+	SendCommittedOffset(ordinal int, offsetKv *OffsetStoreKeyValue) error
 
 	// Adds a listener for consumer information
 	RegisterConsumerInfoListener(listener ConsumerInfoListener)
@@ -376,14 +376,7 @@ func (g *gossiper) SendConsumerGroups(ordinal int, groups []ConsumerGroup) error
 	return err
 }
 
-func (g *gossiper) SendCommittedOffset(
-	ordinal int,
-	group string,
-	topic string,
-	token Token,
-	rangeIndex RangeIndex,
-	value Offset,
-) error {
+func (g *gossiper) SendCommittedOffset(ordinal int, kv *OffsetStoreKeyValue) error {
 	// TODO: Implement SendCommittedOffset
 	return nil
 }
