@@ -6,6 +6,8 @@ import (
 	conf "github.com/jorgebay/soda/internal/conf"
 	mock "github.com/stretchr/testify/mock"
 
+	time "time"
+
 	types "github.com/jorgebay/soda/internal/types"
 )
 
@@ -23,6 +25,20 @@ func (_m *Config) AdminPort() int {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
+// AutoCommitInterval provides a mock function with given fields:
+func (_m *Config) AutoCommitInterval() time.Duration {
+	ret := _m.Called()
+
+	var r0 time.Duration
+	if rf, ok := ret.Get(0).(func() time.Duration); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(time.Duration)
 	}
 
 	return r0

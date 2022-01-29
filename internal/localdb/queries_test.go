@@ -119,6 +119,9 @@ var _ = Describe("Client", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obtained).To(Equal(value))
 
+			// Quick test that can be upserted multiple times
+			Expect(client.SaveOffset(&kv)).NotTo(HaveOccurred())
+
 			// Quick test Offsets() method
 			offsets, err := client.Offsets()
 			Expect(err).NotTo(HaveOccurred())

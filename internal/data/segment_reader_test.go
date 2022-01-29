@@ -9,22 +9,17 @@ import (
 
 	"github.com/jorgebay/soda/internal/conf"
 	"github.com/jorgebay/soda/internal/test/conf/mocks"
+	tMocks "github.com/jorgebay/soda/internal/test/types/mocks"
 	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 )
 
 var _ = Describe("SegmentReader", func() {
 	Describe("read()", func() {
 		It("should support empty reads", func() {
-			config := new(mocks.Config)
-			config.On("ReadAheadSize").Return(1 * conf.Mib)
-			s := &SegmentReader{
-				config:    config,
-				Items:     make(chan ReadItem, 16),
-				pollDelay: 1 * time.Millisecond,
-			}
-
+			s := newTestReader()
 			file, err := os.CreateTemp("", "segment_file*.dlog")
 			Expect(err).NotTo(HaveOccurred())
 			s.segmentFile = file
@@ -36,14 +31,7 @@ var _ = Describe("SegmentReader", func() {
 		})
 
 		It("should support partial chunks", func() {
-			config := new(mocks.Config)
-			config.On("ReadAheadSize").Return(1 * conf.Mib)
-			s := &SegmentReader{
-				config:    config,
-				Items:     make(chan ReadItem, 16),
-				pollDelay: 1 * time.Millisecond,
-			}
-
+			s := newTestReader()
 			file, err := os.CreateTemp("", "segment_file*.dlog")
 			Expect(err).NotTo(HaveOccurred())
 
@@ -72,6 +60,7 @@ var _ = Describe("SegmentReader", func() {
 		It("should continue reading the next file", func() {
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(2048)
+			config.On("AutoCommitInterval").Return(1 * time.Second)
 
 			dir, err := os.MkdirTemp("", "read_next_file*")
 			Expect(err).NotTo(HaveOccurred())
@@ -92,12 +81,10 @@ var _ = Describe("SegmentReader", func() {
 			firstFile.Sync()
 			secondFile.Sync()
 
-			s := &SegmentReader{
-				config:    config,
-				Items:     make(chan ReadItem, 16),
-				basePath:  dir,
-				pollDelay: 1 * time.Millisecond,
-			}
+			s := newTestReader()
+			s.config = config
+			s.basePath = dir
+
 			go s.read()
 			defer firstFile.Close()
 			defer secondFile.Close()
@@ -116,6 +103,7 @@ var _ = Describe("SegmentReader", func() {
 		It("should read alignment", func() {
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(1024)
+			config.On("AutoCommitInterval").Return(1 * time.Second)
 
 			dir, err := os.MkdirTemp("", "read_alignment*")
 			Expect(err).NotTo(HaveOccurred())
@@ -134,12 +122,10 @@ var _ = Describe("SegmentReader", func() {
 
 			file.Sync()
 
-			s := &SegmentReader{
-				config:    config,
-				Items:     make(chan ReadItem, 16),
-				basePath:  dir,
-				pollDelay: 1 * time.Millisecond,
-			}
+			s := newTestReader()
+			s.config = config
+			s.basePath = dir
+
 			go s.read()
 			defer close(s.Items)
 
@@ -153,6 +139,7 @@ var _ = Describe("SegmentReader", func() {
 		It("should poll until there's new data", func() {
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(1024)
+			config.On("AutoCommitInterval").Return(1 * time.Second)
 
 			dir, err := os.MkdirTemp("", "poll_new_data*")
 			Expect(err).NotTo(HaveOccurred())
@@ -168,12 +155,10 @@ var _ = Describe("SegmentReader", func() {
 
 			file.Sync()
 
-			s := &SegmentReader{
-				config:    config,
-				Items:     make(chan ReadItem, 16),
-				basePath:  dir,
-				pollDelay: 1 * time.Millisecond,
-			}
+			s := newTestReader()
+			s.config = config
+			s.basePath = dir
+
 			go s.read()
 			defer close(s.Items)
 
@@ -247,5 +232,20 @@ func pollChunkAndAssert(s *SegmentReader, item *testReadItem, bodyLength int) {
 		}
 
 		Expect(chunk.DataBlock()).To(Equal(expectedBody))
+	}
+}
+
+func newTestReader() *SegmentReader {
+	config := new(mocks.Config)
+	config.On("ReadAheadSize").Return(1 * conf.Mib)
+	config.On("AutoCommitInterval").Return(1 * time.Second)
+	offsetState := new(tMocks.OffsetState)
+	offsetState.On("Set",
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	return &SegmentReader{
+		config:      config,
+		Items:       make(chan ReadItem, 16),
+		pollDelay:   1 * time.Millisecond,
+		offsetState: offsetState,
 	}
 }

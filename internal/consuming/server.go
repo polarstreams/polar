@@ -191,11 +191,9 @@ func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter) {
 	}
 
 	log.Debug().Msgf("Received consumer client poll from connection '%s'", conn.Id())
-	// TODO: implement offset state
-	offsetState := &defaultOffsetState{}
 
 	grq, _, _ := c.readQueues.LoadOrStore(group, func() (interface{}, error) {
-		return newGroupReadQueue(group, c.state, offsetState, c.topologyGetter, c.config), nil
+		return newGroupReadQueue(group, c.state, c.offsetState, c.topologyGetter, c.config), nil
 	})
 
 	groupReadQueue := grq.(*groupReadQueue)
@@ -252,6 +250,14 @@ func adaptHttpErr(err error, w http.ResponseWriter) {
 
 func (c *consumer) OnConsumerInfoFromPeer(ordinal int, groups []ConsumerGroup) {
 	c.state.SetInfoFromPeer(ordinal, groups)
+}
+
+func (c *consumer) OnOffsetFromPeer(kv *OffsetStoreKeyValue) {
+	log.Debug().
+		Str("group", kv.Key.Group).
+		Str("topic", kv.Key.Topic).
+		Msgf("Received offset from peer for token %d/%d", kv.Key.Token, kv.Key.RangeIndex)
+	c.offsetState.Set(kv.Key.Group, kv.Key.Topic, kv.Key.Token, kv.Key.RangeIndex, kv.Value, OffsetCommitLocal)
 }
 
 func (c *consumer) sendConsumerGroupsToPeers() {

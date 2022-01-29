@@ -22,7 +22,9 @@ type SegmentReader struct {
 	Items         chan ReadItem
 	basePath      string
 	config        conf.DatalogConfig
+	group         string
 	Topic         TopicDataId
+	SourceVersion GenVersion // The version in which this reader was created, a consumer might be on Gen=v3 but the current is v4. In this case, source would be v4 and topic.Version = v3
 	offsetState   OffsetState
 	messageOffset uint64
 	fileName      string
@@ -43,19 +45,23 @@ const minSeekIntervals = 2 * time.Second
 // It aggressively reads ahead and maintains local cache, so there should there
 // should be a different reader instance per consumer group.
 func NewSegmentReader(
+	group string,
 	topic TopicDataId,
+	sourceVersion GenVersion,
 	offsetState OffsetState,
 	config conf.DatalogConfig,
 ) (*SegmentReader, error) {
 	// From the same base folder, the SegmentReader will continue reading through the files in order
 	basePath := config.DatalogPath(&topic)
 	s := &SegmentReader{
-		config:      config,
-		basePath:    basePath,
-		Items:       make(chan ReadItem, 16),
-		Topic:       topic,
-		offsetState: offsetState,
-		pollDelay:   defaultPollDelay,
+		config:        config,
+		basePath:      basePath,
+		Items:         make(chan ReadItem, 16),
+		Topic:         topic,
+		group:         group,
+		SourceVersion: sourceVersion,
+		offsetState:   offsetState,
+		pollDelay:     defaultPollDelay,
 	}
 
 	if err := s.initRead(); err != nil {
@@ -82,9 +88,10 @@ func (s *SegmentReader) read() {
 	buf := make([]byte, s.config.ReadAheadSize())
 	var closeError error = nil
 	remainingReader := bytes.NewReader(emptyBuffer)
+	lastCommit := time.Time{}
 
 	for item := range s.Items {
-		// Check
+		s.storeOffset(lastCommit)
 
 		writeIndex := 0
 		if s.segmentFile == nil {
@@ -156,6 +163,21 @@ func (s *SegmentReader) read() {
 	}
 
 	s.close(closeError)
+}
+
+func (s *SegmentReader) storeOffset(lastCommit time.Time) {
+	commit := false
+	if time.Since(lastCommit) >= s.config.AutoCommitInterval() {
+		lastCommit = time.Now()
+		commit = true
+	}
+	value := Offset{
+		Offset:  s.messageOffset,
+		Version: s.Topic.GenId,
+		Source:  s.SourceVersion,
+	}
+	log.Debug().Bool("commit", commit).Str("group", s.group).Msgf("Setting offset for %s", &s.Topic)
+	s.offsetState.Set(s.group, s.Topic.Name, s.Topic.Token, s.Topic.RangeIndex, value, OffsetCommitAll)
 }
 
 // Tries open the initial file and seek the correct position, returning an error when there's an

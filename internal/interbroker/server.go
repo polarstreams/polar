@@ -68,6 +68,7 @@ func (g *gossiper) acceptHttpConnections() error {
 			router.GET(fmt.Sprintf(conf.GossipTokenInRange, ":token"), ToHandle(g.getTokenInRangeHandler))
 			router.GET(fmt.Sprintf(conf.GossipTokenHasHistoryUrl, ":token"), ToHandle(g.getTokenHasHistoryUrl))
 			router.POST(conf.GossipConsumerGroupsInfoUrl, ToPostHandle(g.postConsumerGroupInfo))
+			router.POST(conf.GossipConsumerOffsetUrl, ToPostHandle(g.postConsumerOffset))
 
 			// Routing message is part of gossip but it's usually made using a different client connection
 			router.POST(fmt.Sprintf(conf.RoutingMessageUrl, ":topic"), ToPostHandle(g.postReroutingHandler))
@@ -173,6 +174,16 @@ func (g *gossiper) postConsumerGroupInfo(w http.ResponseWriter, r *http.Request,
 	}
 	// Use the registered listener
 	g.consumerInfoListener.OnConsumerInfoFromPeer(message.Origin, message.Groups)
+	return nil
+}
+
+func (g *gossiper) postConsumerOffset(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	var message OffsetStoreKeyValue
+	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
+		return err
+	}
+	// Use the registered listener
+	g.consumerInfoListener.OnOffsetFromPeer(&message)
 	return nil
 }
 

@@ -97,6 +97,8 @@ type GenListener interface {
 
 type ConsumerInfoListener interface {
 	OnConsumerInfoFromPeer(ordinal int, groups []ConsumerGroup)
+
+	OnOffsetFromPeer(kv *OffsetStoreKeyValue)
 }
 
 type ReroutingListener interface {
@@ -338,7 +340,7 @@ func (g *gossiper) SetGenerationAsProposed(ordinal int, newGen *Generation, expe
 
 	jsonBody, err := json.Marshal(message)
 	if err != nil {
-		log.Fatal().Err(err).Msgf("json marshalling failed when setting generation as accepted")
+		log.Fatal().Err(err).Msgf("json marshalling failed when setting generation as proposed")
 	}
 
 	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationProposeUrl, newGen.Start), jsonBody)
@@ -377,6 +379,12 @@ func (g *gossiper) SendConsumerGroups(ordinal int, groups []ConsumerGroup) error
 }
 
 func (g *gossiper) SendCommittedOffset(ordinal int, kv *OffsetStoreKeyValue) error {
-	// TODO: Implement SendCommittedOffset
-	return nil
+	jsonBody, err := json.Marshal(kv)
+	if err != nil {
+		log.Fatal().Err(err).Msgf("json marshalling failed when sending offset")
+	}
+
+	r, err := g.requestPost(ordinal, conf.GossipConsumerOffsetUrl, jsonBody)
+	defer r.Body.Close()
+	return err
 }

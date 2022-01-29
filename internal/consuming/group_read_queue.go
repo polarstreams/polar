@@ -68,7 +68,7 @@ func (q *groupReadQueue) process() {
 	failedResponseItems := make([]consumerResponseItem, 0)
 	for item := range q.items {
 		if item.refresh {
-			// TODO: Implement
+			// TODO: Implement close readers
 			// Check which readers can be closed
 			continue
 		}
@@ -257,7 +257,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 						GenId:      offset.Version,
 					}
 					var err error
-					reader, err = NewSegmentReader(topicId, q.offsetState, q.config)
+					reader, err = NewSegmentReader(q.group, topicId, currentGen.Version, q.offsetState, q.config)
 					if err != nil {
 						// reader could not be initialized, skip for now
 						continue

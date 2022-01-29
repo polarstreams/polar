@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"time"
 
 	. "github.com/jorgebay/soda/internal/types"
 )
@@ -51,8 +52,9 @@ type DatalogConfig interface {
 	MaxSegmentSize() int
 	SegmentBufferSize() int // The amount of bytes that the segment buffer can hold
 	MaxMessageSize() int
-	MaxGroupSize() int         // MaxGroupSize is the maximum size of an uncompressed group of messages
-	ReadAheadSize() int        // The amount of bytes to read each time from a segment file
+	MaxGroupSize() int  // MaxGroupSize is the maximum size of an uncompressed group of messages
+	ReadAheadSize() int // The amount of bytes to read each time from a segment file
+	AutoCommitInterval() time.Duration
 	IndexFilePeriodBytes() int // How frequently write to the index file based on the segment size.
 }
 
@@ -74,6 +76,7 @@ type ProducerConfig interface {
 type ConsumerConfig interface {
 	BasicConfig
 	DatalogConfig
+	AutoCommitInterval() time.Duration
 	ConsumerPort() int
 	ConsumerReadThreshold() int // The minimum amount of bytes once reached the consumer poll is fullfilled
 }
@@ -161,6 +164,10 @@ func (c *config) MaxGroupSize() int {
 
 func (c *config) ReadAheadSize() int {
 	return c.MaxGroupSize() * 10
+}
+
+func (c *config) AutoCommitInterval() time.Duration {
+	return 5 * time.Second
 }
 
 func (c *config) ConsumerReadThreshold() int {

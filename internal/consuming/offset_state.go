@@ -16,7 +16,7 @@ func newDefaultOffsetState(
 	gossiper interbroker.Gossiper,
 ) OffsetState {
 	state := &defaultOffsetState{
-		offsetMap:      map[OffsetStoreKey]*Offset{},
+		offsetMap:      make(map[OffsetStoreKey]*Offset),
 		commitChan:     make(chan *OffsetStoreKeyValue, 64),
 		localDb:        localDb,
 		gossiper:       gossiper,
@@ -65,7 +65,7 @@ func (s *defaultOffsetState) Set(
 	token Token,
 	rangeIndex RangeIndex,
 	value Offset,
-	commit bool,
+	commit OffsetCommitType,
 ) {
 	key := OffsetStoreKey{Group: group, Topic: topic, Token: token, RangeIndex: rangeIndex}
 	// We could use segment logs in the future
@@ -80,9 +80,16 @@ func (s *defaultOffsetState) Set(
 
 	s.offsetMap[key] = &value
 
-	if commit {
-		// Process commits in order but don't await for it to complete
-		s.commitChan <- &OffsetStoreKeyValue{Key: key, Value: value}
+	if commit != OffsetCommitNone {
+		// Store commits locally in order but don't await for it to complete
+		kv := &OffsetStoreKeyValue{Key: key, Value: value}
+		s.commitChan <- kv
+
+		if commit == OffsetCommitAll {
+			// Send to followers in the background with no order guarantees
+			// The local OffsetState of the follower will verify for new values
+			go s.sendToFollowers(kv)
+		}
 	}
 }
 
@@ -95,10 +102,6 @@ func (s *defaultOffsetState) processCommit() {
 				"Offset stored in the local db for group %s topic '%s' %d/%d",
 				kv.Key.Group, kv.Key.Topic, kv.Key.Token, kv.Key.RangeIndex)
 		}
-
-		// Send to followers in the background with no order guarantees
-		// The local OffsetState of the follower will verify for new values
-		go s.sendToFollowers(kv)
 	}
 }
 

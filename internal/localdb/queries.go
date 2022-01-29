@@ -31,7 +31,7 @@ func (c *client) prepareQueries() {
 		`INSERT INTO transactions (tx, origin, timestamp, status) VALUES (?, ?, ?, ?)`)
 
 	c.queries.insertOffset = c.prepare(
-		`INSERT INTO offsets (group_name, topic, token, range_index, version, offset, source)
+		`REPLACE INTO offsets (group_name, topic, token, range_index, version, offset, source)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`)
 
 	c.queries.selectOffsets = c.prepare(

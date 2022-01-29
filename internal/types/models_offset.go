@@ -1,5 +1,13 @@
 package types
 
+type OffsetCommitType int
+
+const (
+	OffsetCommitNone OffsetCommitType = iota
+	OffsetCommitLocal
+	OffsetCommitAll
+)
+
 // Represents a topic offset for a given token.
 type Offset struct {
 	Offset  uint64     `json:"offsetValue"`
@@ -30,7 +38,7 @@ type OffsetState interface {
 	Get(group string, topic string, token Token, rangeIndex RangeIndex) *Offset
 
 	// Sets the known offset value in memory, optionally commiting it to the data store
-	Set(group string, topic string, token Token, rangeIndex RangeIndex, value Offset, commit bool)
+	Set(group string, topic string, token Token, rangeIndex RangeIndex, value Offset, commit OffsetCommitType)
 
 	// Determines whether the consumer group can be served with token data.
 	// It navigates through the generation tree, looking for parents.
