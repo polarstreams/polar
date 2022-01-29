@@ -3,6 +3,7 @@ package localdb
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -20,12 +21,13 @@ type queries struct {
 
 func (c *client) prepareQueries() {
 	c.queries.selectGenerations = c.prepare(`
-		SELECT start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers FROM
+		SELECT start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents FROM
 		generations WHERE start_token = ? ORDER BY start_token, version DESC LIMIT 2`)
 
 	c.queries.insertGeneration = c.prepare(`
-		INSERT INTO generations (start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		INSERT INTO generations
+			(start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	c.queries.insertTransaction = c.prepare(
 		`INSERT INTO transactions (tx, origin, timestamp, status) VALUES (?, ?, ?, ?)`)
@@ -86,9 +88,10 @@ func (c *client) GetGenerationsByToken(token Token) ([]Generation, error) {
 	for rows.Next() {
 		item := Generation{}
 		var followers string
+		var parents string
 		err = rows.Scan(
 			&item.Start, &item.End, &item.Version, &item.Timestamp, &item.Tx, &item.TxLeader,
-			&item.Status, &item.Leader, &followers)
+			&item.Status, &item.Leader, &followers, &parents)
 		if err != nil {
 			return result, err
 		}
@@ -103,6 +106,7 @@ func (c *client) GetGenerationsByToken(token Token) ([]Generation, error) {
 
 			item.Followers = followersSlice
 		}
+		item.Parents = parentsFromString(parents)
 		result = append(result, item)
 	}
 	return result, nil
@@ -127,9 +131,10 @@ func (c *client) CommitGeneration(gen *Generation) error {
 	}
 
 	followers := utils.ToCsv(gen.Followers)
+
 	if _, err := insertGenStatement.Exec(
 		gen.Start, gen.End, gen.Version, gen.Timestamp, gen.Tx, gen.TxLeader,
-		StatusCommitted, gen.Leader, followers); err != nil {
+		StatusCommitted, gen.Leader, followers, parentsToString(gen.Parents)); err != nil {
 		return err
 	}
 
@@ -164,4 +169,19 @@ func (c *client) Offsets() ([]OffsetStoreKeyValue, error) {
 		result = append(result, kv)
 	}
 	return result, nil
+}
+
+func parentsFromString(stringValue string) []GenParent {
+	var result []GenParent
+	utils.PanicIfErr(json.Unmarshal([]byte(stringValue), &result), "Unexpected error when deserializing parents")
+	return result
+}
+
+func parentsToString(parents []GenParent) string {
+	if len(parents) == 0 {
+		return "[]"
+	}
+	bytes, err := json.Marshal(parents)
+	utils.PanicIfErr(err, "Unexpected error when serializing parents")
+	return string(bytes)
 }

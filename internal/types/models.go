@@ -2,9 +2,6 @@ package types
 
 import (
 	"fmt"
-	"time"
-
-	"github.com/google/uuid"
 )
 
 const NotFoundIndex BrokerIndex = -1
@@ -32,14 +29,9 @@ type ConsumerGroup struct {
 //
 // e.g. in a cluster composed of {0, 3, 1, 4, 2, 3}, the index of 3 is 1.
 type BrokerIndex int
-type GenVersion uint32
 
 func (b *BrokerInfo) String() string {
 	return fmt.Sprintf("%s (%d)", b.HostName, b.Ordinal)
-}
-
-func (v GenVersion) String() string {
-	return fmt.Sprintf("%d", v)
 }
 
 type TopicInfo struct {
@@ -201,52 +193,3 @@ type Replicator interface {
 		segmentId uint64,
 		chunk SegmentChunk) error
 }
-
-type Generation struct {
-	Start     Token       `json:"start"`
-	End       Token       `json:"end"`
-	Version   GenVersion  `json:"version"`   // TODO: Use GenVersion type
-	Timestamp int64       `json:"timestamp"` // In unix micros
-	Leader    int         `json:"leader"`    // The ordinal of the leader
-	Followers []int       `json:"followers"` // Follower ordinals
-	TxLeader  int         `json:"txLeader"`  // The originator of the transaction
-	Tx        uuid.UUID   `json:"tx"`
-	Status    GenStatus   `json:"status"`
-	ToDelete  bool        `json:"toDelete"`
-	Parents   []GenParent `json:"parents"`
-}
-
-type GenParent struct {
-	Start   Token      `json:"start"`
-	Version GenVersion `json:"version"`
-}
-
-// Time() returns the timestamp expressed as a time.Time
-func (o *Generation) Time() time.Time {
-	// Timestamp is expressed in micros
-	nanos := o.Timestamp * 1000
-	return time.Unix(0, nanos)
-}
-
-// GenStatus determines the state (proposed, accepted, ...) of the status
-type GenStatus int
-
-var genStatusNames = [...]string{"Cancelled", "Proposed", "Accepted", "Committed"}
-
-func (s GenStatus) String() string {
-	return genStatusNames[s]
-}
-
-const (
-	StatusCancelled GenStatus = iota
-	StatusProposed
-	StatusAccepted
-	StatusCommitted
-)
-
-type TransactionStatus int
-
-const (
-	TransactionStatusCancelled TransactionStatus = iota
-	TransactionStatusCommitted
-)

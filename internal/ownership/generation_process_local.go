@@ -10,12 +10,15 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func (o *generator) processLocal(message *localGenMessage) creationError {
+// Processes creation of new generation for tokens that are naturally owned by this broker.
+// The reason of the creation it can be that we are starting new
+// or the broker came back online and it's trying to recover
+func (o *generator) processLocalMyToken(message *localGenMessage) creationError {
 	topology := o.discoverer.Topology()
 	token := topology.MyToken()
 	timestamp := time.Now()
 
-	generation := Generation{
+	gen := Generation{
 		Start:     token,
 		End:       topology.GetToken(topology.LocalIndex + 1),
 		Version:   0,
@@ -25,27 +28,26 @@ func (o *generator) processLocal(message *localGenMessage) creationError {
 		Tx:        uuid.New(),
 		TxLeader:  topology.MyOrdinal(),
 		Status:    StatusProposed,
-		ToDelete:  false,
+		Parents:   make([]GenParent, 0),
 	}
 
 	log.Info().Msgf(
 		"Processing a generation started locally for T%d (%d) with B%d and B%d as followers",
-		topology.MyOrdinal(), topology.MyToken(), generation.Followers[0], generation.Followers[1])
+		topology.MyOrdinal(), topology.MyToken(), gen.Followers[0], gen.Followers[1])
 
 	// Perform a read from followers
-	readResults := o.readStateFromFollowers(&generation)
+	readResults := o.readStateFromFollowers(&gen)
 
 	if readResults[0].Error != nil && readResults[1].Error != nil {
 		// No point in continuing
 		return newCreationError("Followers state could not be read")
 	}
 
-	localCommitted, localProposed := o.discoverer.GenerationProposed(token)
+	if message.isNew && (readResults[0].Committed != nil || readResults[1].Committed != nil) {
+		return newCreationError("Unexpected information found in peer for new token")
+	}
 
-	generation.Version = utils.MaxVersion(
-		localCommitted,
-		readResults[0].Committed,
-		readResults[1].Committed) + 1
+	localCommitted, localProposed := o.discoverer.GenerationProposed(token)
 
 	if isInProgress(localProposed) {
 		return newCreationError("In progress generation in local broker")
@@ -55,10 +57,25 @@ func (o *generator) processLocal(message *localGenMessage) creationError {
 		return newCreationError("In progress generation in remote broker")
 	}
 
-	// After reading, we can continue by performing a CAS operation for proposed
-	log.Info().Msgf("Proposing myself as a leader for T%d (%d)", topology.MyOrdinal(), topology.MyToken())
+	if message.isNew {
+		// After reading, we can continue by performing a CAS operation for proposed
+		log.Info().Msgf("Proposing myself as a first time leader of T%d (%d)", topology.MyOrdinal(), topology.MyToken())
+		gen.Version = GenVersion(1)
+	} else {
+		parentVersion := utils.MaxVersion(
+			localCommitted,
+			readResults[0].Committed,
+			readResults[1].Committed)
+		gen.Version = parentVersion + 1
+		gen.Parents = append(gen.Parents, GenParent{
+			Start:   token,
+			Version: parentVersion,
+		})
+		log.Info().Msgf(
+			"Proposing myself as leader of T%d (%d) in v%d", topology.MyOrdinal(), topology.MyToken(), gen.Version)
+	}
 
-	followerErrors := o.setStateToFollowers(&generation, []error{nil, nil}, readResults)
+	followerErrors := o.setStateToFollowers(&gen, []error{nil, nil}, readResults)
 	if followerErrors[0] != nil && followerErrors[1] != nil {
 		return newCreationError("Followers state could not be set to proposed")
 	}
@@ -68,21 +85,21 @@ func (o *generator) processLocal(message *localGenMessage) creationError {
 		localTx = &localProposed.Tx
 	}
 
-	if err := o.discoverer.SetGenerationProposed(&generation, localTx); err != nil {
+	if err := o.discoverer.SetGenerationProposed(&gen, localTx); err != nil {
 		log.Err(err).Msg("Unexpected error when setting as proposed locally")
 		// Don't retry
 		return newCreationError("Unexpected local error")
 	}
 
 	log.Info().Msgf("Accepting myself as a leader for T%d (%d)", topology.MyOrdinal(), topology.MyToken())
-	generation.Status = StatusAccepted
+	gen.Status = StatusAccepted
 
-	followerErrors = o.setStateToFollowers(&generation, followerErrors, readResults)
+	followerErrors = o.setStateToFollowers(&gen, followerErrors, readResults)
 	if followerErrors[0] != nil && followerErrors[1] != nil {
 		return newCreationError("Followers state could not be set to accepted")
 	}
 
-	if err := o.discoverer.SetGenerationProposed(&generation, &generation.Tx); err != nil {
+	if err := o.discoverer.SetGenerationProposed(&gen, &gen.Tx); err != nil {
 		log.Err(err).Msg("Unexpected error when setting as proposed locally")
 		return newCreationError("Unexpected local error")
 	}
@@ -91,13 +108,13 @@ func (o *generator) processLocal(message *localGenMessage) creationError {
 	log.Info().Msgf("Setting transaction for T%d (%d) as committed", topology.MyOrdinal(), topology.MyToken())
 
 	// We can now start receiving producer traffic for this token
-	if err := o.discoverer.SetAsCommitted(generation.Start, generation.Tx, topology.MyOrdinal()); err != nil {
+	if err := o.discoverer.SetAsCommitted(gen.Start, gen.Tx, topology.MyOrdinal()); err != nil {
 		log.Err(err).Msg("Set as committed locally failed (probably local db related)")
 		return newCreationError("Set as committed locally failed")
 	}
 
-	generation.Status = StatusCommitted
-	followerErrors = o.setStateToFollowers(&generation, followerErrors, readResults)
+	gen.Status = StatusCommitted
+	followerErrors = o.setStateToFollowers(&gen, followerErrors, readResults)
 	if followerErrors[0] != nil && followerErrors[1] != nil {
 		// The transaction is still considered committed and
 		// will be roll forward by the followers
@@ -164,6 +181,7 @@ func (o *generator) setRemoteState(
 	}
 }
 
+// Reads from followers, when there's no information, nil property values are returned
 func (o *generator) readStateFromFollowers(gen *Generation) []GenReadResult {
 	r1 := make(chan GenReadResult)
 	r2 := make(chan GenReadResult)

@@ -45,6 +45,7 @@ var _ = Describe("Client", func() {
 					Status:    StatusAccepted,
 					Leader:    2,
 					Followers: []int{0, 1},
+					Parents:   []GenParent{{Start: start, Version: GenVersion(i - 1)}},
 				})
 			}
 
@@ -78,6 +79,7 @@ var _ = Describe("Client", func() {
 				TxLeader:  3,
 				Tx:        uuid.New(),
 				Status:    StatusCommitted,
+				Parents:   []GenParent{{Start: 2001, Version: GenVersion(122)}},
 			}
 
 			err := client.CommitGeneration(&gen)
@@ -147,11 +149,12 @@ func (c *testConfig) LocalDbPath() string {
 
 func insertGeneration(c *client, gen Generation) {
 	query := `
-		INSERT INTO generations (start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		INSERT INTO generations
+		(start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := c.db.Exec(
 		query, gen.Start, gen.End, gen.Version, gen.Timestamp, gen.Tx, gen.TxLeader,
-		gen.Status, gen.Leader, utils.ToCsv(gen.Followers))
+		gen.Status, gen.Leader, utils.ToCsv(gen.Followers), parentsToString(gen.Parents))
 	Expect(err).NotTo(HaveOccurred())
 }
 

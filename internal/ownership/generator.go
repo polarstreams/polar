@@ -100,7 +100,7 @@ func (o *generator) startNew() {
 	}
 
 	message := localGenMessage{
-		reason: reason,
+		isNew:  reason == newCluster,
 		result: make(chan creationError),
 	}
 
@@ -147,7 +147,7 @@ func (o *generator) process() {
 func (o *generator) processGeneration(message genMessage) creationError {
 	// Consider a channel if state is needed across multiple items, i.e. "serialItems"
 	if m, ok := message.(*localGenMessage); ok {
-		return o.processLocal(m)
+		return o.processLocalMyToken(m)
 	}
 
 	if m, ok := message.(*remoteGenProposedMessage); ok {

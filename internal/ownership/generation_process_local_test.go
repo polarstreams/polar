@@ -108,7 +108,7 @@ var _ = Describe("generator", func() {
 				gossiper:   gossiperMock,
 			}
 
-			err := o.processLocal(&localGenMessage{reason: newCluster})
+			err := o.processLocalMyToken(&localGenMessage{})
 			Expect(err).NotTo(HaveOccurred())
 
 			gossiperMock.AssertExpectations(GinkgoT())

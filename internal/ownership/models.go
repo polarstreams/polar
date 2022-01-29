@@ -14,7 +14,7 @@ type genMessage interface {
 }
 
 type localGenMessage struct {
-	reason startReason
+	isNew  bool // When is new, it's expected to be generation 1 of a token
 	result chan creationError
 }
 

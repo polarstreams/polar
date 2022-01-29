@@ -18,7 +18,8 @@ const ddl01 = `
 		status INT NOT NULL,
 		leader INT NOT NULL,
 		followers TEXT NOT NULL, -- comma separated values
-		PRIMARY KEY (start_token, version) -- unique constraint for token and version
+		parents TEXT NOT NULL, -- json of []GenParent, defaulting to empty array
+		PRIMARY KEY (start_token, version)
 	);
 
 	-- Contains local information for the status of generations
