@@ -192,7 +192,7 @@ func (s *SegmentReader) initRead() error {
 		// No file found on folder
 		return nil
 	}
-	s.segmentFile, err = os.OpenFile(filepath.Join(s.basePath, foundFileName), conf.ReadFlags, 0)
+	s.segmentFile, err = os.OpenFile(filepath.Join(s.basePath, foundFileName), conf.SegmentFileReadFlags, 0)
 	if err != nil {
 		log.Err(err).Msgf("File %s in %s could not be opened by reader", foundFileName, s.basePath)
 		return err
@@ -276,7 +276,7 @@ func (s *SegmentReader) checkNextFile() string {
 
 // Closes the previous segment file and opens the new one, setting is as the current one.
 func (s *SegmentReader) swapSegmentFile() {
-	newFile, err := os.OpenFile(filepath.Join(s.basePath, s.nextFileName), conf.ReadFlags, 0)
+	newFile, err := os.OpenFile(filepath.Join(s.basePath, s.nextFileName), conf.SegmentFileReadFlags, 0)
 	if err != nil {
 		log.Err(err).Msgf("Next file could not be opened")
 		return

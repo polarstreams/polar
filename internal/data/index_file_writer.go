@@ -12,20 +12,22 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// Represents a writer for index files
+// Represents a writer for index & offset files
 type indexFileWriter struct {
-	items    chan indexFileItem
-	basePath string
-	config   conf.DatalogConfig
-	closed   chan bool
+	items        chan indexFileItem
+	basePath     string
+	config       conf.DatalogConfig
+	closed       chan bool
+	offsetWriter *offsetFileWriter
 }
 
 func newIndexFileWriter(basePath string, config conf.DatalogConfig) *indexFileWriter {
 	w := &indexFileWriter{
-		items:    make(chan indexFileItem, 1), // Try not to block when sending
-		config:   config,
-		basePath: basePath,
-		closed:   make(chan bool, 1),
+		items:        make(chan indexFileItem, 1), // Try not to block when sending
+		config:       config,
+		basePath:     basePath,
+		closed:       make(chan bool, 1),
+		offsetWriter: newOffsetFileWriter(),
 	}
 	go w.writeLoop()
 	return w
@@ -38,7 +40,11 @@ func (w *indexFileWriter) writeLoop() {
 	lastStoredFileOffset := int64(0)
 	buffer := utils.NewBufferCap(16)
 	writeThreshold := int64(w.config.IndexFilePeriodBytes())
+	w.offsetWriter.create(w.basePath)
 	for item := range w.items {
+		// Always store the producer.offset file
+		w.offsetWriter.write(item.tailOffset)
+
 		if item.toClose {
 			// File closing
 			if file != nil {
@@ -80,25 +86,29 @@ func (w *indexFileWriter) writeLoop() {
 			}
 			lastStoredFileOffset = item.fileOffset
 		}
+
 	}
 
+	w.offsetWriter.close()
 	w.closed <- true
 }
 
 // When conditions apply, it adds a line to the index file mapping file offset with message offset
 // in the background.
-func (w *indexFileWriter) append(segmentId uint64, offset uint64, fileOffset int64) {
+func (w *indexFileWriter) append(segmentId uint64, offset uint64, fileOffset int64, tailOffset uint64) {
 	w.items <- indexFileItem{
 		segmentId:  segmentId,
 		offset:     offset,
 		fileOffset: fileOffset,
+		tailOffset: tailOffset,
 	}
 }
 
 // Closes the current file in the background
-func (w *indexFileWriter) closeFile(segmentId uint64) {
+func (w *indexFileWriter) closeFile(segmentId uint64, tailOffset uint64) {
 	w.items <- indexFileItem{
-		segmentId: segmentId,
-		toClose:   true,
+		segmentId:  segmentId,
+		tailOffset: tailOffset,
+		toClose:    true,
 	}
 }

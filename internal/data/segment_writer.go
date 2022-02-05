@@ -35,6 +35,7 @@ type SegmentWriter struct {
 	buffer         *bytes.Buffer
 	lastFlush      time.Time
 	bufferedOffset uint64 // Stores the offset of the first message buffered since it was buffered
+	tailOffset     uint64 // Value of the last written message
 	config         conf.DatalogConfig
 	segmentFile    *os.File
 	indexFile      *indexFileWriter
@@ -190,7 +191,7 @@ func (s *SegmentWriter) createFile(segmentId uint64) {
 	name := fmt.Sprintf("%020d.%s", s.segmentId, conf.SegmentFileExtension)
 	log.Debug().Msgf("Creating segment file %s on %s", name, s.basePath)
 
-	f, err := os.OpenFile(filepath.Join(s.basePath, name), conf.WriteFlags, FilePermissions)
+	f, err := os.OpenFile(filepath.Join(s.basePath, name), conf.SegmentFileWriteFlags, FilePermissions)
 	if err != nil {
 		// Can't create segment
 		log.Err(err).Msgf("Failed to create segment file at %s", s.basePath)
@@ -218,7 +219,8 @@ func (s *SegmentWriter) flush(reason string) {
 		panic(err)
 	}
 
-	s.indexFile.append(s.segmentId, s.bufferedOffset, s.segmentLength)
+	// Store the index file and producer offset
+	s.indexFile.append(s.segmentId, s.bufferedOffset, s.segmentLength, s.tailOffset)
 	s.segmentLength += length
 	s.buffer.Reset()
 	s.lastFlush = time.Now()
@@ -244,7 +246,7 @@ func (s *SegmentWriter) closeFile() {
 	}()
 
 	// Close the index file
-	s.indexFile.closeFile(previousSegmentId)
+	s.indexFile.closeFile(previousSegmentId, s.tailOffset)
 
 	s.segmentFile = nil
 	s.segmentId = math.MaxUint64
@@ -260,6 +262,11 @@ func (s *SegmentWriter) writeToBuffer(item SegmentChunk) {
 	headStartIndex := s.buffer.Len()
 	compressedBody := item.DataBlock()
 	const flags = byte(0) // Only valid flag is alignment 0x80 (10000000)
+
+	recordLength := item.RecordLength()
+	if recordLength > 0 {
+		s.tailOffset = item.StartOffset() + uint64(recordLength) - 1
+	}
 
 	// Write head
 	binary.Write(s.buffer, conf.Endianness, flags)

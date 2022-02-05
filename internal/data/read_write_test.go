@@ -27,7 +27,7 @@ var _ = Describe("I/O Techniques", func() {
 
 		filename := filepath.Join(dir, "sample.txt")
 
-		file, err := os.OpenFile(filename, conf.WriteFlags, FilePermissions)
+		file, err := os.OpenFile(filename, conf.SegmentFileWriteFlags, FilePermissions)
 		Expect(err).NotTo(HaveOccurred())
 
 		buf := make([]byte, blockSize)
@@ -41,7 +41,7 @@ var _ = Describe("I/O Techniques", func() {
 		file.Close()
 
 		buf = make([]byte, blockSize*4)
-		file, _ = os.OpenFile(filename, conf.ReadFlags, FilePermissions)
+		file, _ = os.OpenFile(filename, conf.SegmentFileReadFlags, FilePermissions)
 		n, err = file.Read(buf)
 		Expect(err).NotTo(HaveOccurred())
 		// It should retrieve what was there
@@ -54,7 +54,7 @@ var _ = Describe("I/O Techniques", func() {
 
 		filename := filepath.Join(dir, "sample.txt")
 
-		writeFile, err := os.OpenFile(filename, conf.WriteFlags, FilePermissions)
+		writeFile, err := os.OpenFile(filename, conf.SegmentFileWriteFlags, FilePermissions)
 		Expect(err).NotTo(HaveOccurred())
 
 		buf := make([]byte, blockSize)
@@ -68,7 +68,7 @@ var _ = Describe("I/O Techniques", func() {
 		writeFile.Close()
 
 		buf = make([]byte, blockSize*4)
-		readFile, err := os.OpenFile(filename, conf.ReadFlags, FilePermissions)
+		readFile, err := os.OpenFile(filename, conf.SegmentFileReadFlags, FilePermissions)
 		Expect(err).NotTo(HaveOccurred())
 		n, err = readFile.Read(buf)
 		Expect(err).NotTo(HaveOccurred())

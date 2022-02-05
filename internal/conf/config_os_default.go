@@ -8,8 +8,10 @@ import (
 )
 
 // Fallback to O_SYNC on platforms not supported for production use
-const WriteFlags = os.O_APPEND | os.O_CREATE | os.O_WRONLY | os.O_SYNC
+const SegmentFileWriteFlags = os.O_APPEND | os.O_CREATE | os.O_WRONLY | os.O_SYNC
 
-const ReadFlags = os.O_RDONLY
+const SegmentFileReadFlags = os.O_RDONLY
 
-const IndexFileWriteFlags = WriteFlags
+const IndexFileWriteFlags = SegmentFileWriteFlags
+
+const ProducerOffsetFileWriteFlags = os.O_CREATE | os.O_WRONLY | os.O_SYNC

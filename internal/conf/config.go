@@ -11,11 +11,12 @@ import (
 )
 
 const (
-	Mib                  = 1024 * 1024
-	allocationPoolSize   = 32 * Mib
-	filePermissions      = 0755
-	SegmentFileExtension = "dlog"
-	IndexFileExtension   = "index"
+	Mib                    = 1024 * 1024
+	allocationPoolSize     = 32 * Mib
+	filePermissions        = 0755
+	SegmentFileExtension   = "dlog"
+	IndexFileExtension     = "index"
+	ProducerOffsetFileName = "producer.offset"
 )
 
 const (

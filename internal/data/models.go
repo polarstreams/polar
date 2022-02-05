@@ -42,6 +42,7 @@ type indexFileItem struct {
 	offset     uint64 // The message offset
 	fileOffset int64
 	toClose    bool
+	tailOffset uint64
 }
 
 type ReadSegmentChunk struct {
