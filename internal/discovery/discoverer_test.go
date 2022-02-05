@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jorgebay/soda/internal/test/conf/mocks"
+	dbMocks "github.com/jorgebay/soda/internal/test/localdb/mocks"
 	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -27,7 +28,9 @@ var _ = Describe("discoverer", func() {
 		It("should parse fixed brokers", func() {
 			os.Setenv(envOrdinal, "2")
 			os.Setenv(envBrokerNames, "abc,def,ghi")
-			d := &discoverer{}
+			d := &discoverer{
+				localDb: newLocalDbWithNoRecords(),
+			}
 
 			d.Init()
 
@@ -55,6 +58,7 @@ var _ = Describe("discoverer", func() {
 					baseHostName: "soda-",
 				},
 				k8sClient: &k8sClientFake{3},
+				localDb:   newLocalDbWithNoRecords(),
 			}
 
 			d.Init()
@@ -74,6 +78,7 @@ var _ = Describe("discoverer", func() {
 					baseHostName: "soda-",
 				},
 				k8sClient: &k8sClientFake{6},
+				localDb:   newLocalDbWithNoRecords(),
 			}
 
 			d.Init()
@@ -99,6 +104,7 @@ var _ = Describe("discoverer", func() {
 					baseHostName: "soda-",
 				},
 				k8sClient: &k8sClientFake{3},
+				localDb:   newLocalDbWithNoRecords(),
 			}
 
 			d.Init()
@@ -188,7 +194,7 @@ var _ = Describe("discoverer", func() {
 	Describe("Leader()", func() {
 		It("should default to the current token when not partition key is provided", func() {
 			ordinal := 1
-			d := NewDiscoverer(newConfigFake(ordinal), nil).(*discoverer)
+			d := NewDiscoverer(newConfigFake(ordinal), newLocalDbWithNoRecords()).(*discoverer)
 			d.k8sClient = &k8sClientFake{6}
 
 			d.Init()
@@ -212,7 +218,7 @@ var _ = Describe("discoverer", func() {
 
 		It("should calculate the primary token and get the generation", func() {
 			ordinal := 1
-			d := NewDiscoverer(newConfigFake(ordinal), nil).(*discoverer)
+			d := NewDiscoverer(newConfigFake(ordinal), newLocalDbWithNoRecords()).(*discoverer)
 			d.k8sClient = &k8sClientFake{6}
 
 			d.Init()
@@ -236,7 +242,7 @@ var _ = Describe("discoverer", func() {
 		})
 
 		It("should set it to the natural owner when there's no information", func() {
-			d := NewDiscoverer(newConfigFake(1), nil).(*discoverer)
+			d := NewDiscoverer(newConfigFake(1), newLocalDbWithNoRecords()).(*discoverer)
 			d.k8sClient = &k8sClientFake{6}
 
 			d.Init()
@@ -250,6 +256,12 @@ var _ = Describe("discoverer", func() {
 		})
 	})
 })
+
+func newLocalDbWithNoRecords() *dbMocks.Client {
+	localDb := new(dbMocks.Client)
+	localDb.On("LatestGenerations").Return([]Generation{}, nil)
+	return localDb
+}
 
 type configFake struct {
 	ordinal      int

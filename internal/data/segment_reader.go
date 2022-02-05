@@ -26,7 +26,7 @@ type SegmentReader struct {
 	Topic             TopicDataId
 	SourceVersion     GenVersion // The version in which this reader was created, a consumer might be on Gen=v3 but the current is v4. In this case, source would be v4 and topic.Version = v3
 	offsetState       OffsetState
-	maxProducedOffset *uint64
+	MaxProducedOffset *uint64 // When set, it determines the last offset produced for this topicId for an old generation
 	messageOffset     uint64
 	fileName          string
 	nextFileName      string
@@ -64,7 +64,7 @@ func NewSegmentReader(
 		group:             group,
 		SourceVersion:     sourceVersion,
 		offsetState:       offsetState,
-		maxProducedOffset: maxProducedOffset,
+		MaxProducedOffset: maxProducedOffset,
 		pollDelay:         defaultPollDelay,
 	}
 

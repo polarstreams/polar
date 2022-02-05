@@ -105,6 +105,108 @@ var _ = Describe("Client", func() {
 		})
 	})
 
+	Describe("LatestGenerations()", func() {
+		It("Should return latest generation per token", func() {
+			client := newTestClient()
+			defer client.Close()
+
+			gen1_v3 := Generation{
+				Start:     1,
+				End:       2,
+				Version:   3,
+				Timestamp: utils.ToUnixMillis(time.Now()),
+				Tx:        uuid.New(),
+				Status:    StatusCommitted,
+				Leader:    2,
+				Followers: []int{0, 1},
+				Parents:   []GenParent{{Start: 1, Version: 2}},
+			}
+			gen1_v4 := Generation{
+				Start:     1,
+				End:       2,
+				Version:   4,
+				Timestamp: utils.ToUnixMillis(time.Now()),
+				Tx:        uuid.New(),
+				Status:    StatusCommitted,
+				Leader:    2,
+				Followers: []int{0, 1},
+				Parents:   []GenParent{{Start: 1, Version: 3}},
+			}
+			gen2_v1 := Generation{
+				Start:     2,
+				End:       3,
+				Version:   1,
+				Timestamp: utils.ToUnixMillis(time.Now()),
+				Tx:        uuid.New(),
+				Status:    StatusCommitted,
+				Leader:    2,
+				Followers: []int{0, 1},
+				Parents:   []GenParent{{Start: 1, Version: 3}},
+			}
+			insertGeneration(client, gen1_v3)
+			insertGeneration(client, gen1_v4)
+			insertGeneration(client, gen2_v1)
+
+			result, err := client.LatestGenerations()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(HaveLen(2))
+			Expect(result[0]).To(Equal(gen1_v4))
+			Expect(result[1]).To(Equal(gen2_v1))
+		})
+	})
+
+	Describe("GenerationsByParent()", func() {
+		It("Should return the next generations", func() {
+			client := newTestClient()
+			defer client.Close()
+
+			gen1_v3 := Generation{
+				Start:     1,
+				End:       2,
+				Version:   3,
+				Timestamp: utils.ToUnixMillis(time.Now()),
+				Tx:        uuid.New(),
+				Status:    StatusCommitted,
+				Leader:    2,
+				Followers: []int{0, 1},
+				Parents:   []GenParent{{Start: 1, Version: 2}},
+			}
+			gen1_v4 := Generation{
+				Start:     1,
+				End:       2,
+				Version:   4,
+				Timestamp: utils.ToUnixMillis(time.Now()),
+				Tx:        uuid.New(),
+				Status:    StatusCommitted,
+				Leader:    2,
+				Followers: []int{0, 1},
+				Parents:   []GenParent{{Start: 1, Version: 3}},
+			}
+			gen2_v1 := Generation{
+				Start:     2,
+				End:       3,
+				Version:   1,
+				Timestamp: utils.ToUnixMillis(time.Now()),
+				Tx:        uuid.New(),
+				Status:    StatusCommitted,
+				Leader:    2,
+				Followers: []int{0, 1},
+				Parents:   []GenParent{{Start: 1, Version: 3}},
+			}
+			insertGeneration(client, gen1_v3)
+			insertGeneration(client, gen1_v4)
+			insertGeneration(client, gen2_v1)
+
+			result, err := client.GenerationsByParent(&gen1_v3)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal([]Generation{gen1_v4}))
+
+			result, err = client.GenerationsByParent(&gen2_v1)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(HaveLen(0))
+		})
+	})
+
 	Describe("CommitGeneration()", func() {
 		It("should insert a record in each table", func() {
 			client := newTestClient()

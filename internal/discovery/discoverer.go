@@ -52,8 +52,6 @@ type TopologyGetter interface {
 	//
 	// The slice is sorted in natural order (i.e. 0, 3, 1, 4, 2, 5)
 	Brokers() []BrokerInfo
-
-	TokenByOrdinal(ordinal int) Token // TODO: Probably unnecessary
 }
 
 type TopologyChangeHandler func()
@@ -62,7 +60,7 @@ type genMap map[Token]Generation
 
 func NewDiscoverer(config conf.DiscovererConfig, localDb localdb.Client) Discoverer {
 	generations := atomic.Value{}
-	generations.Store(genMap{})
+	generations.Store(make(genMap))
 
 	return &discoverer{
 		config:      config,
@@ -100,6 +98,10 @@ func (d *discoverer) Init() error {
 			return err
 		}
 		d.topology = createTopology(totalBrokers, d.config)
+	}
+
+	if err := d.loadGenerations(); err != nil {
+		return err
 	}
 
 	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.topology.Brokers))
@@ -166,11 +168,6 @@ func (d *discoverer) Brokers() []BrokerInfo {
 func (d *discoverer) LocalInfo() *BrokerInfo {
 	topology := d.topology
 	return &topology.Brokers[topology.LocalIndex]
-}
-
-func (d *discoverer) TokenByOrdinal(ordinal int) Token {
-	index := d.topology.GetIndex(ordinal)
-	return d.topology.GetToken(index)
 }
 
 func (d *discoverer) Leader(partitionKey string) ReplicationInfo {

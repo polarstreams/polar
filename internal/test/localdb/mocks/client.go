@@ -68,6 +68,29 @@ func (_m *Client) GenerationInfo(token types.Token, version types.GenVersion) (*
 	return r0, r1
 }
 
+// GenerationsByParent provides a mock function with given fields: gen
+func (_m *Client) GenerationsByParent(gen *types.Generation) ([]types.Generation, error) {
+	ret := _m.Called(gen)
+
+	var r0 []types.Generation
+	if rf, ok := ret.Get(0).(func(*types.Generation) []types.Generation); ok {
+		r0 = rf(gen)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]types.Generation)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*types.Generation) error); ok {
+		r1 = rf(gen)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetGenerationsByToken provides a mock function with given fields: token
 func (_m *Client) GetGenerationsByToken(token types.Token) ([]types.Generation, error) {
 	ret := _m.Called(token)
@@ -103,6 +126,29 @@ func (_m *Client) Init() error {
 	}
 
 	return r0
+}
+
+// LatestGenerations provides a mock function with given fields:
+func (_m *Client) LatestGenerations() ([]types.Generation, error) {
+	ret := _m.Called()
+
+	var r0 []types.Generation
+	if rf, ok := ret.Get(0).(func() []types.Generation); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]types.Generation)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // Offsets provides a mock function with given fields:

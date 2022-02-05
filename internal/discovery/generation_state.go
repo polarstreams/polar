@@ -6,6 +6,7 @@ import (
 
 	. "github.com/google/uuid"
 	. "github.com/jorgebay/soda/internal/types"
+	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -14,8 +15,13 @@ type GenerationState interface {
 	// This is part of the hot path.
 	Generation(token Token) *Generation
 
-	// GenerationInfo gets the information of a past committed generation
-	GenerationInfo(token Token, version GenVersion) (*Generation, error)
+	// GenerationInfo gets the information of a past committed generation.
+	// Returns nil when not found.
+	GenerationInfo(token Token, version GenVersion) *Generation
+
+	// For an old generation, get's the following generation (or two in the case of split).
+	// Returns nil when not found.
+	NextGeneration(token Token, version GenVersion) []Generation
 
 	// GenerationProposed reads a snapshot of the current committed and proposed generations
 	GenerationProposed(token Token) (committed *Generation, proposed *Generation)
@@ -39,6 +45,30 @@ type GenerationState interface {
 	HasTokenHistory(token Token) (bool, error)
 }
 
+// Loads all generations from local storage
+func (d *discoverer) loadGenerations() error {
+	defer d.genMutex.Unlock()
+	d.genMutex.Lock()
+
+	if existing := d.generations.Load(); existing != nil {
+		if existingMap := existing.(genMap); len(existingMap) > 0 {
+			return fmt.Errorf("Generation map is not empty")
+		}
+	}
+
+	genList, err := d.localDb.LatestGenerations()
+	if err != nil {
+		return err
+	}
+
+	newMap := make(genMap)
+	for _, gen := range genList {
+		newMap[gen.Start] = gen
+	}
+	d.generations.Store(newMap)
+	return nil
+}
+
 func (d *discoverer) Generation(token Token) *Generation {
 	existingMap := d.generations.Load().(genMap)
 
@@ -48,8 +78,24 @@ func (d *discoverer) Generation(token Token) *Generation {
 	return nil
 }
 
-func (d *discoverer) GenerationInfo(token Token, version GenVersion) (*Generation, error) {
-	return d.localDb.GenerationInfo(token, version)
+func (d *discoverer) GenerationInfo(token Token, version GenVersion) *Generation {
+	gen, err := d.localDb.GenerationInfo(token, version)
+	utils.PanicIfErr(err, "Generation info failed to be retrieved")
+	return gen
+}
+
+func (d *discoverer) NextGeneration(token Token, version GenVersion) []Generation {
+	current := d.GenerationInfo(token, version)
+	if current == nil {
+		return nil
+	}
+
+	nextGens, err := d.localDb.GenerationsByParent(current)
+	utils.PanicIfErr(err, "Generations by parent failed to be retrieved")
+
+	// TODO: Handle the case where this token was joined with another one and v+1 does not exist
+
+	return nextGens
 }
 
 func (d *discoverer) GenerationProposed(token Token) (committed *Generation, proposed *Generation) {

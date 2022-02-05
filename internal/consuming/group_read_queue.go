@@ -36,7 +36,7 @@ type groupReadQueue struct {
 	gossiper       interbroker.Gossiper
 	config         conf.ConsumerConfig
 	readerIndex    uint16
-	readers        map[readerKey]map[string]*SegmentReader // Readers per token and topic
+	readers        map[readerKey]map[string]*SegmentReader // Uses token+index as keys and map of readers per topic as values
 }
 
 func newGroupReadQueue(
@@ -96,24 +96,7 @@ func (q *groupReadQueue) process() {
 		errors := make([]error, 0)
 
 		if len(failedResponseItems) > 0 {
-			// There was an error writing the previous response to a consumer in this group
-			// If the tokens and topic match, give the response to the consumer
-			for i := len(failedResponseItems) - 1; i >= 0; i-- {
-				r := failedResponseItems[i]
-				// Use sequential search, there should be a single (or two) tokens and a handful of topics
-				if utils.ContainsToken(tokens, r.topic.Token) && utils.ContainsString(topics, r.topic.Name) {
-					// Remove it from failed
-					failedResponseItems = append(failedResponseItems[:i], failedResponseItems[i+1:]...)
-
-					offset := q.offsetState.Get(q.group, r.topic.Name, r.topic.Token, r.topic.RangeIndex)
-					if offset != nil && offset.Version != r.topic.GenId {
-						// Since it failed, there were topology changes and the offset state for the group changed
-						// It can be safely ignored
-						continue
-					}
-					responseItems = append(responseItems, r)
-				}
-			}
+			responseItems = q.useFailedResponseItems(failedResponseItems, tokens, topics)
 		}
 
 		if len(responseItems) == 0 {
@@ -140,12 +123,8 @@ func (q *groupReadQueue) process() {
 					responseItems = append(responseItems, consumerResponseItem{chunk: chunk, topic: reader.Topic})
 					totalSize += size
 				} else {
-					// There's no more data
-					// TODO: Implement empty closing
-					// - Check if we are in the latest generation
-					// - if not, check the maximum offset with the replica and close it
-					// - Use a time since to check from time to time
-					// - Do in the background and channel response
+					// No data from this reader since we last read
+					q.maybeCloseReader(reader, chunk)
 				}
 			}
 		}
@@ -187,8 +166,6 @@ func (q *groupReadQueue) process() {
 		}
 		item.done <- true
 	}
-
-	// TODO:  look for generation after X (child when reading)
 }
 
 func marshalResponse(w http.ResponseWriter, responseItems []consumerResponseItem) error {
@@ -221,6 +198,66 @@ func (q *groupReadQueue) readNext(connId UUID, w http.ResponseWriter) {
 	<-done
 }
 
+func (q *groupReadQueue) maybeCloseReader(reader *SegmentReader, chunk SegmentChunk) {
+	nextReadOffset := chunk.StartOffset()
+	if reader.MaxProducedOffset != nil && nextReadOffset > *reader.MaxProducedOffset {
+		// There will be no more data, we should dispose the reader
+		q.closeReader(reader)
+
+		//  Move offset to new generation
+		topicId := reader.Topic
+		nextGens := q.topologyGetter.NextGeneration(topicId.Token, topicId.GenId)
+		for _, gen := range nextGens {
+			offset := Offset{Offset: 0, Version: gen.Version}
+			q.offsetState.Set(
+				q.group, topicId.Name, gen.Start, topicId.RangeIndex, offset, OffsetCommitAll)
+		}
+	}
+}
+
+func (q *groupReadQueue) closeReader(reader *SegmentReader) {
+	topicId := reader.Topic
+	key := readerKey{
+		token:      topicId.Token,
+		rangeIndex: topicId.RangeIndex,
+	}
+
+	readersByTopic, found := q.readers[key]
+	if !found {
+		return
+	}
+
+	delete(readersByTopic, topicId.Name)
+	close(reader.Items)
+}
+
+func (q *groupReadQueue) useFailedResponseItems(
+	failedResponseItems []consumerResponseItem,
+	tokens []TokenRanges,
+	topics []string,
+) []consumerResponseItem {
+	result := make([]consumerResponseItem, 0, 1)
+	// There was an error writing the previous response to a consumer in this group
+	// If the tokens and topic match, give the response to the consumer
+	for i := len(failedResponseItems) - 1; i >= 0; i-- {
+		r := failedResponseItems[i]
+		// Use sequential search, there should be a single (or two) tokens and a handful of topics
+		if utils.ContainsToken(tokens, r.topic.Token) && utils.ContainsString(topics, r.topic.Name) {
+			// Remove it from failed
+			failedResponseItems = append(failedResponseItems[:i], failedResponseItems[i+1:]...)
+
+			offset := q.offsetState.Get(q.group, r.topic.Name, r.topic.Token, r.topic.RangeIndex)
+			if offset != nil && offset.Version != r.topic.GenId {
+				// Since it failed, there were topology changes and the offset state for the group changed
+				// It can be safely ignored
+				continue
+			}
+			result = append(result, r)
+		}
+	}
+	return result
+}
+
 // Gets the readers, creating them if necessary
 func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) []*SegmentReader {
 	result := make([]*SegmentReader, 0, len(tokenRanges)*len(topics))
@@ -234,14 +271,14 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 		}
 		for _, index := range t.Indices {
 			key := readerKey{t.Token, index}
-			readersByToken, found := q.readers[key]
+			readersByTopic, found := q.readers[key]
 			if !found {
-				readersByToken = make(map[string]*SegmentReader)
-				q.readers[key] = readersByToken
+				readersByTopic = make(map[string]*SegmentReader)
+				q.readers[key] = readersByTopic
 			}
 
 			for _, topic := range topics {
-				reader, found := readersByToken[topic]
+				reader, found := readersByTopic[topic]
 				if !found {
 					log.Info().Msgf("Creating reader for token %d/%d and topic '%s'", t, index, topic)
 					offset := q.offsetState.Get(q.group, topic, t.Token, index)
@@ -249,6 +286,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 						// We have no information of this group
 						//TODO: Verify that we have loaded from other brokers
 
+						// TODO: Start at tail or last segment not archived
 						offset = &Offset{
 							Offset:  0,
 							Version: 1,
@@ -291,7 +329,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 						continue
 					}
 
-					readersByToken[topic] = reader
+					readersByTopic[topic] = reader
 				}
 				result = append(result, reader)
 			}
@@ -302,8 +340,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 }
 
 func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (uint64, error) {
-	gen, err := q.topologyGetter.GenerationInfo(topicId.Token, topicId.GenId)
-	utils.PanicIfErr(err, "Generation info failed to be retrieved")
+	gen := q.topologyGetter.GenerationInfo(topicId.Token, topicId.GenId)
 	if gen == nil {
 		log.Warn().Msgf("Past generation could not be retrieved %d v%d", topicId.Token, topicId.GenId)
 		// Attempt to get the info from local storage

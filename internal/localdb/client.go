@@ -25,10 +25,16 @@ type Client interface {
 	// Retrieves all the stored offsets
 	Offsets() ([]OffsetStoreKeyValue, error)
 
+	// Gets latest generation stored per token
+	LatestGenerations() ([]Generation, error)
+
+	// Gets the following (children) generations
+	GenerationsByParent(gen *Generation) ([]Generation, error)
+
 	// TODO: convert to history
 	GetGenerationsByToken(token Token) ([]Generation, error)
 
-	// Gets the generation by token and version
+	// Gets the generation by token and version, returns nil when not found
 	GenerationInfo(token Token, version GenVersion) (*Generation, error)
 }
 
@@ -88,6 +94,12 @@ func (c *client) DbWasNewlyCreated() bool {
 }
 
 func (c *client) Close() {
-	_ = c.queries.selectGenerationList.Close()
+	_ = c.queries.selectGenerationsByToken.Close()
+	_ = c.queries.selectGenerationsAll.Close()
+	_ = c.queries.selectGenerationsByParent.Close()
+	_ = c.queries.selectGeneration.Close()
+	_ = c.queries.insertGeneration.Close()
+	_ = c.queries.insertTransaction.Close()
+	_ = c.queries.insertOffset.Close()
 	log.Err(c.db.Close()).Msg("Local db closed")
 }

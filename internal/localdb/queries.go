@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -12,27 +13,40 @@ import (
 )
 
 type queries struct {
-	selectGenerationList *sql.Stmt
-	selectGeneration     *sql.Stmt
-	insertGeneration     *sql.Stmt
-	insertTransaction    *sql.Stmt
-	selectOffsets        *sql.Stmt
-	insertOffset         *sql.Stmt
+	selectGenerationsByToken  *sql.Stmt
+	selectGenerationsAll      *sql.Stmt
+	selectGenerationsByParent *sql.Stmt
+	selectGeneration          *sql.Stmt
+	insertGeneration          *sql.Stmt
+	insertTransaction         *sql.Stmt
+	selectOffsets             *sql.Stmt
+	insertOffset              *sql.Stmt
 }
 
 func (c *client) prepareQueries() {
-	c.queries.selectGenerationList = c.prepare(`
-		SELECT start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents FROM
-		generations WHERE start_token = ? ORDER BY start_token, version DESC LIMIT 2`)
+	const generationColumns = "start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents"
 
-	c.queries.selectGeneration = c.prepare(`
-		SELECT start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents FROM
-		generations WHERE start_token = ? AND version = ?`)
+	c.queries.selectGenerationsByToken = c.prepare(fmt.Sprintf(`
+		SELECT %s FROM generations
+		WHERE start_token = ? ORDER BY start_token, version DESC LIMIT 2`, generationColumns))
 
-	c.queries.insertGeneration = c.prepare(`
-		INSERT INTO generations
-			(start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	c.queries.selectGenerationsByParent = c.prepare(fmt.Sprintf(`
+		SELECT %s FROM generations
+		WHERE start_token >= ? AND end_token <= ? AND parents = ?`, generationColumns))
+
+	c.queries.selectGenerationsAll = c.prepare(fmt.Sprintf(`
+		SELECT %s
+		FROM
+			generations
+			INNER JOIN (SELECT start_token AS t, MAX(version) as v FROM generations GROUP BY start_token) AS max_gen
+				ON max_gen.t = generations.start_token AND max_gen.v = generations.version`,
+		generationColumns))
+
+	c.queries.selectGeneration = c.prepare(fmt.Sprintf(
+		`SELECT %s FROM generations WHERE start_token = ? AND version = ?`, generationColumns))
+
+	c.queries.insertGeneration = c.prepare(fmt.Sprintf(
+		`INSERT INTO generations (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, generationColumns))
 
 	c.queries.insertTransaction = c.prepare(
 		`INSERT INTO transactions (tx, origin, timestamp, status) VALUES (?, ?, ?, ?)`)
@@ -83,7 +97,46 @@ func (c *client) setCurrentSchemaVersion() error {
 }
 
 func (c *client) GetGenerationsByToken(token Token) ([]Generation, error) {
-	rows, err := c.queries.selectGenerationList.Query(int64(token))
+	rows, err := c.queries.selectGenerationsByToken.Query(int64(token))
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]Generation, 0)
+	defer rows.Close()
+	for rows.Next() {
+		item, err := scanGenRow(rows)
+		if err != nil {
+			return result, err
+		}
+		result = append(result, *item)
+	}
+	return result, nil
+}
+
+func (c *client) GenerationsByParent(gen *Generation) ([]Generation, error) {
+	// Look for the children of the current generation
+	parent := parentsToString([]GenParent{{Start: gen.Start, Version: gen.Version}})
+
+	rows, err := c.queries.selectGenerationsByParent.Query(gen.Start, gen.End, parent)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]Generation, 0)
+	defer rows.Close()
+	for rows.Next() {
+		item, err := scanGenRow(rows)
+		if err != nil {
+			return result, err
+		}
+		result = append(result, *item)
+	}
+	return result, nil
+}
+
+func (c *client) LatestGenerations() ([]Generation, error) {
+	rows, err := c.queries.selectGenerationsAll.Query()
 	if err != nil {
 		return nil, err
 	}
