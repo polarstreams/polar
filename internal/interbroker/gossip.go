@@ -343,6 +343,9 @@ func (g *gossiper) ReadProducerOffset(ordinal int, topic *TopicDataId) (uint64, 
 		topic.RangeIndex.String(),
 		topic.GenId.String())
 	r, err := g.requestGet(ordinal, url)
+	if err != nil {
+		return 0, err
+	}
 	defer r.Body.Close()
 	var value uint64
 	if err = json.NewDecoder(r.Body).Decode(&value); err != nil {
