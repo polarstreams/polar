@@ -119,6 +119,27 @@ func (_m *Gossiper) OpenConnections() error {
 	return r0
 }
 
+// ReadProducerOffset provides a mock function with given fields: ordinal, topic
+func (_m *Gossiper) ReadProducerOffset(ordinal int, topic *types.TopicDataId) (uint64, error) {
+	ret := _m.Called(ordinal, topic)
+
+	var r0 uint64
+	if rf, ok := ret.Get(0).(func(int, *types.TopicDataId) uint64); ok {
+		r0 = rf(ordinal, topic)
+	} else {
+		r0 = ret.Get(0).(uint64)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(int, *types.TopicDataId) error); ok {
+		r1 = rf(ordinal, topic)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // RegisterConsumerInfoListener provides a mock function with given fields: listener
 func (_m *Gossiper) RegisterConsumerInfoListener(listener interbroker.ConsumerInfoListener) {
 	_m.Called(listener)
@@ -134,13 +155,13 @@ func (_m *Gossiper) RegisterReroutedMessageListener(listener interbroker.Rerouti
 	_m.Called(listener)
 }
 
-// SendCommittedOffset provides a mock function with given fields: ordinal, group, topic, token, rangeIndex, value
-func (_m *Gossiper) SendCommittedOffset(ordinal int, group string, topic string, token types.Token, rangeIndex types.RangeIndex, value types.Offset) error {
-	ret := _m.Called(ordinal, group, topic, token, rangeIndex, value)
+// SendCommittedOffset provides a mock function with given fields: ordinal, offsetKv
+func (_m *Gossiper) SendCommittedOffset(ordinal int, offsetKv *types.OffsetStoreKeyValue) error {
+	ret := _m.Called(ordinal, offsetKv)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(int, string, string, types.Token, types.RangeIndex, types.Offset) error); ok {
-		r0 = rf(ordinal, group, topic, token, rangeIndex, value)
+	if rf, ok := ret.Get(0).(func(int, *types.OffsetStoreKeyValue) error); ok {
+		r0 = rf(ordinal, offsetKv)
 	} else {
 		r0 = ret.Error(0)
 	}

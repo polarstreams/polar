@@ -2,6 +2,7 @@ package consuming
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/jorgebay/soda/internal/conf"
 	. "github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/discovery"
+	"github.com/jorgebay/soda/internal/interbroker"
 	. "github.com/jorgebay/soda/internal/types"
 	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
@@ -31,6 +33,7 @@ type groupReadQueue struct {
 	state          *ConsumerState
 	offsetState    OffsetState
 	topologyGetter discovery.TopologyGetter
+	gossiper       interbroker.Gossiper
 	config         conf.ConsumerConfig
 	readerIndex    uint16
 	readers        map[readerKey]map[string]*SegmentReader // Readers per token and topic
@@ -41,6 +44,7 @@ func newGroupReadQueue(
 	state *ConsumerState,
 	offsetState OffsetState,
 	topologyGetter discovery.TopologyGetter,
+	gossiper interbroker.Gossiper,
 	config conf.ConsumerConfig,
 ) *groupReadQueue {
 	queue := &groupReadQueue{
@@ -50,6 +54,7 @@ func newGroupReadQueue(
 		state:          state,
 		offsetState:    offsetState,
 		topologyGetter: topologyGetter,
+		gossiper:       gossiper,
 		config:         config,
 	}
 	go queue.process()
@@ -134,6 +139,13 @@ func (q *groupReadQueue) process() {
 					// A non-empty data block
 					responseItems = append(responseItems, consumerResponseItem{chunk: chunk, topic: reader.Topic})
 					totalSize += size
+				} else {
+					// There's no more data
+					// TODO: Implement empty closing
+					// - Check if we are in the latest generation
+					// - if not, check the maximum offset with the replica and close it
+					// - Use a time since to check from time to time
+					// - Do in the background and channel response
 				}
 			}
 		}
@@ -216,6 +228,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 	for _, t := range tokenRanges {
 		currentGen := q.topologyGetter.Generation(t.Token)
 		if currentGen == nil {
+			// TODO: Maybe the token/broker no longer exists
 			log.Warn().Msgf("Information about the generation of token %d could not be found", t.Token)
 			continue
 		}
@@ -244,24 +257,40 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 					}
 
 					if !q.offsetState.CanConsumeToken(q.group, topic, *currentGen) {
+						// TODO: Verify that a previous token from a broker that does not exist any more was consumed
 						log.Debug().Msgf(
 							"Group %s can't consume topic %s for token %d v%d yet",
 							q.group, topic, key.token, currentGen.Version)
 						continue
 					}
 
+					readerVersion := offset.Version
 					topicId := TopicDataId{
 						Name:       topic,
 						Token:      t.Token,
 						RangeIndex: index,
-						GenId:      offset.Version,
+						GenId:      readerVersion,
 					}
-					var err error
-					reader, err = NewSegmentReader(q.group, topicId, currentGen.Version, q.offsetState, q.config)
+
+					var maxProducedOffset *uint64 = nil
+					if readerVersion != currentGen.Version {
+						// We are reading from an old generation
+						// We need to set the max offset produced
+						value, err := q.getMaxProducedOffset(&topicId)
+						if err != nil {
+							// Hopefully in the future it will resolve itself
+							continue
+						}
+						maxProducedOffset = &value
+					}
+
+					reader, err := NewSegmentReader(
+						q.group, topicId, currentGen.Version, q.offsetState, maxProducedOffset, q.config)
 					if err != nil {
 						// reader could not be initialized, skip for now
 						continue
 					}
+
 					readersByToken[topic] = reader
 				}
 				result = append(result, reader)
@@ -270,6 +299,71 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 	}
 
 	return result
+}
+
+func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (uint64, error) {
+	// TODO: Add tests to it
+	gen, err := q.topologyGetter.GenerationInfo(topicId.Token, topicId.GenId)
+	utils.PanicIfErr(err, "Generation info failed to be retrieved")
+	if gen == nil {
+		log.Warn().Msgf("Past generation could not be retrieved %d v%d", topicId.Token, topicId.GenId)
+		// Attempt to get the info from local storage
+		return q.offsetState.ProducerOffsetLocal(topicId)
+	}
+
+	myOrdinal := q.topologyGetter.Topology().MyOrdinal()
+	peers := make([]int, 0)
+	for _, ordinal := range gen.Followers {
+		if ordinal != myOrdinal {
+			peers = append(peers, ordinal)
+		}
+	}
+
+	c := make(chan *uint64)
+
+	// Get the values from the peers and local storage
+	go func() {
+		localValue, err := q.offsetState.ProducerOffsetLocal(topicId)
+		if err != nil {
+			log.Warn().Err(err).Msgf("Max producer offset could not be retrieved from local storage for %s", topicId)
+			c <- nil
+		} else {
+			c <- &localValue
+		}
+	}()
+
+	for _, ordinalValue := range peers {
+		// Closure will capture it
+		ordinal := ordinalValue
+		go func() {
+			value, err := q.gossiper.ReadProducerOffset(ordinal, topicId)
+			if err != nil {
+				log.Warn().Err(err).Msgf("Offset could not be retrieved from peer B%d for %s", ordinal, topicId)
+				c <- nil
+			} else {
+				c <- &value
+			}
+		}()
+	}
+
+	var result *uint64 = nil
+
+	for i := 0; i < len(peers)+1; i++ {
+		value := <-c
+		if value != nil {
+			if result == nil || *result < *value {
+				result = value
+			}
+		}
+	}
+
+	if result == nil {
+		message := fmt.Sprintf("Max producer offset could not be retrieved from peers or local for %s", topicId)
+		log.Error().Msgf(message)
+		return 0, fmt.Errorf(message)
+	}
+
+	return *result, nil
 }
 
 type segmentReadItem struct {

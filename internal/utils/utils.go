@@ -105,6 +105,7 @@ func FromUnixMillis(millis int64) time.Time {
 	return time.Unix(0, millis*int64(time.Millisecond))
 }
 
+// For fatal errors, it logs and exists
 func PanicIfErr(err error, message string) {
 	if err != nil {
 		log.Panic().Err(err).Msg(message)

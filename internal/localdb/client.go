@@ -27,6 +27,9 @@ type Client interface {
 
 	// TODO: convert to history
 	GetGenerationsByToken(token Token) ([]Generation, error)
+
+	// Gets the generation by token and version
+	GenerationInfo(token Token, version GenVersion) (*Generation, error)
 }
 
 // NewClient creates a new instance of Client.
@@ -85,6 +88,6 @@ func (c *client) DbWasNewlyCreated() bool {
 }
 
 func (c *client) Close() {
-	_ = c.queries.selectGenerations.Close()
+	_ = c.queries.selectGenerationList.Close()
 	log.Err(c.db.Close()).Msg("Local db closed")
 }

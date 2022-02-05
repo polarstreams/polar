@@ -12,17 +12,22 @@ import (
 )
 
 type queries struct {
-	selectGenerations *sql.Stmt
-	insertGeneration  *sql.Stmt
-	insertTransaction *sql.Stmt
-	selectOffsets     *sql.Stmt
-	insertOffset      *sql.Stmt
+	selectGenerationList *sql.Stmt
+	selectGeneration     *sql.Stmt
+	insertGeneration     *sql.Stmt
+	insertTransaction    *sql.Stmt
+	selectOffsets        *sql.Stmt
+	insertOffset         *sql.Stmt
 }
 
 func (c *client) prepareQueries() {
-	c.queries.selectGenerations = c.prepare(`
+	c.queries.selectGenerationList = c.prepare(`
 		SELECT start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents FROM
 		generations WHERE start_token = ? ORDER BY start_token, version DESC LIMIT 2`)
+
+	c.queries.selectGeneration = c.prepare(`
+		SELECT start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents FROM
+		generations WHERE start_token = ? AND version = ?`)
 
 	c.queries.insertGeneration = c.prepare(`
 		INSERT INTO generations
@@ -78,7 +83,7 @@ func (c *client) setCurrentSchemaVersion() error {
 }
 
 func (c *client) GetGenerationsByToken(token Token) ([]Generation, error) {
-	rows, err := c.queries.selectGenerations.Query(int64(token))
+	rows, err := c.queries.selectGenerationList.Query(int64(token))
 	if err != nil {
 		return nil, err
 	}
@@ -86,30 +91,50 @@ func (c *client) GetGenerationsByToken(token Token) ([]Generation, error) {
 	result := make([]Generation, 0)
 	defer rows.Close()
 	for rows.Next() {
-		item := Generation{}
-		var followers string
-		var parents string
-		err = rows.Scan(
-			&item.Start, &item.End, &item.Version, &item.Timestamp, &item.Tx, &item.TxLeader,
-			&item.Status, &item.Leader, &followers, &parents)
+		item, err := scanGenRow(rows)
 		if err != nil {
 			return result, err
 		}
-		if followers != "" {
-			parts := strings.Split(followers, ",")
-			followersSlice := make([]int, len(parts))
-			for i := range followersSlice {
-				if followersSlice[i], err = strconv.Atoi(parts[i]); err != nil {
-					return nil, err
-				}
-			}
-
-			item.Followers = followersSlice
-		}
-		item.Parents = parentsFromString(parents)
-		result = append(result, item)
+		result = append(result, *item)
 	}
 	return result, nil
+}
+
+func scanGenRow(rows *sql.Rows) (*Generation, error) {
+	result := Generation{}
+	var followers string
+	var parents string
+	err := rows.Scan(
+		&result.Start, &result.End, &result.Version, &result.Timestamp, &result.Tx, &result.TxLeader,
+		&result.Status, &result.Leader, &followers, &parents)
+	if err != nil {
+		return nil, err
+	}
+	if followers != "" {
+		parts := strings.Split(followers, ",")
+		followersSlice := make([]int, len(parts))
+		for i := range followersSlice {
+			if followersSlice[i], err = strconv.Atoi(parts[i]); err != nil {
+				return nil, err
+			}
+		}
+
+		result.Followers = followersSlice
+	}
+	result.Parents = parentsFromString(parents)
+	return &result, nil
+}
+
+func (c *client) GenerationInfo(token Token, version GenVersion) (*Generation, error) {
+	rows, err := c.queries.selectGeneration.Query(token, version)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, nil
+	}
+	return scanGenRow(rows)
 }
 
 func (c *client) CommitGeneration(gen *Generation) error {

@@ -174,10 +174,10 @@ func (t *TopologyInfo) PrimaryToken(token Token, ranges int) (Token, BrokerIndex
 //
 // Specifies a topic, for a token, for a defined gen id.
 type TopicDataId struct {
-	Name       string
-	Token      Token
-	GenId      GenVersion
-	RangeIndex RangeIndex
+	Name       string     `json:"topic"`
+	Token      Token      `json:"token"`
+	RangeIndex RangeIndex `json:"rangeIndex"`
+	GenId      GenVersion `json:"version"`
 }
 
 func (t *TopicDataId) String() string {

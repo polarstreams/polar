@@ -47,7 +47,7 @@ func NewConsumer(
 		topologyGetter: topologyGetter,
 		gossiper:       gossiper,
 		state:          NewConsumerState(config, topologyGetter),
-		offsetState:    newDefaultOffsetState(localDb, topologyGetter, gossiper),
+		offsetState:    newDefaultOffsetState(localDb, topologyGetter, gossiper, config),
 		readQueues:     NewCopyOnWriteMap(),
 	}
 }
@@ -193,7 +193,7 @@ func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter) {
 	log.Debug().Msgf("Received consumer client poll from connection '%s'", conn.Id())
 
 	grq, _, _ := c.readQueues.LoadOrStore(group, func() (interface{}, error) {
-		return newGroupReadQueue(group, c.state, c.offsetState, c.topologyGetter, c.config), nil
+		return newGroupReadQueue(group, c.state, c.offsetState, c.topologyGetter, c.gossiper, c.config), nil
 	})
 
 	groupReadQueue := grq.(*groupReadQueue)

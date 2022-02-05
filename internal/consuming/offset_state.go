@@ -3,6 +3,8 @@ package consuming
 import (
 	"sync"
 
+	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/discovery"
 	"github.com/jorgebay/soda/internal/interbroker"
 	"github.com/jorgebay/soda/internal/localdb"
@@ -14,6 +16,7 @@ func newDefaultOffsetState(
 	localDb localdb.Client,
 	topologyGetter discovery.TopologyGetter,
 	gossiper interbroker.Gossiper,
+	config conf.ConsumerConfig,
 ) OffsetState {
 	state := &defaultOffsetState{
 		offsetMap:      make(map[OffsetStoreKey]*Offset),
@@ -21,6 +24,7 @@ func newDefaultOffsetState(
 		localDb:        localDb,
 		gossiper:       gossiper,
 		topologyGetter: topologyGetter,
+		config:         config,
 	}
 	go state.processCommit()
 	return state
@@ -33,6 +37,7 @@ type defaultOffsetState struct {
 	localDb        localdb.Client
 	gossiper       interbroker.Gossiper
 	topologyGetter discovery.TopologyGetter
+	config         conf.ConsumerConfig
 }
 
 func (s *defaultOffsetState) Init() error {
@@ -158,4 +163,8 @@ func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
 func (s *defaultOffsetState) CanConsumeToken(group string, topic string, gen Generation) bool {
 	//TODO: Implement CanConsumeToken
 	return true
+}
+
+func (s *defaultOffsetState) ProducerOffsetLocal(topic *TopicDataId) (uint64, error) {
+	return data.ReadProducerOffset(topic, s.config)
 }

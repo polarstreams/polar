@@ -25,8 +25,9 @@ const (
 	GossipGenerationCommmitUrl  = "/v1/generation/%s/commit"
 	GossipTokenHasHistoryUrl    = "/v1/token/%s/has-history"
 	GossipTokenInRange          = "/v1/token/%s/in-range"
-	GossipConsumerGroupsInfoUrl = "/v1/consumer/groups-info" // Send/receive consumer groups info
-	GossipConsumerOffsetUrl     = "/v1/consumer/offsets"     // Send/receive consumer offsets
+	GossipConsumerGroupsInfoUrl = "/v1/consumer/groups-info"        // Send/receive consumer groups info
+	GossipConsumerOffsetUrl     = "/v1/consumer/offsets"            // Send/receive consumer offsets
+	GossipReadProducerOffsetUrl = "/v1/producer/offset/%s/%s/%s/%s" // Reads the producer offset, with params: topic, token, range, version
 
 	// Routing Urls (using gossip http/2 interface)
 

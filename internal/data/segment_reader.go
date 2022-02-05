@@ -19,19 +19,20 @@ import (
 )
 
 type SegmentReader struct {
-	Items         chan ReadItem
-	basePath      string
-	config        conf.DatalogConfig
-	group         string
-	Topic         TopicDataId
-	SourceVersion GenVersion // The version in which this reader was created, a consumer might be on Gen=v3 but the current is v4. In this case, source would be v4 and topic.Version = v3
-	offsetState   OffsetState
-	messageOffset uint64
-	fileName      string
-	nextFileName  string
-	pollDelay     time.Duration
-	segmentFile   *os.File
-	lastSeek      time.Time
+	Items             chan ReadItem
+	basePath          string
+	config            conf.DatalogConfig
+	group             string
+	Topic             TopicDataId
+	SourceVersion     GenVersion // The version in which this reader was created, a consumer might be on Gen=v3 but the current is v4. In this case, source would be v4 and topic.Version = v3
+	offsetState       OffsetState
+	maxProducedOffset *uint64
+	messageOffset     uint64
+	fileName          string
+	nextFileName      string
+	pollDelay         time.Duration
+	segmentFile       *os.File
+	lastSeek          time.Time
 }
 
 const pollTimes = 10
@@ -40,7 +41,8 @@ const minSeekIntervals = 2 * time.Second
 
 // Returns a log file reader.
 //
-// The segment reader instance is valid for a single generation, closed when the generation ends.
+// The segment reader instance is valid for a single generation, closed when the generation ends or the broker is no
+// longer the leader.
 //
 // It aggressively reads ahead and maintains local cache, so there should there
 // should be a different reader instance per consumer group.
@@ -49,19 +51,21 @@ func NewSegmentReader(
 	topic TopicDataId,
 	sourceVersion GenVersion,
 	offsetState OffsetState,
+	maxProducedOffset *uint64,
 	config conf.DatalogConfig,
 ) (*SegmentReader, error) {
 	// From the same base folder, the SegmentReader will continue reading through the files in order
 	basePath := config.DatalogPath(&topic)
 	s := &SegmentReader{
-		config:        config,
-		basePath:      basePath,
-		Items:         make(chan ReadItem, 16),
-		Topic:         topic,
-		group:         group,
-		SourceVersion: sourceVersion,
-		offsetState:   offsetState,
-		pollDelay:     defaultPollDelay,
+		config:            config,
+		basePath:          basePath,
+		Items:             make(chan ReadItem, 16),
+		Topic:             topic,
+		group:             group,
+		SourceVersion:     sourceVersion,
+		offsetState:       offsetState,
+		maxProducedOffset: maxProducedOffset,
+		pollDelay:         defaultPollDelay,
 	}
 
 	if err := s.initRead(); err != nil {
@@ -76,7 +80,8 @@ func NewSegmentReader(
 func (s *SegmentReader) startReading() {
 	// Determine file start position
 
-	//TODO: read as leader or replica per generation
+	// TODO: differentiate between reading from the latest generation or the previous one
+	// TODO: read as leader or replica per generation
 
 	log.Info().Msgf("Start reading for %s", &s.Topic)
 

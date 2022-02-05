@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jorgebay/soda/internal/conf"
+	"github.com/jorgebay/soda/internal/data"
 	"github.com/jorgebay/soda/internal/metrics"
 	. "github.com/jorgebay/soda/internal/types"
 	. "github.com/jorgebay/soda/internal/utils"
@@ -67,6 +68,13 @@ func (g *gossiper) acceptHttpConnections() error {
 			router.POST(fmt.Sprintf(conf.GossipGenerationCommmitUrl, ":token"), ToPostHandle(g.postGenCommitHandler))
 			router.GET(fmt.Sprintf(conf.GossipTokenInRange, ":token"), ToHandle(g.getTokenInRangeHandler))
 			router.GET(fmt.Sprintf(conf.GossipTokenHasHistoryUrl, ":token"), ToHandle(g.getTokenHasHistoryUrl))
+			router.GET(fmt.Sprintf(
+				conf.GossipReadProducerOffsetUrl,
+				":topic",
+				":token",
+				":rangeIndex",
+				":version"), ToHandle(g.getProducerOffset))
+
 			router.POST(conf.GossipConsumerGroupsInfoUrl, ToPostHandle(g.postConsumerGroupInfo))
 			router.POST(conf.GossipConsumerOffsetUrl, ToPostHandle(g.postConsumerOffset))
 
@@ -164,6 +172,40 @@ func (g *gossiper) getTokenHasHistoryUrl(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Content-Type", "application/json")
 	// Encode can't fail for a bool
 	_ = json.NewEncoder(w).Encode(result)
+	return nil
+}
+
+func (g *gossiper) getProducerOffset(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	topic := ps.ByName("topic")
+	if topic == "" {
+		return fmt.Errorf("Empty topic")
+	}
+	token, err := strconv.ParseInt(ps.ByName("token"), 10, 64)
+	if err != nil {
+		return err
+	}
+	rangeIndex, err := strconv.ParseUint(ps.ByName("rangeIndex"), 10, 8)
+	if err != nil {
+		return err
+	}
+	version, err := strconv.ParseUint(ps.ByName("version"), 10, 32)
+	if err != nil {
+		return err
+	}
+	topicId := TopicDataId{
+		Name:       topic,
+		Token:      Token(token),
+		RangeIndex: RangeIndex(rangeIndex),
+		GenId:      GenVersion(version),
+	}
+
+	value, err := data.ReadProducerOffset(&topicId, g.config)
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	// Encode can't fail for a bool
+	_ = json.NewEncoder(w).Encode(value)
 	return nil
 }
 

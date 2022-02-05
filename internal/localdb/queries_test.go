@@ -65,6 +65,46 @@ var _ = Describe("Client", func() {
 		})
 	})
 
+	Describe("GenerationInfo()", func() {
+		It("Should retrieve an empty generations when no info is found", func() {
+			client := newTestClient()
+
+			result, err := client.GenerationInfo(1100, 80000000)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeNil())
+		})
+
+		It("Should return the last 2 generations", func() {
+			start := Token(1101)
+			end := Token(2101)
+			client := newTestClient()
+			tx := uuid.New()
+
+			// Insert test data
+			inserted := make([]Generation, 0)
+			for i := 1; i <= 3; i++ {
+				item := Generation{
+					Start:     start,
+					End:       end,
+					Version:   GenVersion(i),
+					Timestamp: utils.ToUnixMillis(time.Now()),
+					Tx:        tx,
+					Status:    StatusCommitted,
+					Leader:    2,
+					Followers: []int{0, 1},
+					Parents:   []GenParent{{Start: start, Version: GenVersion(i - 1)}},
+				}
+				insertGeneration(client, item)
+				inserted = append(inserted, item)
+			}
+
+			result, err := client.GenerationInfo(start, 2)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).NotTo(BeNil())
+			Expect(*result).To(Equal(inserted[1]))
+		})
+	})
+
 	Describe("CommitGeneration()", func() {
 		It("should insert a record in each table", func() {
 			client := newTestClient()

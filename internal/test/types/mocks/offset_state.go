@@ -56,6 +56,27 @@ func (_m *OffsetState) Init() error {
 	return r0
 }
 
+// ProducerOffsetLocal provides a mock function with given fields: topic
+func (_m *OffsetState) ProducerOffsetLocal(topic *types.TopicDataId) (uint64, error) {
+	ret := _m.Called(topic)
+
+	var r0 uint64
+	if rf, ok := ret.Get(0).(func(*types.TopicDataId) uint64); ok {
+		r0 = rf(topic)
+	} else {
+		r0 = ret.Get(0).(uint64)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*types.TopicDataId) error); ok {
+		r1 = rf(topic)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Set provides a mock function with given fields: group, topic, token, rangeIndex, value, commit
 func (_m *OffsetState) Set(group string, topic string, token types.Token, rangeIndex types.RangeIndex, value types.Offset, commit types.OffsetCommitType) {
 	_m.Called(group, topic, token, rangeIndex, value, commit)

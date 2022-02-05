@@ -57,6 +57,9 @@ type Gossiper interface {
 	// Sends a message to the broker with the committed offset of a consumer group
 	SendCommittedOffset(ordinal int, offsetKv *OffsetStoreKeyValue) error
 
+	// Reads the producer offset of a certain past topic generatoin
+	ReadProducerOffset(ordinal int, topic *TopicDataId) (uint64, error)
+
 	// Adds a listener for consumer information
 	RegisterConsumerInfoListener(listener ConsumerInfoListener)
 
@@ -330,6 +333,22 @@ func (g *gossiper) GetGenerations(ordinal int, token Token) GenReadResult {
 		result.Proposed = &gens[1]
 	}
 	return result
+}
+
+func (g *gossiper) ReadProducerOffset(ordinal int, topic *TopicDataId) (uint64, error) {
+	url := fmt.Sprintf(
+		conf.GossipReadProducerOffsetUrl,
+		topic.Name,
+		topic.Token.String(),
+		topic.RangeIndex.String(),
+		topic.GenId.String())
+	r, err := g.requestGet(ordinal, url)
+	defer r.Body.Close()
+	var value uint64
+	if err = json.NewDecoder(r.Body).Decode(&value); err != nil {
+		return 0, err
+	}
+	return value, err
 }
 
 func (g *gossiper) SetGenerationAsProposed(ordinal int, newGen *Generation, expectedTx *UUID) error {

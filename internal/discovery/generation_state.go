@@ -14,6 +14,9 @@ type GenerationState interface {
 	// This is part of the hot path.
 	Generation(token Token) *Generation
 
+	// GenerationInfo gets the information of a past committed generation
+	GenerationInfo(token Token, version GenVersion) (*Generation, error)
+
 	// GenerationProposed reads a snapshot of the current committed and proposed generations
 	GenerationProposed(token Token) (committed *Generation, proposed *Generation)
 
@@ -43,6 +46,10 @@ func (d *discoverer) Generation(token Token) *Generation {
 		return &v
 	}
 	return nil
+}
+
+func (d *discoverer) GenerationInfo(token Token, version GenVersion) (*Generation, error) {
+	return d.localDb.GenerationInfo(token, version)
 }
 
 func (d *discoverer) GenerationProposed(token Token) (committed *Generation, proposed *Generation) {

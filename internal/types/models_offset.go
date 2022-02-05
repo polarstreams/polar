@@ -45,4 +45,7 @@ type OffsetState interface {
 	//
 	// Only called one per consumer group reader.
 	CanConsumeToken(group string, topic string, gen Generation) bool
+
+	// Reads the local max producer offset from disk
+	ProducerOffsetLocal(topic *TopicDataId) (uint64, error)
 }
