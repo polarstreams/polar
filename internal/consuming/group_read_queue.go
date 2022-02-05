@@ -302,7 +302,6 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 }
 
 func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (uint64, error) {
-	// TODO: Add tests to it
 	gen, err := q.topologyGetter.GenerationInfo(topicId.Token, topicId.GenId)
 	utils.PanicIfErr(err, "Generation info failed to be retrieved")
 	if gen == nil {

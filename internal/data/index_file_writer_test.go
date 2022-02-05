@@ -118,7 +118,7 @@ var _ = Describe("indexFileWriter", func() {
 func assertStored(basePath string, segmentId uint64, values []indexOffset) {
 	expectedFileLength := utils.BinarySize(indexOffset{}) * len(values) // 8 + 8 + 4
 	var blob []byte
-	maxWaits := 500
+	maxWaits := 2500 // ~ 5 seconds
 	if len(values) == 0 {
 		maxWaits = 10
 	}
@@ -153,7 +153,7 @@ func assertStored(basePath string, segmentId uint64, values []indexOffset) {
 
 func assertProducerOffsetStored(basePath string, expected uint64) {
 	var blob []byte
-	maxWaits := 500
+	maxWaits := 2500 // ~ 5 seconds
 	// Wait for the data to be stored in the file
 	for i := 0; i < maxWaits; i++ {
 		time.Sleep(20)
