@@ -45,6 +45,7 @@ func MaxVersion(values ...*types.Generation) types.GenVersion {
 func adaptHttpErr(err error, w http.ResponseWriter) {
 	httpErr, ok := err.(types.HttpError)
 
+	fmt.Println("--Adapting http err", ok, err)
 	if !ok {
 		log.Err(err).Msg("Unexpected error when producing")
 		http.Error(w, "Internal server error", 500)

@@ -40,7 +40,7 @@ func NewTestBroker(ordinal int) *TestBroker {
 func (b *TestBroker) Start() {
 	err := exec.Command("go", "build", "-o", "barco.exe", "../../../.").Run()
 	Expect(err).NotTo(HaveOccurred())
-	cmd := exec.Command("./barco.exe")
+	cmd := exec.Command("./barco.exe", "-debug")
 	os.RemoveAll(fmt.Sprintf("./home%d", b.ordinal))
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("BARCO_ORDINAL=%d", b.ordinal),
@@ -53,7 +53,7 @@ func (b *TestBroker) Start() {
 
 	mu := sync.Mutex{}
 	const maxOutput = 100
-	output := make([]string, 0, maxOutput)
+	b.output = make([]string, 0, maxOutput)
 
 	scanner := bufio.NewScanner(stderr)
 	go func() {
@@ -69,10 +69,10 @@ func (b *TestBroker) Start() {
 			}
 
 			mu.Lock()
-			if len(output) >= maxOutput {
-				output = output[1:(maxOutput - 1)]
+			if len(b.output) >= maxOutput {
+				b.output = b.output[1:(maxOutput - 1)]
 			}
-			output = append(output, value)
+			b.output = append(b.output, value)
 			mu.Unlock()
 		}
 	}()
@@ -98,6 +98,24 @@ func (b *TestBroker) WaitForStart() {
 		b.Kill()
 		Fail("Broker could not be started")
 	}
+}
+
+// Reads the last 100 lines of the output looking for a match
+func (b *TestBroker) WaitOutput(value string) {
+	start := time.Now()
+	found := false
+	for !found && time.Since(start) < 5 * time.Second {
+		time.Sleep(200 * time.Millisecond)
+		b.mu.RLock()
+		for _, text := range b.output {
+			if strings.Contains(text, value) {
+				found = true
+			}
+		}
+		b.mu.RUnlock()
+	}
+
+	Expect(found).To(BeTrue())
 }
 
 func (b *TestBroker) Shutdown() {

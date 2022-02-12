@@ -366,7 +366,7 @@ func (g *gossiper) SetGenerationAsProposed(ordinal int, newGen *Generation, expe
 	}
 
 	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationProposeUrl, newGen.Start), jsonBody)
-	defer r.Body.Close()
+	defer bodyClose(r)
 	return err
 }
 
@@ -381,7 +381,7 @@ func (g *gossiper) SetAsCommitted(ordinal int, token Token, tx UUID) error {
 	}
 
 	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationCommmitUrl, token), jsonBody)
-	defer r.Body.Close()
+	defer bodyClose(r)
 	return err
 }
 
@@ -396,7 +396,7 @@ func (g *gossiper) SendConsumerGroups(ordinal int, groups []ConsumerGroup) error
 	}
 
 	r, err := g.requestPost(ordinal, conf.GossipConsumerGroupsInfoUrl, jsonBody)
-	defer r.Body.Close()
+	defer bodyClose(r)
 	return err
 }
 
@@ -407,6 +407,12 @@ func (g *gossiper) SendCommittedOffset(ordinal int, kv *OffsetStoreKeyValue) err
 	}
 
 	r, err := g.requestPost(ordinal, conf.GossipConsumerOffsetUrl, jsonBody)
-	defer r.Body.Close()
+	defer bodyClose(r)
 	return err
+}
+
+func bodyClose(r *http.Response) {
+	if r != nil && r.Body != nil {
+		r.Body.Close()
+	}
 }

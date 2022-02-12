@@ -105,7 +105,7 @@ func (g *gossiper) getGenHandler(w http.ResponseWriter, r *http.Request, ps http
 	}
 
 	committed, proposed := g.discoverer.GenerationProposed(Token(token))
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", contentType)
 
 	// Return an array of generations w/ committed in the first position
 	result := make([]Generation, 2)
@@ -152,7 +152,7 @@ func (g *gossiper) getTokenInRangeHandler(w http.ResponseWriter, r *http.Request
 		return err
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", contentType)
 	// Encode can't fail for a bool
 	_ = json.NewEncoder(w).Encode(g.discoverer.IsTokenInRange(Token(token)))
 	return nil
@@ -169,7 +169,7 @@ func (g *gossiper) getTokenHasHistoryUrl(w http.ResponseWriter, r *http.Request,
 		return err
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", contentType)
 	// Encode can't fail for a bool
 	_ = json.NewEncoder(w).Encode(result)
 	return nil
@@ -203,7 +203,7 @@ func (g *gossiper) getProducerOffset(w http.ResponseWriter, r *http.Request, ps 
 	if err != nil {
 		return err
 	}
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", contentType)
 	// Encode can't fail for a bool
 	_ = json.NewEncoder(w).Encode(value)
 	return nil
