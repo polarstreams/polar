@@ -1,8 +1,8 @@
 package topics
 
 import (
-	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/types"
+	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/types"
 )
 
 type TopicHandler interface {

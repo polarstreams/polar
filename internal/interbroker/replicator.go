@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jorgebay/soda/internal/types"
+	"github.com/barcostreams/barco/internal/types"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/context"
 )

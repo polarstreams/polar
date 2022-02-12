@@ -3,9 +3,9 @@ package metrics
 import (
 	"net/http"
 
-	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/discovery"
-	"github.com/jorgebay/soda/internal/utils"
+	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/discovery"
+	"github.com/barcostreams/barco/internal/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -14,33 +14,33 @@ import (
 
 var (
 	CoalescerMessagesProcessed = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "soda_coalescer_messages_total",
+		Name: "barco_coalescer_messages_total",
 		Help: "The total number of processed messages by the coalescer (producer)",
 	})
 
 	CoalescerMessagesPerGroup = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "soda_coalescer_messages_coalesced",
+		Name:    "barco_coalescer_messages_coalesced",
 		Help:    "Number of messages coalesced into compressed buffers",
 		Buckets: prometheus.ExponentialBuckets(2, 2, 9), // buckets from 1 to 512
 	})
 
 	InterbrokerReceivedGroups = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "soda_interbroker_received_coalesced_total",
+		Name: "barco_interbroker_received_coalesced_total",
 		Help: "The total number of coalesced group messages received by the interbroker data server",
 	})
 
 	ReroutedSent = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "soda_producing_rerouting_sent_total",
+		Name: "barco_producing_rerouting_sent_total",
 		Help: "The total number of re-routed messages sent by this broker",
 	}, []string{"target"})
 
 	ReroutedReceived = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "soda_producing_rerouting_received_total",
+		Name: "barco_producing_rerouting_received_total",
 		Help: "The total number of re-routed messages received by the broker",
 	})
 
 	SegmentFlushKib = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "soda_segment_flushed_kib",
+		Name:    "barco_segment_flushed_kib",
 		Help:    "Number of Kibibytes flushed to disk",
 		Buckets: prometheus.ExponentialBuckets(2, 4, 8), // buckets from 2Kib to 32Mib
 	})
@@ -50,6 +50,7 @@ var (
 func Serve(discoverer discovery.Discoverer, config conf.Config) {
 	port := config.MetricsPort()
 	address := utils.GetServiceAddress(port, discoverer.LocalInfo(), config)
+	log.Info().Msgf("Starting metrics endpoint on port %d", port)
 	c := make(chan bool, 1)
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())

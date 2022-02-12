@@ -3,8 +3,8 @@ package localdb
 import (
 	"database/sql"
 
-	"github.com/jorgebay/soda/internal/conf"
-	. "github.com/jorgebay/soda/internal/types"
+	"github.com/barcostreams/barco/internal/conf"
+	. "github.com/barcostreams/barco/internal/types"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/zerolog/log"
 )

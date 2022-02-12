@@ -1,4 +1,5 @@
 {
+    "go.buildTags": "integration",
     "cSpell.words": [
         "Coalescer",
         "gomega",

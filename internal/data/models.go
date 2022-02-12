@@ -1,8 +1,8 @@
 package data
 
 import (
-	. "github.com/jorgebay/soda/internal/types"
-	"github.com/jorgebay/soda/internal/utils"
+	. "github.com/barcostreams/barco/internal/types"
+	"github.com/barcostreams/barco/internal/utils"
 )
 
 var emptyBuffer = make([]byte, 0)

@@ -3,8 +3,8 @@ package ownership
 import (
 	"fmt"
 
+	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/google/uuid"
-	. "github.com/jorgebay/soda/internal/types"
 )
 
 // genMessage represents an internal queued items of

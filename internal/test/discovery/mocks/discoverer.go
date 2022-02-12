@@ -3,10 +3,10 @@
 package mocks
 
 import (
-	discovery "github.com/jorgebay/soda/internal/discovery"
+	discovery "github.com/barcostreams/barco/internal/discovery"
 	mock "github.com/stretchr/testify/mock"
 
-	types "github.com/jorgebay/soda/internal/types"
+	types "github.com/barcostreams/barco/internal/types"
 
 	uuid "github.com/google/uuid"
 )

@@ -1,6 +1,6 @@
 package consuming
 
-import . "github.com/jorgebay/soda/internal/types"
+import . "github.com/barcostreams/barco/internal/types"
 
 type ConsumerGroupQueries interface {
 	// Locally stores the offset of a given group.

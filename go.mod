@@ -1,4 +1,4 @@
-module github.com/jorgebay/soda
+module github.com/barcostreams/barco
 
 go 1.15
 

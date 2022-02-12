@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	. "github.com/jorgebay/soda/internal/types"
+	. "github.com/barcostreams/barco/internal/types"
 )
 
 const (
@@ -20,8 +20,10 @@ const (
 )
 
 const (
-	envHome                 = "SODA_HOME"
-	envListenOnAllAddresses = "SODA_LISTEN_ON_ALL"
+	envHome                 = "BARCO_HOME"
+	envListenOnAllAddresses = "BARCO_LISTEN_ON_ALL"
+	envGossipPort           = "BARCO_GOSSIP_PORT"
+	envGossipDataPort       = "BARCO_GOSSIP_DATA_PORT"
 )
 
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
@@ -109,13 +111,13 @@ type config struct {
 
 func parseHostName(hostName string) (baseHostName string, ordinal int) {
 	if hostName == "" {
-		return "soda-", 0
+		return "barco-", 0
 	}
 
 	matches := hostRegex.FindAllStringSubmatch(hostName, -1)
 
 	if len(matches) == 0 {
-		return "soda-", 0
+		return "barco-", 0
 	}
 
 	m := matches[0]
@@ -140,11 +142,11 @@ func (c *config) MetricsPort() int {
 }
 
 func (c *config) GossipPort() int {
-	return 8084
+	return envInt(envGossipPort, "8084")
 }
 
 func (c *config) GossipDataPort() int {
-	return 8085
+	return envInt(envGossipDataPort, "8085")
 }
 
 func (c *config) ListenOnAllAddresses() bool {
@@ -198,11 +200,7 @@ func (c *config) FlowController() FlowController {
 }
 
 func (c *config) HomePath() string {
-	homePath := os.Getenv(envHome)
-	if homePath == "" {
-		return filepath.Join("/var", "lib", "soda")
-	}
-	return homePath
+	return env(envHome, filepath.Join("/var", "lib", "barco"))
 }
 
 func (c *config) dataPath() string {
@@ -214,7 +212,7 @@ func (c *config) LocalDbPath() string {
 }
 
 func (c *config) DatalogPath(t *TopicDataId) string {
-	// Pattern: /var/lib/soda/data/datalog/{topic}/{token}/{rangeIndex}/{genId}
+	// Pattern: /var/lib/barco/data/datalog/{topic}/{token}/{rangeIndex}/{genId}
 	return filepath.Join(c.dataPath(), "datalog", t.Name, t.Token.String(), t.RangeIndex.String(), t.GenId.String())
 }
 
@@ -228,4 +226,21 @@ func (c *config) Ordinal() int {
 
 func (c *config) BaseHostName() string {
 	return c.baseHostName
+}
+
+func env(name string, defaultValue string) string {
+	value := os.Getenv(name)
+	if value == "" {
+		value = defaultValue
+	}
+	return value
+}
+
+func envInt(name string, defaultValue string) int {
+	value := env(name, defaultValue)
+	intValue, err := strconv.Atoi(value)
+	if err != nil {
+		panic(err)
+	}
+	return intValue
 }

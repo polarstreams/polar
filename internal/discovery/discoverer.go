@@ -8,15 +8,15 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/localdb"
-	. "github.com/jorgebay/soda/internal/types"
+	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/localdb"
+	. "github.com/barcostreams/barco/internal/types"
 	"github.com/rs/zerolog/log"
 )
 
 const (
-	envOrdinal     = "SODA_ORDINAL"
-	envBrokerNames = "SODA_BROKER_NAMES"
+	envOrdinal     = "BARCO_ORDINAL"
+	envBrokerNames = "BARCO_BROKER_NAMES"
 )
 
 var roundRobinRangeIndex uint32 = 0

@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jorgebay/soda/internal/conf"
-	. "github.com/jorgebay/soda/internal/types"
+	"github.com/barcostreams/barco/internal/conf"
+	. "github.com/barcostreams/barco/internal/types"
 )
 
 func ReadProducerOffset(topicId *TopicDataId, config conf.DatalogConfig) (uint64, error) {

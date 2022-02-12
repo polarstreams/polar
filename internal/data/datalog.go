@@ -3,8 +3,8 @@ package data
 import (
 	"os"
 
-	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/types"
+	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/types"
 )
 
 const DirectoryPermissions os.FileMode = 0755

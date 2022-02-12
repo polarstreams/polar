@@ -3,7 +3,7 @@
 package mocks
 
 import (
-	types "github.com/jorgebay/soda/internal/types"
+	types "github.com/barcostreams/barco/internal/types"
 	mock "github.com/stretchr/testify/mock"
 )
 

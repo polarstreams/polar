@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jorgebay/soda/internal/conf"
-	. "github.com/jorgebay/soda/internal/types"
-	"github.com/jorgebay/soda/internal/utils"
+	"github.com/barcostreams/barco/internal/conf"
+	. "github.com/barcostreams/barco/internal/types"
+	"github.com/barcostreams/barco/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 

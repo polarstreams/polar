@@ -6,11 +6,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/barcostreams/barco/internal/discovery"
+	"github.com/barcostreams/barco/internal/interbroker"
+	"github.com/barcostreams/barco/internal/localdb"
+	. "github.com/barcostreams/barco/internal/types"
 	"github.com/google/uuid"
-	"github.com/jorgebay/soda/internal/discovery"
-	"github.com/jorgebay/soda/internal/interbroker"
-	"github.com/jorgebay/soda/internal/localdb"
-	. "github.com/jorgebay/soda/internal/types"
 	"github.com/rs/zerolog/log"
 )
 

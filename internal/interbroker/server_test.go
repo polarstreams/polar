@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/jorgebay/soda/internal/conf"
+	"github.com/barcostreams/barco/internal/conf"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

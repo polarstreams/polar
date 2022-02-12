@@ -10,9 +10,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	cMocks "github.com/jorgebay/soda/internal/test/conf/mocks"
-	dMocks "github.com/jorgebay/soda/internal/test/discovery/mocks"
-	. "github.com/jorgebay/soda/internal/types"
+	cMocks "github.com/barcostreams/barco/internal/test/conf/mocks"
+	dMocks "github.com/barcostreams/barco/internal/test/discovery/mocks"
+	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

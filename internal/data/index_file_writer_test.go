@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/test/conf/mocks"
-	"github.com/jorgebay/soda/internal/utils"
+	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/test/conf/mocks"
+	"github.com/barcostreams/barco/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -153,21 +153,26 @@ func assertStored(basePath string, segmentId uint64, values []indexOffset) {
 
 func assertProducerOffsetStored(basePath string, expected uint64) {
 	var blob []byte
+	var storedOffset uint64
 	maxWaits := 2500 // ~ 5 seconds
+
 	// Wait for the data to be stored in the file
 	for i := 0; i < maxWaits; i++ {
 		time.Sleep(20)
 		b, err := os.ReadFile(filepath.Join(basePath, conf.ProducerOffsetFileName))
 		if err == nil && len(b) == alignmentSize {
-			blob = b
-			break
+			buffer := bytes.NewBuffer(b)
+			binary.Read(buffer, conf.Endianness, &storedOffset)
+			if storedOffset == expected {
+				blob = b
+				break
+			}
 		}
 	}
 
 	Expect(blob).To(HaveLen(alignmentSize))
 	buffer := bytes.NewBuffer(blob)
 
-	var storedOffset uint64
 	var storedChecksum uint32
 	// Calculate the expected checksum
 	buf := buffer.Bytes()[:8]

@@ -5,11 +5,11 @@ package mocks
 import (
 	io "io"
 
-	interbroker "github.com/jorgebay/soda/internal/interbroker"
+	interbroker "github.com/barcostreams/barco/internal/interbroker"
 
 	mock "github.com/stretchr/testify/mock"
 
-	types "github.com/jorgebay/soda/internal/types"
+	types "github.com/barcostreams/barco/internal/types"
 
 	url "net/url"
 

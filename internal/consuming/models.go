@@ -1,6 +1,6 @@
 package consuming
 
-import . "github.com/jorgebay/soda/internal/types"
+import . "github.com/barcostreams/barco/internal/types"
 
 // Represents a single consumer instance
 type ConsumerInfo struct {

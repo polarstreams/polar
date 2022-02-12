@@ -4,14 +4,14 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jorgebay/soda/internal/test/conf/mocks"
-	dbMocks "github.com/jorgebay/soda/internal/test/localdb/mocks"
-	. "github.com/jorgebay/soda/internal/types"
+	"github.com/barcostreams/barco/internal/test/conf/mocks"
+	dbMocks "github.com/barcostreams/barco/internal/test/localdb/mocks"
+	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-const envReplicas = "SODA_REPLICAS"
+const envReplicas = "BARCO_REPLICAS"
 
 func Test(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -55,7 +55,7 @@ var _ = Describe("discoverer", func() {
 			d := &discoverer{
 				config: &configFake{
 					ordinal:      1,
-					baseHostName: "soda-",
+					baseHostName: "barco-",
 				},
 				k8sClient: &k8sClientFake{3},
 				localDb:   newLocalDbWithNoRecords(),
@@ -64,9 +64,9 @@ var _ = Describe("discoverer", func() {
 			d.Init()
 
 			Expect(d.topology.Brokers).To(Equal([]BrokerInfo{
-				{IsSelf: false, Ordinal: 0, HostName: "soda-0"},
-				{IsSelf: true, Ordinal: 1, HostName: "soda-1"},
-				{IsSelf: false, Ordinal: 2, HostName: "soda-2"},
+				{IsSelf: false, Ordinal: 0, HostName: "barco-0"},
+				{IsSelf: true, Ordinal: 1, HostName: "barco-1"},
+				{IsSelf: false, Ordinal: 2, HostName: "barco-2"},
 			}))
 			Expect(d.topology.LocalIndex).To(Equal(BrokerIndex(1)))
 		})
@@ -75,7 +75,7 @@ var _ = Describe("discoverer", func() {
 			d := &discoverer{
 				config: &configFake{
 					ordinal:      2,
-					baseHostName: "soda-",
+					baseHostName: "barco-",
 				},
 				k8sClient: &k8sClientFake{6},
 				localDb:   newLocalDbWithNoRecords(),
@@ -84,12 +84,12 @@ var _ = Describe("discoverer", func() {
 			d.Init()
 
 			Expect(d.topology.Brokers).To(Equal([]BrokerInfo{
-				{IsSelf: false, Ordinal: 0, HostName: "soda-0"},
-				{IsSelf: false, Ordinal: 3, HostName: "soda-3"},
-				{IsSelf: false, Ordinal: 1, HostName: "soda-1"},
-				{IsSelf: false, Ordinal: 4, HostName: "soda-4"},
-				{IsSelf: true, Ordinal: 2, HostName: "soda-2"},
-				{IsSelf: false, Ordinal: 5, HostName: "soda-5"},
+				{IsSelf: false, Ordinal: 0, HostName: "barco-0"},
+				{IsSelf: false, Ordinal: 3, HostName: "barco-3"},
+				{IsSelf: false, Ordinal: 1, HostName: "barco-1"},
+				{IsSelf: false, Ordinal: 4, HostName: "barco-4"},
+				{IsSelf: true, Ordinal: 2, HostName: "barco-2"},
+				{IsSelf: false, Ordinal: 5, HostName: "barco-5"},
 			}))
 
 			Expect(d.topology.LocalIndex).To(Equal(BrokerIndex(4)))
@@ -101,7 +101,7 @@ var _ = Describe("discoverer", func() {
 			d := &discoverer{
 				config: &configFake{
 					ordinal:      1,
-					baseHostName: "soda-",
+					baseHostName: "barco-",
 				},
 				k8sClient: &k8sClientFake{3},
 				localDb:   newLocalDbWithNoRecords(),
@@ -113,11 +113,11 @@ var _ = Describe("discoverer", func() {
 				{
 					IsSelf:   false,
 					Ordinal:  0,
-					HostName: "soda-0",
+					HostName: "barco-0",
 				}, {
 					IsSelf:   false,
 					Ordinal:  2,
-					HostName: "soda-2",
+					HostName: "barco-2",
 				},
 			}))
 		})
@@ -287,7 +287,7 @@ func (c *configFake) ListenOnAllAddresses() bool {
 func newConfigFake(ordinal int) *configFake {
 	return &configFake{
 		ordinal:      ordinal,
-		baseHostName: "soda-",
+		baseHostName: "barco-",
 	}
 }
 

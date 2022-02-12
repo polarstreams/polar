@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	. "github.com/barcostreams/barco/internal/test"
+	"github.com/barcostreams/barco/internal/test/localdb/mocks"
+	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/google/uuid"
-	"github.com/jorgebay/soda/internal/test/localdb/mocks"
-	. "github.com/jorgebay/soda/internal/types"
-	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 )

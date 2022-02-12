@@ -3,12 +3,12 @@ package consuming
 import (
 	"sync"
 
-	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/data"
-	"github.com/jorgebay/soda/internal/discovery"
-	"github.com/jorgebay/soda/internal/interbroker"
-	"github.com/jorgebay/soda/internal/localdb"
-	. "github.com/jorgebay/soda/internal/types"
+	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/data"
+	"github.com/barcostreams/barco/internal/discovery"
+	"github.com/barcostreams/barco/internal/interbroker"
+	"github.com/barcostreams/barco/internal/localdb"
+	. "github.com/barcostreams/barco/internal/types"
 	"github.com/rs/zerolog/log"
 )
 

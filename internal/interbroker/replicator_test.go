@@ -4,8 +4,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jorgebay/soda/internal/test/discovery/mocks"
-	. "github.com/jorgebay/soda/internal/types"
+	"github.com/barcostreams/barco/internal/test/discovery/mocks"
+	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

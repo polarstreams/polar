@@ -7,13 +7,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/discovery"
+	"github.com/barcostreams/barco/internal/interbroker"
+	"github.com/barcostreams/barco/internal/localdb"
+	. "github.com/barcostreams/barco/internal/types"
+	. "github.com/barcostreams/barco/internal/utils"
 	. "github.com/google/uuid"
-	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/discovery"
-	"github.com/jorgebay/soda/internal/interbroker"
-	"github.com/jorgebay/soda/internal/localdb"
-	. "github.com/jorgebay/soda/internal/types"
-	. "github.com/jorgebay/soda/internal/utils"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
@@ -24,7 +24,7 @@ const consumerGroupsToPeersDelay = 10 * time.Second
 const consumerNoDataDelay = 5      // Seconds
 const consumerNoOwnedDataDelay = 5 // Seconds
 
-const contentType = "application/vnd.soda.consumermessage"
+const contentType = "application/vnd.barco.consumermessage"
 
 var addDebouncer = Debounce(10*time.Second, 0)
 var removeDebouncer = Debounce(removeDelay, 0.4) // Debounce events that occurred in the following 2 minutes

@@ -1,8 +1,8 @@
 package interbroker
 
 import (
+	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/google/uuid"
-	. "github.com/jorgebay/soda/internal/types"
 )
 
 // GenerationProposeMessage the interbroker api json message for

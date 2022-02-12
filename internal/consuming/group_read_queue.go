@@ -7,13 +7,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/barcostreams/barco/internal/conf"
+	. "github.com/barcostreams/barco/internal/data"
+	"github.com/barcostreams/barco/internal/discovery"
+	"github.com/barcostreams/barco/internal/interbroker"
+	. "github.com/barcostreams/barco/internal/types"
+	"github.com/barcostreams/barco/internal/utils"
 	. "github.com/google/uuid"
-	"github.com/jorgebay/soda/internal/conf"
-	. "github.com/jorgebay/soda/internal/data"
-	"github.com/jorgebay/soda/internal/discovery"
-	"github.com/jorgebay/soda/internal/interbroker"
-	. "github.com/jorgebay/soda/internal/types"
-	"github.com/jorgebay/soda/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 

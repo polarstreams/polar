@@ -8,24 +8,24 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/consuming"
-	"github.com/jorgebay/soda/internal/data"
-	"github.com/jorgebay/soda/internal/data/topics"
-	"github.com/jorgebay/soda/internal/discovery"
-	"github.com/jorgebay/soda/internal/interbroker"
-	"github.com/jorgebay/soda/internal/localdb"
-	"github.com/jorgebay/soda/internal/metrics"
-	"github.com/jorgebay/soda/internal/ownership"
-	"github.com/jorgebay/soda/internal/producing"
-	"github.com/jorgebay/soda/internal/types"
+	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/consuming"
+	"github.com/barcostreams/barco/internal/data"
+	"github.com/barcostreams/barco/internal/data/topics"
+	"github.com/barcostreams/barco/internal/discovery"
+	"github.com/barcostreams/barco/internal/interbroker"
+	"github.com/barcostreams/barco/internal/localdb"
+	"github.com/barcostreams/barco/internal/metrics"
+	"github.com/barcostreams/barco/internal/ownership"
+	"github.com/barcostreams/barco/internal/producing"
+	"github.com/barcostreams/barco/internal/types"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
 func main() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	log.Info().Msg("Starting Soda")
+	log.Info().Msg("Starting Barco")
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	debug := flag.Bool("debug", false, "sets log level to debug")
@@ -58,12 +58,14 @@ func main() {
 	// Initialization phase ended
 	log.Info().Msg("Start accepting connections from other brokers")
 	if err := gossiper.AcceptConnections(); err != nil {
-		log.Fatal().Err(err).Msg("Exiting")
+		log.Fatal().Err(err).Msg("Gossiper was not able to accept connections, exiting")
 	}
 
 	if err := gossiper.OpenConnections(); err != nil {
-		log.Fatal().Err(err).Msg("Exiting")
+		log.Fatal().Err(err).Msg("Gossiper was not able to open connections, exiting")
 	}
+
+	metrics.Serve(discoverer, config)
 
 	gossiper.WaitForPeersUp()
 
@@ -79,9 +81,7 @@ func main() {
 		log.Fatal().Err(err).Msg("Exiting")
 	}
 
-	metrics.Serve(discoverer, config)
-
-	log.Info().Msg("Soda started")
+	log.Info().Msg("Barco started")
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan,

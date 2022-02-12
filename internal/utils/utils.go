@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/types"
 	"github.com/google/uuid"
-	"github.com/jorgebay/soda/internal/conf"
-	"github.com/jorgebay/soda/internal/types"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
 )

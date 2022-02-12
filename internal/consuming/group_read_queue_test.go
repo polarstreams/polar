@@ -3,10 +3,10 @@ package consuming
 import (
 	"fmt"
 
-	dMocks "github.com/jorgebay/soda/internal/test/discovery/mocks"
-	iMocks "github.com/jorgebay/soda/internal/test/interbroker/mocks"
-	tMocks "github.com/jorgebay/soda/internal/test/types/mocks"
-	. "github.com/jorgebay/soda/internal/types"
+	dMocks "github.com/barcostreams/barco/internal/test/discovery/mocks"
+	iMocks "github.com/barcostreams/barco/internal/test/interbroker/mocks"
+	tMocks "github.com/barcostreams/barco/internal/test/types/mocks"
+	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
