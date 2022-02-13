@@ -117,7 +117,7 @@ func (b *TestBroker) WaitOutput(value string) {
 		b.mu.RUnlock()
 	}
 
-	Expect(found).To(BeTrue())
+	Expect(found).To(BeTrue(), "Waited 5 seconds for '%s'", value)
 }
 
 func (b *TestBroker) Shutdown() {

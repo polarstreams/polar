@@ -90,7 +90,8 @@ func (c *TestClient) ConsumerPoll(ordinal int) *http.Response {
 	url := fmt.Sprintf("http://127.0.0.%d:%d/%s", ordinal+1, consumerPort, conf.ConsumerPollUrl)
 	resp, err := c.client.Post(url, "application/json", strings.NewReader(""))
 	Expect(err).NotTo(HaveOccurred())
-	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	Expect(resp.StatusCode).To(BeNumerically(">=", http.StatusOK))
+	Expect(resp.StatusCode).To(BeNumerically("<", 300))
 	return resp
 }
 

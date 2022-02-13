@@ -431,7 +431,11 @@ type consumerResponseItem struct {
 }
 
 func (i *consumerResponseItem) Marshal(w io.Writer) error {
+	// Can be extracted into "MarshalTopic"
 	if err := binary.Write(w, conf.Endianness, i.topic.Token); err != nil {
+		return err
+	}
+	if err := binary.Write(w, conf.Endianness, i.topic.RangeIndex); err != nil {
 		return err
 	}
 	if err := binary.Write(w, conf.Endianness, i.topic.GenId); err != nil {
@@ -443,7 +447,11 @@ func (i *consumerResponseItem) Marshal(w io.Writer) error {
 	if _, err := w.Write([]byte(i.topic.Name)); err != nil {
 		return err
 	}
-	if _, err := w.Write(i.chunk.DataBlock()); err != nil {
+	payload := i.chunk.DataBlock()
+	if err := binary.Write(w, conf.Endianness, int32(len(payload))); err != nil {
+		return err
+	}
+	if _, err := w.Write(payload); err != nil {
 		return err
 	}
 	return nil

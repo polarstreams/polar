@@ -2,7 +2,6 @@ package producing
 
 import (
 	"bytes"
-	"encoding/binary"
 	"io"
 	"time"
 
@@ -39,20 +38,6 @@ type coalescer struct {
 	offset          uint64
 	buffers         buffers
 	writer          *data.SegmentWriter
-}
-
-type record struct {
-	replication types.ReplicationInfo
-	length      uint32 // Body length
-	timestamp   int64  // Timestamp in micros
-	body        io.ReadCloser
-	offset      uint64 // Record offset
-	response    chan error
-}
-
-type buffers struct {
-	group      [writeConcurrencyLevel]*bytes.Buffer
-	compressor [writeConcurrencyLevel]*zstd.Encoder
 }
 
 func newBuffers(config conf.ProducerConfig) buffers {
@@ -221,16 +206,7 @@ func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
 	compressor.Reset(buf)
 
 	for _, item := range group {
-		// Record's bodyLength+timestamp
-		if err := binary.Write(compressor, conf.Endianness, item.length); err != nil {
-			return nil, err
-		}
-		if err := binary.Write(compressor, conf.Endianness, item.timestamp); err != nil {
-			return nil, err
-		}
-
-		// Record's body
-		if _, err := io.Copy(compressor, item.body); err != nil {
+		if err := item.marshal(compressor); err != nil {
 			return nil, err
 		}
 	}
