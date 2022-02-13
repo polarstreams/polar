@@ -280,7 +280,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 			for _, topic := range topics {
 				reader, found := readersByTopic[topic]
 				if !found {
-					log.Info().Msgf("Creating reader for token %d/%d and topic '%s'", t, index, topic)
+					log.Info().Msgf("Creating reader for token %d/%d and topic '%s'", t.Token, index, topic)
 					offset := q.offsetState.Get(q.group, topic, t.Token, index)
 					if offset == nil {
 						// We have no information of this group
@@ -330,8 +330,10 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 					}
 
 					readersByTopic[topic] = reader
+					result = append(result, reader)
+				} else {
+					result = append(result, reader)
 				}
-				result = append(result, reader)
 			}
 		}
 	}

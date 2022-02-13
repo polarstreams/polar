@@ -174,7 +174,7 @@ func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 			} else {
 				i++
 			}
-			log.Info().Msgf("Client data connection to %s could not be opened, retrying", c.hostName)
+			log.Info().Msgf("Client gossip data connection to %s could not be opened, retrying", c.hostName)
 			// TODO: Add jitter
 			time.Sleep(time.Duration(delay) * time.Millisecond)
 			continue

@@ -3,6 +3,7 @@ package data
 import (
 	"bytes"
 	"io/ioutil"
+	"time"
 
 	"github.com/barcostreams/barco/internal/test/conf/mocks"
 	mocks2 "github.com/barcostreams/barco/internal/test/types/mocks"
@@ -57,6 +58,7 @@ var _ = Describe("SegmentWriter", func() {
 			config.On("MaxGroupSize").Return(100)
 			config.On("SegmentBufferSize").Return(300)
 			config.On("MaxSegmentSize").Return(500)
+			config.On("SegmentFlushInterval").Return(1 * time.Second)
 
 			replicator := new(mocks2.Replicator)
 			replicator.On("SendToFollowers", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)

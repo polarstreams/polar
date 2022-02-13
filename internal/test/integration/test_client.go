@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package integration
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/barcostreams/barco/internal/conf"
 	. "github.com/onsi/gomega"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
@@ -24,6 +26,11 @@ type TestClient struct {
 type TestClientOptions struct {
 	HttpVersion int
 }
+
+const (
+	producerPort = 8081
+	consumerPort = 8082
+)
 
 // Creates a htt
 func NewTestClient(options *TestClientOptions) *TestClient {
@@ -59,11 +66,36 @@ func NewTestClient(options *TestClientOptions) *TestClient {
 	}
 }
 
-func (c *TestClient) ProduceJson(ordinal int, topic string, message string) *http.Response {
-	url := fmt.Sprintf("http://127.0.0.%d:%d/v1/topic/%s/messages", ordinal+1, 8081, topic)
+func (c *TestClient) ProduceJson(ordinal int, topic string, message string, partitionKey string) *http.Response {
+	querystring := ""
+	if partitionKey != "" {
+		querystring = fmt.Sprintf("?partitionKey=%s", partitionKey)
+	}
+	url := fmt.Sprintf("http://127.0.0.%d:%d/v1/topic/%s/messages%s", ordinal+1, producerPort, topic, querystring)
 	resp, err := c.client.Post(url, "application/json", strings.NewReader(message))
 	Expect(err).NotTo(HaveOccurred())
 	return resp
+}
+
+func (c *TestClient) RegisterAsConsumer(clusterSize int, message string) {
+	for i := 0; i < clusterSize; i++ {
+		url := fmt.Sprintf("http://127.0.0.%d:%d/%s", i+1, consumerPort, conf.ConsumerRegisterUrl)
+		resp, err := c.client.Post(url, "application/json", strings.NewReader(message))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	}
+}
+
+func (c *TestClient) ConsumerPoll(ordinal int) *http.Response {
+	url := fmt.Sprintf("http://127.0.0.%d:%d/%s", ordinal+1, consumerPort, conf.ConsumerPollUrl)
+	resp, err := c.client.Post(url, "application/json", strings.NewReader(""))
+	Expect(err).NotTo(HaveOccurred())
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	return resp
+}
+
+func (c *TestClient) Close() {
+	c.client.CloseIdleConnections()
 }
 
 func ReadBody(resp *http.Response) string {

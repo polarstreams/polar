@@ -58,6 +58,20 @@ func (_m *Config) BaseHostName() string {
 	return r0
 }
 
+// ConsumerAddDelay provides a mock function with given fields:
+func (_m *Config) ConsumerAddDelay() time.Duration {
+	ret := _m.Called()
+
+	var r0 time.Duration
+	if rf, ok := ret.Get(0).(func() time.Duration); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(time.Duration)
+	}
+
+	return r0
+}
+
 // ConsumerPort provides a mock function with given fields:
 func (_m *Config) ConsumerPort() int {
 	ret := _m.Called()
@@ -349,6 +363,20 @@ func (_m *Config) SegmentBufferSize() int {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
+// SegmentFlushInterval provides a mock function with given fields:
+func (_m *Config) SegmentFlushInterval() time.Duration {
+	ret := _m.Called()
+
+	var r0 time.Duration
+	if rf, ok := ret.Get(0).(func() time.Duration); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(time.Duration)
 	}
 
 	return r0

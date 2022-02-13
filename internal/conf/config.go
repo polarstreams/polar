@@ -20,10 +20,12 @@ const (
 )
 
 const (
-	envHome                 = "BARCO_HOME"
-	envListenOnAllAddresses = "BARCO_LISTEN_ON_ALL"
-	envGossipPort           = "BARCO_GOSSIP_PORT"
-	envGossipDataPort       = "BARCO_GOSSIP_DATA_PORT"
+	envHome                   = "BARCO_HOME"
+	envListenOnAllAddresses   = "BARCO_LISTEN_ON_ALL"
+	envGossipPort             = "BARCO_GOSSIP_PORT"
+	envGossipDataPort         = "BARCO_GOSSIP_DATA_PORT"
+	envSegmentFlushIntervalMs = "BARCO_SEGMENT_FLUSH_INTERVAL_MS"
+	envConsumerAddDelay       = "BARCO_CONSUMER_ADD_DELAY_MS"
 )
 
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
@@ -59,6 +61,7 @@ type DatalogConfig interface {
 	ReadAheadSize() int // The amount of bytes to read each time from a segment file
 	AutoCommitInterval() time.Duration
 	IndexFilePeriodBytes() int // How frequently write to the index file based on the segment size.
+	SegmentFlushInterval() time.Duration
 }
 
 type DiscovererConfig interface {
@@ -79,7 +82,7 @@ type ProducerConfig interface {
 type ConsumerConfig interface {
 	BasicConfig
 	DatalogConfig
-	AutoCommitInterval() time.Duration
+	ConsumerAddDelay() time.Duration
 	ConsumerPort() int
 	ConsumerReadThreshold() int // The minimum amount of bytes once reached the consumer poll is fullfilled
 }
@@ -142,11 +145,11 @@ func (c *config) MetricsPort() int {
 }
 
 func (c *config) GossipPort() int {
-	return envInt(envGossipPort, "8084")
+	return envInt(envGossipPort, 8084)
 }
 
 func (c *config) GossipDataPort() int {
-	return envInt(envGossipDataPort, "8085")
+	return envInt(envGossipDataPort, 8085)
 }
 
 func (c *config) ListenOnAllAddresses() bool {
@@ -173,12 +176,22 @@ func (c *config) AutoCommitInterval() time.Duration {
 	return 5 * time.Second
 }
 
+func (c *config) ConsumerAddDelay() time.Duration {
+	ms := envInt(envConsumerAddDelay, 10000)
+	return time.Duration(ms) * time.Millisecond
+}
+
 func (c *config) ConsumerReadThreshold() int {
 	return c.MaxGroupSize()
 }
 
 func (c *config) IndexFilePeriodBytes() int {
 	return int(0.05 * float64(c.MaxSegmentSize()))
+}
+
+func (c *config) SegmentFlushInterval() time.Duration {
+	ms := envInt(envSegmentFlushIntervalMs, 5000)
+	return time.Duration(ms) * time.Millisecond
 }
 
 func (c *config) MaxSegmentSize() int {
@@ -236,8 +249,11 @@ func env(name string, defaultValue string) string {
 	return value
 }
 
-func envInt(name string, defaultValue string) int {
-	value := env(name, defaultValue)
+func envInt(name string, defaultValue int) int {
+	value := os.Getenv(name)
+	if value == "" {
+		return defaultValue
+	}
 	intValue, err := strconv.Atoi(value)
 	if err != nil {
 		panic(err)

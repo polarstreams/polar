@@ -47,6 +47,8 @@ func (b *TestBroker) Start() {
 		fmt.Sprintf("BARCO_HOME=home%d", b.ordinal),
 		"BARCO_LISTEN_ON_ALL=false",
 		"BARCO_BROKER_NAMES=127.0.0.1,127.0.0.2,127.0.0.3",
+		"BARCO_SEGMENT_FLUSH_INTERVAL_MS=1000",
+		"BARCO_CONSUMER_ADD_DELAY_MS=200",
 	)
 	stderr, err := cmd.StderrPipe()
 	Expect(err).NotTo(HaveOccurred())

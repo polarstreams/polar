@@ -26,7 +26,6 @@ const consumerNoOwnedDataDelay = 5 // Seconds
 
 const contentType = "application/vnd.barco.consumermessage"
 
-var addDebouncer = Debounce(10*time.Second, 0)
 var removeDebouncer = Debounce(removeDelay, 0.4) // Debounce events that occurred in the following 2 minutes
 
 // Consumer represents a consumer server
@@ -49,6 +48,7 @@ func NewConsumer(
 		state:          NewConsumerState(config, topologyGetter),
 		offsetState:    newDefaultOffsetState(localDb, topologyGetter, gossiper, config),
 		readQueues:     NewCopyOnWriteMap(),
+		addDebouncer:   Debounce(config.ConsumerAddDelay(), 0),
 	}
 }
 
@@ -59,6 +59,7 @@ type consumer struct {
 	state          *ConsumerState
 	offsetState    OffsetState
 	readQueues     *CopyOnWriteMap
+	addDebouncer   Debouncer
 }
 
 func (c *consumer) Init() error {
@@ -158,7 +159,7 @@ func (c *consumer) postRegister(
 		Msgf("Registering new connection to consumer '%s' of group '%s' for topics %v",
 			consumerInfo.Id, consumerInfo.Group, consumerInfo.Topics)
 
-	addDebouncer(func() {
+	c.addDebouncer(func() {
 		if c.state.Rebalance() {
 			log.Info().Msg("Consumer topology was rebalanced after adding a new consumer connection registered")
 			log.Debug().Msgf("Consumer topology contains consumer groups %v and consumers by connection: %v)",

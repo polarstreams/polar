@@ -18,7 +18,6 @@ import (
 )
 
 const flushResolution = 200 * time.Millisecond
-const flushInterval = 5 * time.Second
 const alignmentSize = 512
 const alignmentFlag = byte(1 << 7)
 
@@ -170,7 +169,7 @@ func (s *SegmentWriter) maybeFlush() bool {
 	}
 
 	canBufferNextGroup := s.buffer.Len()+s.config.MaxGroupSize() < s.config.SegmentBufferSize()
-	if canBufferNextGroup && time.Now().Sub(s.lastFlush) < flushInterval {
+	if canBufferNextGroup && time.Now().Sub(s.lastFlush) < s.config.SegmentFlushInterval() {
 		// Time has not passed and there's enough capacity
 		// in the buffer for the next group
 		return false
