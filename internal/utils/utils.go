@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -178,4 +179,15 @@ func ReadBodyClose(resp *http.Response) (string, error) {
 	}
 	defer resp.Body.Close()
 	return string(body), nil
+}
+
+// For a given number, it returns the last ring length that can contain it.
+// For example: given 3 it returns 3; for 4 -> 3; for 5 -> 3; for 7 -> 6
+func ValidRingLength(length int) int {
+	if length < 3 {
+		return 3
+	}
+	// Rings are 3 * 2^n
+	exponent := math.Floor(math.Log2(float64(length) / 3))
+	return int(3 * math.Exp2(exponent))
 }

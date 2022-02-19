@@ -24,4 +24,22 @@ var _ = Describe("utils", func() {
 			Expect(allEqual).To(BeFalse())
 		})
 	})
+
+	Describe("ValidRingLength()", func() {
+		It("should return the last ring that can contain it", func() {
+			values := [][]int{
+				{1, 3},
+				{2, 3},
+				{4, 3},
+				{6, 6},
+				{7, 6},
+				{11, 6},
+				{12, 12},
+			}
+
+			for _, v := range values {
+				Expect(ValidRingLength(v[0])).To(Equal(v[1]), "Doesn't match for %v", v)
+			}
+		})
+	})
 })

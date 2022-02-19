@@ -66,9 +66,9 @@ spec:
       app.kubernetes.io/name: barco
   serviceName: barco-dev
   replicas: 3
-  persistentVolumeClaimRetentionPolicy:
-    whenDeleted: Delete
-    whenScaled: Delete
+  # persistentVolumeClaimRetentionPolicy:
+  #   whenDeleted: Delete
+  #   whenScaled: Delete
   template:
     metadata:
       labels:

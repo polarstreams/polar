@@ -11,6 +11,7 @@ import (
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/localdb"
 	. "github.com/barcostreams/barco/internal/types"
+	"github.com/barcostreams/barco/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -66,6 +67,7 @@ func NewDiscoverer(config conf.DiscovererConfig, localDb localdb.Client) Discove
 		config:      config,
 		localDb:     localDb,
 		listeners:   make([]TopologyChangeHandler, 0),
+		topology:    atomic.Value{},
 		k8sClient:   newK8sClient(),
 		generations: generations,
 		genProposed: genMap{},
@@ -76,7 +78,7 @@ type discoverer struct {
 	config      conf.DiscovererConfig
 	localDb     localdb.Client
 	listeners   []TopologyChangeHandler
-	topology    TopologyInfo // Gets the current brokers, index and ring
+	topology    atomic.Value // Gets the current brokers, index and ring
 	k8sClient   k8sClient
 	genMutex    sync.Mutex
 	genProposed genMap
@@ -85,35 +87,64 @@ type discoverer struct {
 
 func (d *discoverer) Init() error {
 	if fixedOrdinal, err := strconv.Atoi(os.Getenv(envOrdinal)); err == nil {
-		d.topology = createFixedTopology(fixedOrdinal)
+		d.topology.Store(createFixedTopology(fixedOrdinal))
 	} else {
 		// Use normal discovery
 		if err := d.k8sClient.init(); err != nil {
 			return err
 		}
 
-		// TODO: Validate and round to 3*2^n
-		totalBrokers, err := d.k8sClient.getDesiredReplicas()
-		if err != nil {
-			return err
-		}
-		d.topology = createTopology(totalBrokers, d.config)
+		d.loadTopology()
 	}
+
+	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.Topology().Brokers))
 
 	if err := d.loadGenerations(); err != nil {
 		return err
 	}
 
-	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.topology.Brokers))
-
 	return nil
 }
 
 func (d *discoverer) Topology() *TopologyInfo {
-	return &d.topology
+	value := d.topology.Load()
+	if value == nil {
+		return nil
+	}
+	return value.(*TopologyInfo)
 }
 
-func createTopology(totalBrokers int, config conf.DiscovererConfig) TopologyInfo {
+func (d *discoverer) loadTopology() error {
+	totalBrokers, err := d.k8sClient.getDesiredReplicas()
+	if err != nil {
+		return err
+	}
+	normalizedLen := utils.ValidRingLength(totalBrokers)
+	if normalizedLen != totalBrokers {
+		log.Error().Msgf("Not a valid ring size %d, using %d instead", totalBrokers, normalizedLen)
+		totalBrokers = normalizedLen
+	}
+
+	go d.k8sClient.startWatching(totalBrokers)
+
+	d.topology.Store(createTopology(totalBrokers, d.config))
+
+	go func() {
+		for replicasChanged := range d.k8sClient.replicasChangeChan() {
+			currentTopology := d.Topology()
+			log.Info().Msgf("Topology changed from %d to %d brokers", len(currentTopology.Brokers), replicasChanged)
+			normalizedLen := utils.ValidRingLength(replicasChanged)
+			if normalizedLen != replicasChanged {
+				log.Error().Msgf("Not a valid ring size %d, using %d instead", replicasChanged, normalizedLen)
+				replicasChanged = normalizedLen
+			}
+			d.topology.Store(createTopology(replicasChanged, d.config))
+		}
+	}()
+	return nil
+}
+
+func createTopology(totalBrokers int, config conf.DiscovererConfig) *TopologyInfo {
 	if totalBrokers == 0 {
 		totalBrokers = 1
 	}
@@ -131,13 +162,14 @@ func createTopology(totalBrokers int, config conf.DiscovererConfig) TopologyInfo
 		})
 	}
 
-	return NewTopology(brokers)
+	result := NewTopology(brokers)
+	return &result
 }
 
-func createFixedTopology(ordinal int) TopologyInfo {
+func createFixedTopology(ordinal int) *TopologyInfo {
 	names := os.Getenv(envBrokerNames)
 	if names == "" {
-		return TopologyInfo{}
+		return &TopologyInfo{}
 	}
 
 	// We expect the names to be sorted by ordinal (0, 1, 2, 3, 4, 6)
@@ -154,24 +186,34 @@ func createFixedTopology(ordinal int) TopologyInfo {
 		}
 	}
 
-	return NewTopology(brokers)
+	result := NewTopology(brokers)
+	return &result
 }
 
 func (d *discoverer) Peers() []BrokerInfo {
-	return d.brokersExcept(d.topology.LocalIndex)
+	topology := d.Topology()
+	brokers := topology.Brokers
+	result := make([]BrokerInfo, 0, len(brokers)-1)
+	index := int(topology.LocalIndex)
+	for i, broker := range brokers {
+		if i != index {
+			result = append(result, broker)
+		}
+	}
+	return result
 }
 
 func (d *discoverer) Brokers() []BrokerInfo {
-	return d.topology.Brokers
+	return d.Topology().Brokers
 }
 
 func (d *discoverer) LocalInfo() *BrokerInfo {
-	topology := d.topology
+	topology := d.Topology()
 	return &topology.Brokers[topology.LocalIndex]
 }
 
 func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
-	topology := d.topology
+	topology := d.Topology()
 	token := topology.MyToken()
 	brokerIndex := topology.LocalIndex
 	rangeIndex := RangeIndex(0)
@@ -203,17 +245,6 @@ func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 		Token:      token,
 		RangeIndex: rangeIndex,
 	}
-}
-
-func (d *discoverer) brokersExcept(index BrokerIndex) []BrokerInfo {
-	brokers := d.topology.Brokers
-	result := make([]BrokerInfo, 0, len(brokers)-1)
-	for i, broker := range brokers {
-		if i != int(index) {
-			result = append(result, broker)
-		}
-	}
-	return result
 }
 
 func (d *discoverer) RegisterListener(l TopologyChangeHandler) {

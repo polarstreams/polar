@@ -3,10 +3,15 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
+	"time"
 
+	"github.com/barcostreams/barco/internal/utils"
 	"github.com/rs/zerolog/log"
+	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -17,23 +22,29 @@ const (
 )
 
 const appNameLabel = "app.kubernetes.io/name"
+const k8sBackoffDelayMs = 200
+const k8sMaxBackoffDelayMs = 10_000
 
 // Represents a wrapper around k8s api calls
 type k8sClient interface {
 	init() error
 	getDesiredReplicas() (int, error)
+	startWatching(replicas int)
+	replicasChangeChan() <-chan int
 }
 
 type k8sClientImpl struct {
-	client    *kubernetes.Clientset
-	appName   string
-	namespace string
+	client       *kubernetes.Clientset
+	appName      string
+	namespace    string
+	replicasChan chan int
 }
 
 func newK8sClient() k8sClient {
 	namespace := os.Getenv(envPodNamespace)
 	return &k8sClientImpl{
-		namespace: namespace,
+		namespace:    namespace,
+		replicasChan: make(chan int),
 	}
 }
 
@@ -83,10 +94,73 @@ func (c *k8sClientImpl) getDesiredReplicas() (int, error) {
 		return 0, fmt.Errorf("No statefulset found with %s", stsInfo)
 	}
 	sts := list.Items[0]
-	replicas := sts.Status.Replicas
+	replicas := 1
+	if sts.Spec.Replicas != nil {
+		replicas = int(*sts.Spec.Replicas)
+	}
+
 	log.Debug().Msgf("Found %d replicas in statefulset with %s", replicas, stsInfo)
 	if replicas == 0 {
 		return 0, fmt.Errorf("Stateful has zero replicas (%s)", stsInfo)
 	}
 	return int(replicas), nil
+}
+
+func (c *k8sClientImpl) startWatching(replicas int) {
+	labelSelector := fmt.Sprintf("%s=%s", appNameLabel, c.appName)
+	retryCounter := 0
+	for {
+		log.Debug().Msgf("Creating a k8s watch")
+		watcher, err := c.client.AppsV1().StatefulSets(c.namespace).Watch(context.TODO(), metav1.ListOptions{
+			LabelSelector: labelSelector,
+		})
+
+		if err != nil {
+			log.Warn().Err(err).Msgf("There was an error trying to watch k8s resources")
+			retryCounter++
+			delayMs := math.Pow(2, float64(retryCounter)) * k8sBackoffDelayMs
+			if delayMs > k8sMaxBackoffDelayMs {
+				delayMs = k8sMaxBackoffDelayMs
+			} else {
+				retryCounter++
+			}
+			time.Sleep(utils.Jitter(time.Duration(delayMs) * time.Millisecond))
+			continue
+		}
+
+		log.Info().Msgf("K8s watch added")
+		retryCounter = 0
+
+		for event := range watcher.ResultChan() {
+			if event.Type == watch.Error {
+				log.Warn().Interface("event", event.Object).Msgf("K8s watcher received an error")
+				break
+			}
+
+			log.Debug().Str("type", string(event.Type)).Msgf("K8s Received")
+			sts, ok := event.Object.(*v1.StatefulSet)
+			if !ok {
+				log.Error().Interface("event", event.Object).Msgf("Unexpected event object type")
+				break
+			}
+
+			eventReplicas := 1
+			if sts.Spec.Replicas != nil {
+				eventReplicas = int(*sts.Spec.Replicas)
+			}
+
+			if eventReplicas != replicas {
+				replicas = eventReplicas
+				c.replicasChan <- replicas
+			}
+		}
+
+		log.Debug().Msgf("Stopping k8s watch")
+		// Can be called multiple times
+		watcher.Stop()
+	}
+}
+
+func (c *k8sClientImpl) replicasChangeChan() <-chan int {
+	return c.replicasChan
 }

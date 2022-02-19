@@ -34,7 +34,7 @@ var _ = Describe("discoverer", func() {
 
 			d.Init()
 
-			Expect(d.topology.Brokers).To(Equal([]BrokerInfo{
+			Expect(d.Topology().Brokers).To(Equal([]BrokerInfo{
 				{
 					IsSelf:   false,
 					Ordinal:  0,
@@ -63,12 +63,12 @@ var _ = Describe("discoverer", func() {
 
 			d.Init()
 
-			Expect(d.topology.Brokers).To(Equal([]BrokerInfo{
+			Expect(d.Topology().Brokers).To(Equal([]BrokerInfo{
 				{IsSelf: false, Ordinal: 0, HostName: "barco-0"},
 				{IsSelf: true, Ordinal: 1, HostName: "barco-1"},
 				{IsSelf: false, Ordinal: 2, HostName: "barco-2"},
 			}))
-			Expect(d.topology.LocalIndex).To(Equal(BrokerIndex(1)))
+			Expect(d.Topology().LocalIndex).To(Equal(BrokerIndex(1)))
 		})
 
 		It("should parse 6 real brokers", func() {
@@ -83,7 +83,7 @@ var _ = Describe("discoverer", func() {
 
 			d.Init()
 
-			Expect(d.topology.Brokers).To(Equal([]BrokerInfo{
+			Expect(d.Topology().Brokers).To(Equal([]BrokerInfo{
 				{IsSelf: false, Ordinal: 0, HostName: "barco-0"},
 				{IsSelf: false, Ordinal: 3, HostName: "barco-3"},
 				{IsSelf: false, Ordinal: 1, HostName: "barco-1"},
@@ -92,7 +92,7 @@ var _ = Describe("discoverer", func() {
 				{IsSelf: false, Ordinal: 5, HostName: "barco-5"},
 			}))
 
-			Expect(d.topology.LocalIndex).To(Equal(BrokerIndex(4)))
+			Expect(d.Topology().LocalIndex).To(Equal(BrokerIndex(4)))
 		})
 	})
 
@@ -200,9 +200,9 @@ var _ = Describe("discoverer", func() {
 			d.Init()
 
 			existingMap := d.generations.Load().(genMap)
-			existingMap[d.topology.MyToken()] = Generation{
-				Start:     d.topology.MyToken(),
-				End:       d.topology.GetToken(d.topology.LocalIndex + 1),
+			existingMap[d.Topology().MyToken()] = Generation{
+				Start:     d.Topology().MyToken(),
+				End:       d.Topology().GetToken(d.Topology().LocalIndex + 1),
 				Version:   1,
 				Leader:    ordinal,
 				Followers: []int{4, 2},
@@ -211,7 +211,7 @@ var _ = Describe("discoverer", func() {
 
 			info := d.Leader("")
 			Expect(info.Leader.Ordinal).To(Equal(ordinal))
-			Expect(info.Token).To(Equal(d.topology.MyToken()))
+			Expect(info.Token).To(Equal(d.Topology().MyToken()))
 			Expect(info.Followers[0].Ordinal).To(Equal(4))
 			Expect(info.Followers[1].Ordinal).To(Equal(2))
 		})
@@ -224,9 +224,9 @@ var _ = Describe("discoverer", func() {
 			d.Init()
 
 			existingMap := d.generations.Load().(genMap)
-			existingMap[d.topology.GetToken(0)] = Generation{
-				Start:     d.topology.GetToken(0),
-				End:       d.topology.GetToken(1),
+			existingMap[d.Topology().GetToken(0)] = Generation{
+				Start:     d.Topology().GetToken(0),
+				End:       d.Topology().GetToken(1),
 				Version:   1,
 				Leader:    0,        // Ordinal of node at 0 is zero
 				Followers: []int{3}, // Use a single follower as a signal that the generation was obtained
@@ -235,7 +235,7 @@ var _ = Describe("discoverer", func() {
 
 			info := d.Leader("a") // token -8839064797231613815 , it should use the first broker
 			Expect(info.Leader.Ordinal).To(Equal(0))
-			Expect(info.Token).To(Equal(d.topology.GetToken(0)))
+			Expect(info.Token).To(Equal(d.Topology().GetToken(0)))
 			Expect(info.Followers[0].Ordinal).To(Equal(3))
 			// A single follower as a signal
 			Expect(info.Followers).To(HaveLen(1))
@@ -250,7 +250,7 @@ var _ = Describe("discoverer", func() {
 			partitionKey := "hui" // token: "7851606034017063987" -> last range
 			info := d.Leader(partitionKey)
 			Expect(info.Leader.Ordinal).To(Equal(5))
-			Expect(info.Token).To(Equal(d.topology.GetToken(BrokerIndex(5))))
+			Expect(info.Token).To(Equal(d.Topology().GetToken(BrokerIndex(5))))
 			Expect(info.Followers[0].Ordinal).To(Equal(0))
 			Expect(info.Followers[1].Ordinal).To(Equal(3))
 		})
@@ -301,4 +301,12 @@ func (c *k8sClientFake) init() error {
 
 func (c *k8sClientFake) getDesiredReplicas() (int, error) {
 	return c.desiredReplicas, nil
+}
+
+func (c *k8sClientFake) startWatching(replicas int) {
+
+}
+
+func (c *k8sClientFake) replicasChangeChan() <-chan int {
+	return make(<-chan int)
 }
