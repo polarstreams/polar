@@ -92,7 +92,7 @@ func (t *TopologyInfo) MyToken() Token {
 	return GetTokenAtIndex(len(t.Brokers), int(t.LocalIndex))
 }
 
-// MyOrdinal gets the current broker's index.
+// MyOrdinal gets the current broker's ordinal.
 func (t *TopologyInfo) MyOrdinal() int {
 	return t.Brokers[t.LocalIndex].Ordinal
 }

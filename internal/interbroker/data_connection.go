@@ -20,6 +20,7 @@ type dataConnection struct {
 	closed    chan bool
 	streamIds chan streamId
 	cli       *clientInfo
+	conn      net.Conn
 	handlers  sync.Map
 }
 
@@ -58,11 +59,12 @@ func newDataConnection(cli *clientInfo, config conf.GossipConfig) (*dataConnecti
 		closed:    closed,
 		streamIds: streamIds,
 		cli:       cli,
+		conn:      conn,
 		handlers:  sync.Map{},
 	}
 
-	go c.readDataResponses(conn, config, closeHandler)
-	go c.writeDataRequests(conn, config, closeHandler)
+	go c.readDataResponses(config, closeHandler)
+	go c.writeDataRequests(config, closeHandler)
 
 	return c, nil
 }
@@ -102,8 +104,8 @@ func sendStartupMessage(conn net.Conn) error {
 	return nil
 }
 
-func (c *dataConnection) readDataResponses(conn net.Conn, config conf.GossipConfig, closeHandler func(string)) {
-	r := bufio.NewReaderSize(conn, receiveBufferSize)
+func (c *dataConnection) readDataResponses(config conf.GossipConfig, closeHandler func(string)) {
+	r := bufio.NewReaderSize(c.conn, receiveBufferSize)
 	headerBuffer := make([]byte, headerSize)
 	bodyBuffer := make([]byte, maxDataResponseSize)
 	for {
@@ -137,7 +139,7 @@ func (c *dataConnection) readDataResponses(conn net.Conn, config conf.GossipConf
 	closeHandler("reader")
 }
 
-func (c *dataConnection) writeDataRequests(conn net.Conn, config conf.GossipConfig, closeHandler func(string)) {
+func (c *dataConnection) writeDataRequests(config conf.GossipConfig, closeHandler func(string)) {
 	w := utils.NewBufferCap(config.MaxDataBodyLength() + headerSize + dataRequestMetaSize + conf.MaxTopicLength)
 	header := header{Version: 1, Op: dataReplicationOp}
 
@@ -167,7 +169,7 @@ func (c *dataConnection) writeDataRequests(conn net.Conn, config conf.GossipConf
 			c.streamIds <- streamId
 		})
 
-		if n, err := conn.Write(w.Bytes()); err != nil {
+		if n, err := c.conn.Write(w.Bytes()); err != nil {
 			log.Warn().Err(err).Msg("Peer data client flush resulted in error")
 			break
 		} else if n < w.Len() {
@@ -177,4 +179,8 @@ func (c *dataConnection) writeDataRequests(conn net.Conn, config conf.GossipConf
 	}
 
 	closeHandler("writer")
+}
+
+func (c *dataConnection) close() {
+	c.conn.Close()
 }

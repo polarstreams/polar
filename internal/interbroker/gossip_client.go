@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/types"
+	. "github.com/barcostreams/barco/internal/types"
 	"github.com/barcostreams/barco/internal/utils"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
@@ -31,7 +31,7 @@ func (g *gossiper) OpenConnections() {
 }
 
 // Creates the new clients, without replacing the existing ones, and starts connecting to the peers
-func (g *gossiper) createNewClients(topology *types.TopologyInfo) {
+func (g *gossiper) createNewClients(topology *TopologyInfo) {
 	// We could use a single client for all peers but to
 	// reduce contention and having fine grained control, we use one per each peer
 	peers := topology.Peers()
@@ -74,7 +74,40 @@ func (g *gossiper) createNewClients(topology *types.TopologyInfo) {
 	g.connections.Store(m)
 }
 
-func (g *gossiper) onHostDown(b *types.BrokerInfo) {
+// Closes the connections and remove
+func (g *gossiper) removeClients(previousTopology *TopologyInfo, topology *TopologyInfo) {
+	ordinals := make([]int, 0)
+	for i := len(topology.Brokers); i < len(previousTopology.Brokers); i++ {
+		ordinals = append(ordinals, i)
+	}
+	log.Debug().Msgf("Removing brokers with ordinals %v", ordinals)
+
+	g.connectionsMutex.Lock()
+	defer g.connectionsMutex.Unlock()
+
+	m := g.connections.Load().(clientMap).clone()
+	for _, ordinal := range ordinals {
+		c, ok := m[ordinal]
+		if !ok {
+			log.Error().Msgf("Client for broker with ordinal %d not found", ordinal)
+			continue
+		}
+
+		delete(m, ordinal)
+		// Avoid reconnection attempts
+		c.readyNewDataConnection <- false
+		c.readyNewGossipConnection <- false
+		c.gossipClient.CloseIdleConnections()
+		c.routingClient.CloseIdleConnections()
+		if dataConnValue := c.dataConn.Load(); dataConnValue != nil {
+			dataConn := dataConnValue.(*dataConnection)
+			dataConn.close()
+		}
+	}
+	g.connections.Store(m)
+}
+
+func (g *gossiper) onHostDown(b *BrokerInfo) {
 	if g.localDb.IsShuttingDown() {
 		return
 	}
@@ -83,7 +116,7 @@ func (g *gossiper) onHostDown(b *types.BrokerInfo) {
 	}
 }
 
-func (g *gossiper) onHostUp(b *types.BrokerInfo) {
+func (g *gossiper) onHostUp(b *BrokerInfo) {
 	if g.localDb.IsShuttingDown() {
 		return
 	}
@@ -92,7 +125,7 @@ func (g *gossiper) onHostUp(b *types.BrokerInfo) {
 	}
 }
 
-func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
+func (g *gossiper) createClient(broker BrokerInfo) *clientInfo {
 	gossipConnection := &atomic.Value{}
 
 	clientInfo := &clientInfo{
@@ -119,7 +152,7 @@ func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 				conn, err := net.Dial(network, addr)
 				if err != nil {
 					// Clean whatever is in cache with a connection marked as closed
-					gossipConnection.Store(types.NewFailedConnection())
+					gossipConnection.Store(NewFailedConnection())
 					clientInfo.startReconnection(g, &broker)
 					return conn, err
 				}
@@ -128,7 +161,7 @@ func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 				atomic.StoreInt32(&clientInfo.isConnected, 1)
 
 				log.Info().Msgf("Connected to peer %s on gossip port", addr)
-				c := types.NewTrackedConnection(conn, func(c *types.TrackedConnection) {
+				c := NewTrackedConnection(conn, func(c *TrackedConnection) {
 					log.Warn().Msgf("Connection to peer %s on gossip port closed", addr)
 					clientInfo.startReconnection(g, &broker)
 				})
@@ -158,7 +191,7 @@ func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 				}
 
 				log.Info().Msgf("Connected to peer %s on re-routing (gossip) port", addr)
-				c := types.NewTrackedConnection(conn, func(c *types.TrackedConnection) {
+				c := NewTrackedConnection(conn, func(c *TrackedConnection) {
 					log.Warn().Msgf("Connection to peer %s on re-routing port closed", addr)
 				})
 				return c, nil
@@ -174,7 +207,7 @@ func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 	return clientInfo
 }
 
-func (g *gossiper) getPeerUrl(b *types.BrokerInfo, path string) string {
+func (g *gossiper) getPeerUrl(b *BrokerInfo, path string) string {
 	return fmt.Sprintf("http://%s:%d%s", b.HostName, g.config.GossipPort(), path)
 }
 
@@ -196,16 +229,17 @@ type clientInfo struct {
 	isConnected              int32         // Determines whether there's an open connection to gossip HTTP/2 server
 	dataMessages             chan *dataRequest
 	hostName                 string
-	isReconnecting           int32                   // Used for concurrency control on reconnection
-	onHostDown               func(*types.BrokerInfo) // Func to be called when broker status changed from up to down
-	onHostUp                 func(*types.BrokerInfo) // Func to be called when broker status changed from down to up
-	readyNewDataConnection   chan bool               // Gets a message when the peer is ready to accept data connections
-	readyNewGossipConnection chan bool               // Gets a message when the peer is ready to accept gossip connections
+	isReconnecting           int32             // Used for concurrency control on reconnection
+	onHostDown               func(*BrokerInfo) // Func to be called when broker status changed from up to down
+	onHostUp                 func(*BrokerInfo) // Func to be called when broker status changed from down to up
+	readyNewDataConnection   chan bool         // Gets a message when the peer is ready to accept data connections
+	readyNewGossipConnection chan bool         // Gets a message when the peer is ready to accept gossip connections
 }
 
 func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 	i := 0
-	for {
+	shouldExit := false
+	for !shouldExit {
 		dataConn, err := newDataConnection(c, config)
 		if err != nil {
 			delayMs := math.Pow(2, float64(i)) * baseReconnectionDelayMs
@@ -219,8 +253,13 @@ func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 			delay := utils.Jitter(time.Duration(delayMs) * time.Millisecond)
 
 			select {
-			case <-c.readyNewDataConnection:
-				log.Debug().Msgf("Attempting new data connection after receiving ready message")
+			case shouldConnect := <-c.readyNewDataConnection:
+				if !shouldConnect {
+					shouldExit = true
+					log.Debug().Msgf("Not attempting further data reconnections to %s", c.hostName)
+				} else {
+					log.Debug().Msgf("Attempting new data connection after receiving ready message")
+				}
 			case <-time.After(delay):
 			}
 
@@ -229,6 +268,7 @@ func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 
 		// Reset delay
 		i = 0
+		c.dataConn.Store(dataConn)
 
 		// Wait for connection to be closed
 		<-dataConn.closed
@@ -241,7 +281,7 @@ func (cli *clientInfo) isHostUp() bool {
 }
 
 // startReconnection starts reconnection in the background if it hasn't started
-func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
+func (c *clientInfo) startReconnection(g *gossiper, broker *BrokerInfo) {
 	// Dial handlers might call this func multiple times
 	if !atomic.CompareAndSwapInt32(&c.isReconnecting, 0, 1) {
 		return
@@ -267,12 +307,21 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
 			}
 
 			delay := utils.Jitter(time.Duration(delayMs) * time.Millisecond)
+			shouldConnect := true
 
 			select {
-			case <-c.readyNewGossipConnection:
+			case shouldConnect = <-c.readyNewGossipConnection:
+				if !shouldConnect {
+					break
+				}
 				log.Debug().Msgf("Attempting to reconnect to %s after receiving a ready message", broker)
 			case <-time.After(delay):
 				log.Debug().Msgf("Attempting to reconnect to %s after %v ms", broker, delayMs)
+			}
+
+			if !shouldConnect {
+				log.Debug().Msgf("Not attempting further gossip reconnections to %s", c.hostName)
+				break
 			}
 
 			err := c.makeFirstRequest(g, broker)
@@ -293,7 +342,7 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
 }
 
 // Makes the first request as a gossip client and returns nil when succeeded
-func (c *clientInfo) makeFirstRequest(g *gossiper, broker *types.BrokerInfo) error {
+func (c *clientInfo) makeFirstRequest(g *gossiper, broker *BrokerInfo) error {
 	ordinal := g.discoverer.Topology().MyOrdinal()
 	// Serialization can't fail
 	jsonBody, _ := json.Marshal(ordinal)

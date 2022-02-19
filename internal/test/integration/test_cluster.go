@@ -24,14 +24,29 @@ type TestBroker struct {
 	startChan chan bool
 	brokerName string
 	output  []string
+	options *TestBrokerOptions
+}
+
+type TestBrokerOptions struct {
+	InitialClusterSize int
 }
 
 // Creates and starts a broker
-func NewTestBroker(ordinal int) *TestBroker {
+func NewTestBroker(ordinal int, options... *TestBrokerOptions) *TestBroker {
+	if len(options) > 1 {
+		panic("Only 1 set of options is supported")
+	}
+
+	brokerOptions := &TestBrokerOptions{}
+	if len(options) == 1 {
+		brokerOptions = options[0]
+	}
+
 	b := TestBroker{
 		ordinal: ordinal,
 		startChan: make(chan bool, 1),
 		brokerName: fmt.Sprintf("Broker%d", ordinal),
+		options: brokerOptions,
 	}
 	b.Start()
 	return &b
@@ -42,11 +57,21 @@ func (b *TestBroker) Start() {
 	Expect(err).NotTo(HaveOccurred(), "Build failed: %s", string(buildOutput))
 	cmd := exec.Command("./barco.exe", "-debug")
 	os.RemoveAll(fmt.Sprintf("./home%d", b.ordinal))
+
+	names := make([]string, 0)
+	brokerLength := 3
+	if b.options.InitialClusterSize > 0 {
+		brokerLength = b.options.InitialClusterSize
+	}
+	for i := 1; i <= brokerLength; i++ {
+		names = append(names, fmt.Sprintf("127.0.0.%d", i))
+	}
+
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("BARCO_ORDINAL=%d", b.ordinal),
 		fmt.Sprintf("BARCO_HOME=home%d", b.ordinal),
+		fmt.Sprintf("BARCO_BROKER_NAMES=%s", strings.Join(names, ",")),
 		"BARCO_LISTEN_ON_ALL=false",
-		"BARCO_BROKER_NAMES=127.0.0.1,127.0.0.2,127.0.0.3",
 		"BARCO_SEGMENT_FLUSH_INTERVAL_MS=1000",
 		"BARCO_CONSUMER_ADD_DELAY_MS=200",
 		"BARCO_TOPOLOGY_FILE_POLL_DELAY_MS=400",
@@ -99,7 +124,7 @@ func (b *TestBroker) WaitForStart() {
 
 	if !started {
 		b.Kill()
-		Fail("Broker could not be started")
+		Fail(fmt.Sprintf("Broker %d could not be started", b.ordinal))
 	}
 }
 

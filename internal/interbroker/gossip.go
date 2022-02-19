@@ -132,12 +132,16 @@ func (g *gossiper) Init() error {
 }
 
 func (g *gossiper) OnTopologyChange(previousTopology *TopologyInfo, topology *TopologyInfo) {
-	// TODO: Create new connections, refresh existing
 	if len(topology.Brokers) > len(previousTopology.Brokers) {
 		log.Info().Msgf("Scaling up detected, opening connections to new brokers")
 		g.createNewClients(topology)
 	} else {
-		panic("Not implemented")
+		if len(topology.Brokers) <= previousTopology.MyOrdinal() {
+			log.Info().Msgf("Scaling down detected but I'm going away, ignoring")
+			return
+		}
+		log.Info().Msgf("Scaling down detected, closing connections to existing brokers")
+		g.removeClients(previousTopology, topology)
 	}
 }
 

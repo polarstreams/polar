@@ -178,18 +178,18 @@ func createTopology(totalBrokers int, config conf.DiscovererConfig) *TopologyInf
 // Gets the number of topology from env vars and updates it based on file system changes
 func (d *discoverer) loadFixedTopology(ordinal int) error {
 	names := os.Getenv(envBrokerNames)
-	topology, err := createFixedTopology(ordinal, names)
+	t, err := createFixedTopology(ordinal, names)
 	if err != nil {
 		return err
 	}
 
-	d.topology.Store(topology)
+	d.topology.Store(t)
 
 	go func() {
 		// Start watching changes in the file system in the background
-		replicas := len(topology.Brokers)
 		for {
 			time.Sleep(d.config.FixedTopologyFilePollDelay())
+			previousTopology := d.Topology()
 			contents, err := os.ReadFile(filepath.Join(d.config.HomePath(), conf.TopologyFileName))
 			if err != nil {
 				continue
@@ -201,20 +201,18 @@ func (d *discoverer) loadFixedTopology(ordinal int) error {
 				continue
 			}
 
-			previousTopology := topology
 			topology, err := createFixedTopology(ordinal, names)
 			if err != nil {
 				log.Warn().Err(err).Msgf("There was an error reading file-based topology from file contents")
 				continue
 			}
 
-			newReplicas := len(topology.Brokers)
-			if newReplicas != replicas {
+			if len(topology.Brokers) != len(previousTopology.Brokers) {
 				log.Info().Msgf(
-					"Topology changed from %d to %d brokers based on file information", replicas, newReplicas)
-				replicas = newReplicas
+					"Topology changed from %d to %d brokers based on file information",
+					len(previousTopology.Brokers),
+					len(topology.Brokers))
 				d.topology.Store(topology)
-
 				d.emitTopologyChangeEvent(previousTopology, topology)
 			}
 		}

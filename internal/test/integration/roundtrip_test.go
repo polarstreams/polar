@@ -6,6 +6,7 @@ package integration_test
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -44,11 +45,13 @@ var _ = Describe("A 3 node cluster", func() {
 		var b0 *TestBroker
 		var b1 *TestBroker
 		var b2 *TestBroker
+		var b3 *TestBroker
 
 		BeforeEach(func ()  {
 			b0 = NewTestBroker(0)
 			b1 = NewTestBroker(1)
 			b2 = NewTestBroker(2)
+			b3 = nil
 		})
 
 		AfterEach(func ()  {
@@ -56,6 +59,10 @@ var _ = Describe("A 3 node cluster", func() {
 			b0.Shutdown()
 			b1.Shutdown()
 			b2.Shutdown()
+
+			if b3 != nil {
+				b3.Shutdown()
+			}
 		})
 
 		It("should work", func() {
@@ -177,8 +184,17 @@ var _ = Describe("A 3 node cluster", func() {
 			newBrokers := "127.0.0.1,127.0.0.2,127.0.0.3,127.0.0.4,127.0.0.5,127.0.0.6"
 			os.WriteFile(filepath.Join("home0", conf.TopologyFileName), []byte(newBrokers), 0644)
 
+			b3 = NewTestBroker(3, &TestBrokerOptions{InitialClusterSize: 6})
+			time.Sleep(1 * time.Second)
+
 			b0.WaitOutput("Topology changed from 3 to 6 brokers")
 			b0.WaitOutput("Creating initial peer request to 127.0.0.6")
+
+			newBrokers = "127.0.0.1,127.0.0.2,127.0.0.3"
+			os.WriteFile(filepath.Join("home0", conf.TopologyFileName), []byte(newBrokers), 0644)
+
+			fmt.Println("------- Finishing")
+			time.Sleep(2 * time.Second)
 		})
 	})
 })
