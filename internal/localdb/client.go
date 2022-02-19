@@ -2,6 +2,7 @@ package localdb
 
 import (
 	"database/sql"
+	"sync/atomic"
 
 	"github.com/barcostreams/barco/internal/conf"
 	. "github.com/barcostreams/barco/internal/types"
@@ -36,6 +37,9 @@ type Client interface {
 
 	// Gets the generation by token and version, returns nil when not found
 	GenerationInfo(token Token, version GenVersion) (*Generation, error)
+
+	// Determines whether the localdb is being closed as a result of an application shutting down
+	IsShuttingDown() bool
 }
 
 // NewClient creates a new instance of Client.
@@ -48,10 +52,11 @@ func NewClient(config conf.LocalDbConfig) Client {
 }
 
 type client struct {
-	config  conf.LocalDbConfig
-	dbIsNew bool
-	db      *sql.DB
-	queries queries
+	config       conf.LocalDbConfig
+	dbIsNew      bool
+	db           *sql.DB
+	queries      queries
+	shuttingDown int32
 }
 
 func (c *client) Init() error {
@@ -93,7 +98,12 @@ func (c *client) DbWasNewlyCreated() bool {
 	return c.dbIsNew
 }
 
+func (c *client) IsShuttingDown() bool {
+	return atomic.LoadInt32(&c.shuttingDown) == 1
+}
+
 func (c *client) Close() {
+	atomic.StoreInt32(&c.shuttingDown, 1)
 	_ = c.queries.selectGenerationsByToken.Close()
 	_ = c.queries.selectGenerationsAll.Close()
 	_ = c.queries.selectGenerationsByParent.Close()

@@ -55,6 +55,8 @@ func GetPrimaryTokenIndex(token Token, tokenRangeLength int, ranges int) (Broker
 }
 
 func GetTokenAtIndex(length int, index int) Token {
+	// Wrap around
+	index = index % length
 	return startToken + Token(chunkSizeUnit*getRingFactor(length)*int64(index))
 }
 

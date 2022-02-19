@@ -51,6 +51,9 @@ type Gossiper interface {
 		contentLength int64,
 		body io.Reader) error
 
+	// Queries a peer for the state of another broker
+	ReadBrokerIsUp(ordinal int, brokerUpOrdinal int) (bool, error)
+
 	// Sends a message to the broker with the ordinal number containing the local snapshot of consumers
 	SendConsumerGroups(ordinal int, groups []ConsumerGroup) error
 
@@ -68,6 +71,9 @@ type Gossiper interface {
 
 	// WaitForPeersUp blocks until all peers are UP
 	WaitForPeersUp()
+
+	// Gets a snapshot information to determine whether a broker is considered as UP
+	IsHostUp(ordinal int) bool
 }
 
 //  GenerationGossiper is responsible for communicating actions related to generations.
@@ -95,10 +101,11 @@ type GenerationGossiper interface {
 	RegisterHostUpDownListener(listener HostUpDownListener)
 }
 
-func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Gossiper {
+func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer, localDb localdb.Client) Gossiper {
 	return &gossiper{
 		config:              config,
 		discoverer:          discoverer,
+		localDb:             localDb,
 		connectionsMutex:    sync.Mutex{},
 		connections:         atomic.Value{},
 		replicaWriters:      utils.NewCopyOnWriteMap(),
@@ -233,7 +240,7 @@ func (g *gossiper) WaitForPeersUp() {
 	for {
 		allPeersUp := false
 		for _, peer := range g.discoverer.Peers() {
-			if client := g.getClientInfo(peer.Ordinal); client != nil && client.isHostUp() {
+			if g.IsHostUp(peer.Ordinal) {
 				allPeersUp = true
 			} else {
 				allPeersUp = false
@@ -256,6 +263,11 @@ func (g *gossiper) WaitForPeersUp() {
 
 		time.Sleep(waitForUpDelay)
 	}
+}
+
+func (g *gossiper) IsHostUp(ordinal int) bool {
+	client := g.getClientInfo(ordinal)
+	return client != nil && client.isHostUp()
 }
 
 func (g *gossiper) requestGet(ordinal int, baseUrl string) (*http.Response, error) {
@@ -320,6 +332,18 @@ func (g *gossiper) GetGenerations(ordinal int, token Token) GenReadResult {
 		result.Proposed = &gens[1]
 	}
 	return result
+}
+
+func (g *gossiper) ReadBrokerIsUp(ordinal int, brokerUpOrdinal int) (bool, error) {
+	url := fmt.Sprintf(conf.GossipHostIsUpUrl, strconv.Itoa(brokerUpOrdinal))
+	r, err := g.requestGet(ordinal, url)
+	if err != nil {
+		return false, err
+	}
+	defer r.Body.Close()
+	var value bool
+	err = json.NewDecoder(r.Body).Decode(&value)
+	return value, err
 }
 
 func (g *gossiper) ReadProducerOffset(ordinal int, topic *TopicDataId) (uint64, error) {

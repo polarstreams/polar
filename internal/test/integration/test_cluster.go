@@ -38,8 +38,8 @@ func NewTestBroker(ordinal int) *TestBroker {
 }
 
 func (b *TestBroker) Start() {
-	err := exec.Command("go", "build", "-o", "barco.exe", "../../../.").Run()
-	Expect(err).NotTo(HaveOccurred())
+	buildOutput, err := exec.Command("go", "build", "-o", "barco.exe", "../../../.").CombinedOutput()
+	Expect(err).NotTo(HaveOccurred(), "Build failed: %s", string(buildOutput))
 	cmd := exec.Command("./barco.exe", "-debug")
 	os.RemoveAll(fmt.Sprintf("./home%d", b.ordinal))
 	cmd.Env = append(os.Environ(),
@@ -72,7 +72,7 @@ func (b *TestBroker) Start() {
 
 			mu.Lock()
 			if len(b.output) >= maxOutput {
-				b.output = b.output[1:(maxOutput - 1)]
+				b.output = b.output[1:]
 			}
 			b.output = append(b.output, value)
 			mu.Unlock()

@@ -67,12 +67,18 @@ func (g *gossiper) OpenConnections() error {
 }
 
 func (g *gossiper) onHostDown(b *types.BrokerInfo) {
+	if g.localDb.IsShuttingDown() {
+		return
+	}
 	for _, listener := range g.hostUpDownListeners {
 		listener.OnHostDown(*b)
 	}
 }
 
 func (g *gossiper) onHostUp(b *types.BrokerInfo) {
+	if g.localDb.IsShuttingDown() {
+		return
+	}
 	for _, listener := range g.hostUpDownListeners {
 		listener.OnHostUp(*b)
 	}
@@ -231,7 +237,8 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
 
 	go func() {
 		i := 0
-		for {
+		succeeded := false
+		for !g.localDb.IsShuttingDown() {
 			delay := math.Pow(2, float64(i)) * baseReconnectionDelay
 			if delay > maxReconnectionDelay {
 				delay = maxReconnectionDelay
@@ -250,12 +257,12 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
 
 			response, err := c.gossipClient.Get(g.getPeerUrl(broker, conf.StatusUrl))
 			if err == nil && response.StatusCode == http.StatusOK {
-				// Succeeded
+				succeeded = true
 				break
 			}
 		}
 
-		if atomic.CompareAndSwapInt32(&c.isConnected, 0, 1) {
+		if succeeded && atomic.CompareAndSwapInt32(&c.isConnected, 0, 1) {
 			log.Info().Msgf("Broker %s considered UP", broker.HostName)
 			c.onHostUp(broker)
 		}

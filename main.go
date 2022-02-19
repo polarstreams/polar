@@ -42,7 +42,7 @@ func main() {
 	topicHandler := topics.NewHandler(config)
 	discoverer := discovery.NewDiscoverer(config, localDbClient)
 	datalog := data.NewDatalog(config)
-	gossiper := interbroker.NewGossiper(config, discoverer)
+	gossiper := interbroker.NewGossiper(config, discoverer, localDbClient)
 	generator := ownership.NewGenerator(discoverer, gossiper, localDbClient)
 	producer := producing.NewProducer(config, topicHandler, discoverer, datalog, gossiper)
 	consumer := consuming.NewConsumer(config, localDbClient, discoverer, gossiper)

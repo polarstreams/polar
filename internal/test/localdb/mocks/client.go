@@ -128,6 +128,20 @@ func (_m *Client) Init() error {
 	return r0
 }
 
+// IsShuttingDown provides a mock function with given fields:
+func (_m *Client) IsShuttingDown() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	return r0
+}
+
 // LatestGenerations provides a mock function with given fields:
 func (_m *Client) LatestGenerations() ([]types.Generation, error) {
 	ret := _m.Called()

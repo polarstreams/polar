@@ -19,6 +19,11 @@ var _ = Describe("Token", func() {
 			Expect(GetTokenAtIndex(6, 0)).To(Equal(Token(math.MinInt64)))
 		})
 
+		It("should wrap around", func() {
+			Expect(GetTokenAtIndex(6, 6)).To(Equal(Token(math.MinInt64)))
+			Expect(GetTokenAtIndex(6, 7)).To(Equal(GetTokenAtIndex(6, 1)))
+		})
+
 		It("should cover all the ring and not have major differences", func() {
 			for factor := 0; factor < 12; factor++ {
 				nTokens := int(3 * math.Pow(2, float64(factor)))

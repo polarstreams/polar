@@ -84,6 +84,20 @@ func (_m *Gossiper) Init() error {
 	return r0
 }
 
+// IsHostUp provides a mock function with given fields: ordinal
+func (_m *Gossiper) IsHostUp(ordinal int) bool {
+	ret := _m.Called(ordinal)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(int) bool); ok {
+		r0 = rf(ordinal)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	return r0
+}
+
 // IsTokenRangeCovered provides a mock function with given fields: ordinal, token
 func (_m *Gossiper) IsTokenRangeCovered(ordinal int, token types.Token) (bool, error) {
 	ret := _m.Called(ordinal, token)
@@ -117,6 +131,27 @@ func (_m *Gossiper) OpenConnections() error {
 	}
 
 	return r0
+}
+
+// ReadBrokerIsUp provides a mock function with given fields: ordinal, brokerUpOrdinal
+func (_m *Gossiper) ReadBrokerIsUp(ordinal int, brokerUpOrdinal int) (bool, error) {
+	ret := _m.Called(ordinal, brokerUpOrdinal)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(int, int) bool); ok {
+		r0 = rf(ordinal, brokerUpOrdinal)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(int, int) error); ok {
+		r1 = rf(ordinal, brokerUpOrdinal)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // ReadProducerOffset provides a mock function with given fields: ordinal, topic

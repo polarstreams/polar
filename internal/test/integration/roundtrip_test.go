@@ -22,6 +22,13 @@ import (
 
 const consumerContentType = "application/vnd.barco.consumermessage"
 
+// Precalculated partition keys that will fall under a certain range
+const (
+	partitionKeyT0Range = "123"
+	partitionKeyT1Range = "567"
+	partitionKeyT2Range = "234"
+)
+
 func TestData(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Integration test suite")
@@ -43,6 +50,7 @@ var _ = Describe("A 3 node cluster", func() {
 		})
 
 		AfterEach(func ()  {
+			log.Debug().Msgf("Cleaning up cluster")
 			b0.Shutdown()
 			b1.Shutdown()
 			b2.Shutdown()
@@ -71,9 +79,9 @@ var _ = Describe("A 3 node cluster", func() {
 			expectResponseOk(resp)
 
 			// Use different partition keys
-			// expectResponseOk(client.ProduceJson(0, "abc", message, "123")) // B0
-			expectResponseOk(client.ProduceJson(0, "abc", message, "567")) // Re-routed to B1
-			expectResponseOk(client.ProduceJson(0, "abc", message, "234")) // Re-routed to B2
+			// expectResponseOk(client.ProduceJson(0, "abc", message, partitionKeyT0Range)) // B0
+			expectResponseOk(client.ProduceJson(0, "abc", message, partitionKeyT1Range)) // Re-routed to B1
+			expectResponseOk(client.ProduceJson(0, "abc", message, partitionKeyT2Range)) // Re-routed to B2
 
 			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
 			log.Debug().Msgf("Registered as consumer")
@@ -130,10 +138,23 @@ var _ = Describe("A 3 node cluster", func() {
 			expectResponseOk(client.ProduceJson(1, "abc", message, ""))
 			expectResponseOk(client.ProduceJson(2, "abc", message, ""))
 
+			time.Sleep(1 * time.Second)
+
+			log.Debug().Msgf("Shutting down B1")
 			b1.Shutdown()
 
 			b0.WaitOutput("Broker 127.0.0.2 considered DOWN")
 			b2.WaitOutput("Broker 127.0.0.2 considered DOWN")
+
+			b2.WaitOutput("Accepting myself as leader of T1 (-3074457345618259968) in v2")
+			b2.WaitOutput("Setting transaction for T1 (-3074457345618259968) as committed")
+			b0.WaitOutput("Setting committed version 2 with leader 2 for range [-3074457345618259968, 3074457345618255872]")
+
+			time.Sleep(1 * time.Second)
+
+			// B2 should ingest data in T1-T2 range
+			expectResponseOk(client.ProduceJson(2, "abc", message, partitionKeyT1Range))
+			time.Sleep(1 * time.Second)
 
 			log.Debug().Msgf("Restarting B1")
 			b1.Start()

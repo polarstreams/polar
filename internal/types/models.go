@@ -155,12 +155,12 @@ func (t *TopologyInfo) NextBrokers(index BrokerIndex, length int) []BrokerInfo {
 }
 
 // NaturalFollowers gets the ordinals of the brokers at position n+1 and n+2
-func (t *TopologyInfo) NaturalFollowers() []int {
+func (t *TopologyInfo) NaturalFollowers(brokerIndex BrokerIndex) []int {
 	totalBrokers := len(t.Brokers)
-	localIndex := int(t.LocalIndex)
+	index := int(brokerIndex)
 	return []int{
-		t.Brokers[(localIndex+1)%totalBrokers].Ordinal,
-		t.Brokers[(localIndex+2)%totalBrokers].Ordinal,
+		t.Brokers[(index+1)%totalBrokers].Ordinal,
+		t.Brokers[(index+2)%totalBrokers].Ordinal,
 	}
 }
 

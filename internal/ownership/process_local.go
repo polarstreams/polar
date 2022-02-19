@@ -12,7 +12,7 @@ import (
 
 // Processes creation of new generation for tokens that are naturally owned by this broker.
 // The reason of the creation it can be that we are starting new
-// or the broker came back online and it's trying to recover
+// or this broker came back online and it's trying to recover
 func (o *generator) processLocalMyToken(message *localGenMessage) creationError {
 	topology := o.discoverer.Topology()
 	token := topology.MyToken()
@@ -24,7 +24,7 @@ func (o *generator) processLocalMyToken(message *localGenMessage) creationError 
 		Version:   0,
 		Timestamp: timestamp.UnixMicro(),
 		Leader:    topology.MyOrdinal(),
-		Followers: topology.NaturalFollowers(),
+		Followers: topology.NaturalFollowers(topology.LocalIndex),
 		Tx:        uuid.New(),
 		TxLeader:  topology.MyOrdinal(),
 		Status:    StatusProposed,
@@ -88,7 +88,7 @@ func (o *generator) processLocalMyToken(message *localGenMessage) creationError 
 	if err := o.discoverer.SetGenerationProposed(&gen, localTx); err != nil {
 		log.Err(err).Msg("Unexpected error when setting as proposed locally")
 		// Don't retry
-		return newCreationError("Unexpected local error")
+		return newNonRetryableError("Unexpected local error")
 	}
 
 	log.Info().Msgf("Accepting myself as a leader for T%d (%d)", topology.MyOrdinal(), topology.MyToken())

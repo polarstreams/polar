@@ -31,12 +31,12 @@ type generator struct {
 	// items can be a local or remote
 	items      chan genMessage
 	discoverer discovery.TopologyGetter
-	gossiper   interbroker.GenerationGossiper
+	gossiper   interbroker.Gossiper
 	localDb    localdb.Client
 	nextUuid   func() uuid.UUID // allow injecting it from tests
 }
 
-func NewGenerator(discoverer discovery.TopologyGetter, gossiper interbroker.GenerationGossiper, localDb localdb.Client) Generator {
+func NewGenerator(discoverer discovery.TopologyGetter, gossiper interbroker.Gossiper, localDb localdb.Client) Generator {
 	o := &generator{
 		discoverer: discoverer,
 		gossiper:   gossiper,
@@ -94,7 +94,47 @@ func (o *generator) StartGenerations() {
 }
 
 func (o *generator) OnHostDown(broker BrokerInfo) {
-	log.Debug().Msgf("Generator detected %s as DOWN", &broker)
+	// Check position of the down broker
+	topology := o.discoverer.Topology()
+	brokerIndex := topology.GetIndex(broker.Ordinal)
+	followers := topology.NaturalFollowers(brokerIndex)
+	if followers[0] != topology.MyOrdinal() {
+		log.Debug().Msgf("Generator detected %s as DOWN but we are not the next broker in the ring", &broker)
+		return
+	}
+
+	previousGen := o.discoverer.Generation(topology.GetToken(brokerIndex))
+	if previousGen == nil {
+		log.Warn().Msgf("Broker B%d detected down without owning a generation", broker.Ordinal)
+		return
+	}
+
+	log.Info().Msgf("Generator detected %s as DOWN, trying to become the leader of T%d", &broker, broker.Ordinal)
+
+	go func() {
+		// If host comes back up, it's expected to try to retake its token
+		for !o.gossiper.IsHostUp(broker.Ordinal) && !o.localDb.IsShuttingDown() {
+			message := localFailoverGenMessage{
+				brokerIndex: brokerIndex,
+				broker:      broker,
+				topology:    topology,
+				previousGen: previousGen,
+				result:      make(chan creationError, 1),
+			}
+
+			// Send to the processing queue
+			o.items <- &message
+
+			// Wait for the result
+			err := <-message.result
+			if err == nil {
+				log.Debug().Msgf("Generator was able to become leader of T%d", broker.Ordinal)
+				break
+			}
+
+			time.Sleep(baseDelay)
+		}
+	}()
 }
 
 func (o *generator) OnHostUp(broker BrokerInfo) {
@@ -150,7 +190,9 @@ func (o *generator) process() {
 		// Process it in the background
 		message := message
 		go func() {
-			message.setResult(o.processGeneration(message))
+			err := o.processGeneration(message)
+			log.Warn().Err(err).Msgf("Processing generation resulted in error")
+			message.setResult(err)
 			atomic.StoreInt32(processingFlag, 0)
 		}()
 	}
@@ -169,6 +211,10 @@ func (o *generator) processGeneration(message genMessage) creationError {
 
 	if m, ok := message.(*remoteGenCommittedMessage); ok {
 		return o.processRemoteCommitted(m)
+	}
+
+	if m, ok := message.(*localFailoverGenMessage); ok {
+		return o.processLocalFailover(m)
 	}
 
 	log.Panic().Msg("Unhandled generation internal message type")

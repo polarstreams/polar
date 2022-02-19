@@ -22,6 +22,18 @@ func (m *localGenMessage) setResult(err creationError) {
 	m.result <- err
 }
 
+type localFailoverGenMessage struct {
+	brokerIndex BrokerIndex // Index of the broker that went down
+	broker      BrokerInfo
+	previousGen *Generation
+	topology    *TopologyInfo // Point in time topology info
+	result      chan creationError
+}
+
+func (m *localFailoverGenMessage) setResult(err creationError) {
+	m.result <- err
+}
+
 type remoteGenProposedMessage struct {
 	gen        *Generation
 	expectedTx *UUID
@@ -62,6 +74,10 @@ func wrapIfErr(err error) creationError {
 	if err == nil {
 		return nil
 	}
+	return wrapCreationError(err)
+}
+
+func wrapCreationError(err error) creationError {
 	return &simpleCreationError{
 		message:          err.Error(),
 		canBeRetriedFlag: true,

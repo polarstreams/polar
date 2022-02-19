@@ -74,6 +74,7 @@ func (g *gossiper) acceptHttpConnections() error {
 				":token",
 				":rangeIndex",
 				":version"), ToHandle(g.getProducerOffset))
+			router.GET(fmt.Sprintf(conf.GossipHostIsUpUrl, ":broker"), ToHandle(g.getBrokerIsUpHandler))
 
 			router.POST(conf.GossipConsumerGroupsInfoUrl, ToPostHandle(g.postConsumerGroupInfo))
 			router.POST(conf.GossipConsumerOffsetUrl, ToPostHandle(g.postConsumerOffset))
@@ -144,6 +145,18 @@ func (g *gossiper) postGenCommitHandler(w http.ResponseWriter, r *http.Request, 
 	}
 	// Use the registered listener
 	return g.genListener.OnRemoteSetAsCommitted(Token(token), message.Tx, message.Origin)
+}
+
+func (g *gossiper) getBrokerIsUpHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	broker, err := strconv.ParseInt(ps.ByName("broker"), 10, 64)
+	if err != nil {
+		return err
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	// Encode can't fail for a bool
+	_ = json.NewEncoder(w).Encode(g.IsHostUp(int(broker)))
+	return nil
 }
 
 func (g *gossiper) getTokenInRangeHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
