@@ -82,6 +82,9 @@ func (o *generator) OnRemoteSetAsCommitted(token Token, tx uuid.UUID, origin int
 }
 
 func (o *generator) StartGenerations() {
+	// Register UP/DOWN handler on the main thread
+	o.gossiper.RegisterHostUpDownListener(o)
+
 	started := make(chan bool, 1)
 	go func() {
 		started <- true
@@ -90,13 +93,23 @@ func (o *generator) StartGenerations() {
 	<-started
 }
 
+func (o *generator) OnHostDown(broker BrokerInfo) {
+	log.Debug().Msgf("Generator detected %s as DOWN", &broker)
+}
+
+func (o *generator) OnHostUp(broker BrokerInfo) {
+	log.Debug().Msgf("Generator detected %s as UP", &broker)
+}
+
 func (o *generator) startNew() {
 	reason := o.determineStartReason()
 
 	if reason == scalingUp {
 		// TODO: Send a message to broker n-1 to start the process
 		// of splitting the token range
+		log.Error().Msgf("Broker considered as scaling up")
 		return
+
 	}
 
 	message := localGenMessage{

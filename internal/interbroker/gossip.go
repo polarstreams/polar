@@ -90,37 +90,19 @@ type GenerationGossiper interface {
 
 	// RegisterGenListener adds a listener for new generations received by the gossipper
 	RegisterGenListener(listener GenListener)
-}
 
-type GenListener interface {
-	OnRemoteSetAsProposed(newGen *Generation, expectedTx *UUID) error
-
-	OnRemoteSetAsCommitted(token Token, tx UUID, origin int) error
-}
-
-type ConsumerInfoListener interface {
-	OnConsumerInfoFromPeer(ordinal int, groups []ConsumerGroup)
-
-	OnOffsetFromPeer(kv *OffsetStoreKeyValue)
-}
-
-type ReroutingListener interface {
-	OnReroutedMessage(topic string, querystring url.Values, contentLength int64, body io.ReadCloser) error
-}
-
-type GenReadResult struct {
-	Committed *Generation
-	Proposed  *Generation
-	Error     error
+	// RegisterHostUpDownListener adds a handler to that will be invoked when peers switch from UP->DOWN or DOWN->UP
+	RegisterHostUpDownListener(listener HostUpDownListener)
 }
 
 func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer) Gossiper {
 	return &gossiper{
-		config:           config,
-		discoverer:       discoverer,
-		connectionsMutex: sync.Mutex{},
-		connections:      atomic.Value{},
-		replicaWriters:   utils.NewCopyOnWriteMap(),
+		config:              config,
+		discoverer:          discoverer,
+		connectionsMutex:    sync.Mutex{},
+		connections:         atomic.Value{},
+		replicaWriters:      utils.NewCopyOnWriteMap(),
+		hostUpDownListeners: make([]HostUpDownListener, 0),
 	}
 }
 
@@ -131,6 +113,7 @@ type gossiper struct {
 	genListener          GenListener
 	consumerInfoListener ConsumerInfoListener
 	reroutingListener    ReroutingListener
+	hostUpDownListeners  []HostUpDownListener
 	connectionsMutex     sync.Mutex
 	// Map of connections
 	connections atomic.Value
@@ -174,6 +157,10 @@ func (g *gossiper) RegisterGenListener(listener GenListener) {
 		panic("Listener registered multiple times")
 	}
 	g.genListener = listener
+}
+
+func (g *gossiper) RegisterHostUpDownListener(listener HostUpDownListener) {
+	g.hostUpDownListeners = append(g.hostUpDownListeners, listener)
 }
 
 func (g *gossiper) RegisterConsumerInfoListener(listener ConsumerInfoListener) {

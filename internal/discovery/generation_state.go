@@ -119,7 +119,8 @@ func (d *discoverer) IsTokenInRange(token Token) bool {
 	// active generations managed by broker
 	for _, gen := range generationMap {
 		// containing the token but not the start token
-		if token <= gen.End && token > gen.Start {
+		// Note: end token is never contained
+		if token < gen.End && token > gen.Start {
 			return true
 		}
 	}

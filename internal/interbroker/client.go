@@ -66,6 +66,18 @@ func (g *gossiper) OpenConnections() error {
 	return nil
 }
 
+func (g *gossiper) onHostDown(b *types.BrokerInfo) {
+	for _, listener := range g.hostUpDownListeners {
+		listener.OnHostDown(*b)
+	}
+}
+
+func (g *gossiper) onHostUp(b *types.BrokerInfo) {
+	for _, listener := range g.hostUpDownListeners {
+		listener.OnHostUp(*b)
+	}
+}
+
 func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 	gossipConnection := &atomic.Value{}
 
@@ -73,7 +85,10 @@ func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 		gossipConnection: gossipConnection,
 		dataConn:         &atomic.Value{},
 		hostName:         broker.HostName,
+		isConnected:      0,
 		dataMessages:     make(chan *dataRequest, 256),
+		onHostDown:       g.onHostDown,
+		onHostUp:         g.onHostUp,
 	}
 
 	clientInfo.gossipClient = &http.Client{
@@ -92,6 +107,9 @@ func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 					clientInfo.startReconnection(g, &broker)
 					return conn, err
 				}
+
+				// Set as connected
+				atomic.StoreInt32(&clientInfo.isConnected, 1)
 
 				log.Info().Msgf("Connected to peer %s on gossip port", addr)
 				c := types.NewTrackedConnection(conn, func(c *types.TrackedConnection) {
@@ -158,9 +176,12 @@ type clientInfo struct {
 	routingClient    *http.Client  // HTTP/2 client for re-routing events to the natural leader
 	gossipConnection *atomic.Value // Tracked connection to determine gossip state
 	dataConn         *atomic.Value // Client data connection
+	isConnected      int32         // Determines whether there's an open connection to gossip HTTP/2 server
 	dataMessages     chan *dataRequest
 	hostName         string
-	isReconnecting   int32
+	isReconnecting   int32                   // Used for concurrency control on reconnection
+	onHostDown       func(*types.BrokerInfo) // Func to be called when broker status changed from up to down
+	onHostUp         func(*types.BrokerInfo) // Func to be called when broker status changed from down to up
 }
 
 func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
@@ -190,15 +211,20 @@ func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 
 // isHostUp determines whether a host is considered UP
 func (cli *clientInfo) isHostUp() bool {
-	c, ok := cli.gossipConnection.Load().(*types.TrackedConnection)
-	return ok && c.IsOpen()
+	return atomic.LoadInt32(&cli.isConnected) == 1
 }
 
 // startReconnection starts reconnection in the background if it hasn't started
 func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
-	// Determine is already reconnecting
+	// Dial handlers might call this func multiple times
 	if !atomic.CompareAndSwapInt32(&c.isReconnecting, 0, 1) {
 		return
+	}
+
+	// Set as not connected
+	if atomic.CompareAndSwapInt32(&c.isConnected, 1, 0) {
+		log.Warn().Msgf("Broker %s considered DOWN", broker.HostName)
+		c.onHostDown(broker)
 	}
 
 	log.Info().Msgf("Start reconnecting to %s", broker.HostName)
@@ -227,6 +253,11 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
 				// Succeeded
 				break
 			}
+		}
+
+		if atomic.CompareAndSwapInt32(&c.isConnected, 0, 1) {
+			log.Info().Msgf("Broker %s considered UP", broker.HostName)
+			c.onHostUp(broker)
 		}
 
 		// Leave field as 0 to allow new reconnections

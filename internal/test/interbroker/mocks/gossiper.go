@@ -150,6 +150,11 @@ func (_m *Gossiper) RegisterGenListener(listener interbroker.GenListener) {
 	_m.Called(listener)
 }
 
+// RegisterHostUpDownListener provides a mock function with given fields: listener
+func (_m *Gossiper) RegisterHostUpDownListener(listener interbroker.HostUpDownListener) {
+	_m.Called(listener)
+}
+
 // RegisterReroutedMessageListener provides a mock function with given fields: listener
 func (_m *Gossiper) RegisterReroutedMessageListener(listener interbroker.ReroutingListener) {
 	_m.Called(listener)

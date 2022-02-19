@@ -32,35 +32,35 @@ var _ = Describe("A 3 node cluster", func() {
 	// sudo ifconfig lo0 alias 127.0.0.2 up && sudo ifconfig lo0 alias 127.0.0.3 up
 
 	Describe("Producing and consuming", func() {
+		var b0 *TestBroker
 		var b1 *TestBroker
 		var b2 *TestBroker
-		var b3 *TestBroker
 
 		BeforeEach(func ()  {
-			b1 = NewTestBroker(0)
-			b2 = NewTestBroker(1)
-			b3 = NewTestBroker(2)
+			b0 = NewTestBroker(0)
+			b1 = NewTestBroker(1)
+			b2 = NewTestBroker(2)
 		})
 
 		AfterEach(func ()  {
+			b0.Shutdown()
 			b1.Shutdown()
 			b2.Shutdown()
-			b3.Shutdown()
 		})
 
 		It("should work", func() {
 			start := time.Now()
+			b0.WaitForStart()
 			b1.WaitForStart()
 			b2.WaitForStart()
-			b3.WaitForStart()
 
 			log.Debug().Msgf("All brokers started successfully")
 
-			b1.WaitOutput("Setting committed version 1 with leader 0 for range")
+			b0.WaitOutput("Setting committed version 1 with leader 0 for range")
 			log.Debug().Msgf("Waited for first broker")
-			b2.WaitOutput("Setting committed version 1 with leader 1 for range")
+			b1.WaitOutput("Setting committed version 1 with leader 1 for range")
 			log.Debug().Msgf("Waited for second broker")
-			b3.WaitOutput("Setting committed version 1 with leader 2 for range")
+			b2.WaitOutput("Setting committed version 1 with leader 2 for range")
 			log.Debug().Msgf("Waited for third broker")
 
 			message := `{"hello": "world"}`
@@ -103,6 +103,40 @@ var _ = Describe("A 3 node cluster", func() {
 
 			// Test with HTTP/1
 			expectResponseOk(NewTestClient(&TestClientOptions{HttpVersion: 1}).ProduceJson(0, "abc", message, ""))
+
+			client.Close()
+		})
+
+		It("should work with brokers going down", func() {
+			b0.WaitForStart()
+			b1.WaitForStart()
+			b2.WaitForStart()
+
+			log.Debug().Msgf("All brokers started successfully")
+
+			b0.WaitOutput("Setting committed version 1 with leader 0 for range")
+			log.Debug().Msgf("Waited for first broker")
+			b1.WaitOutput("Setting committed version 1 with leader 1 for range")
+			log.Debug().Msgf("Waited for second broker")
+			b2.WaitOutput("Setting committed version 1 with leader 2 for range")
+			log.Debug().Msgf("Waited for third broker")
+
+			message := `{"hello": "world"}`
+
+			// Test with HTTP/2
+			client := NewTestClient(nil)
+			// Send messages to all brokers
+			expectResponseOk(client.ProduceJson(0, "abc", message, ""))
+			expectResponseOk(client.ProduceJson(1, "abc", message, ""))
+			expectResponseOk(client.ProduceJson(2, "abc", message, ""))
+
+			b1.Shutdown()
+
+			b0.WaitOutput("Broker 127.0.0.2 considered DOWN")
+			b2.WaitOutput("Broker 127.0.0.2 considered DOWN")
+
+			log.Debug().Msgf("Restarting B1")
+			b1.Start()
 
 			client.Close()
 		})
