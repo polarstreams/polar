@@ -3,6 +3,7 @@ package discovery
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/barcostreams/barco/internal/test/conf/mocks"
 	dbMocks "github.com/barcostreams/barco/internal/test/localdb/mocks"
@@ -30,6 +31,7 @@ var _ = Describe("discoverer", func() {
 			os.Setenv(envBrokerNames, "abc,def,ghi")
 			d := &discoverer{
 				localDb: newLocalDbWithNoRecords(),
+				config:  newConfigFake(2),
 			}
 
 			d.Init()
@@ -276,12 +278,20 @@ func (c *configFake) BaseHostName() string {
 	return c.baseHostName
 }
 
+func (c *configFake) HomePath() string {
+	return "/var/lib/barco"
+}
+
 func (c *configFake) ConsumerRanges() int {
 	return 8
 }
 
 func (c *configFake) ListenOnAllAddresses() bool {
 	return true
+}
+
+func (c *configFake) FixedTopologyFilePollDelay() time.Duration {
+	return 10 * time.Second
 }
 
 func newConfigFake(ordinal int) *configFake {

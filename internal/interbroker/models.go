@@ -34,3 +34,14 @@ type GenReadResult struct {
 	Proposed  *Generation
 	Error     error
 }
+
+type clientMap map[int]*clientInfo
+
+// Creates a shallow clone of the map
+func (m clientMap) clone() clientMap {
+	result := make(clientMap, len(m))
+	for k, v := range m {
+		result[k] = v
+	}
+	return result
+}

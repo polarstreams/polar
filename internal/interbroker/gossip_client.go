@@ -24,48 +24,54 @@ const (
 	maxReconnectionDelayMs  = 10_000
 )
 
-type clientMap map[int]*clientInfo
+func (g *gossiper) OpenConnections() {
+	topology := g.discoverer.Topology()
+	log.Info().Msgf("Start opening connections to %d peers", len(topology.Brokers)-1)
+	g.createNewClients(g.discoverer.Topology())
+}
 
-func (g *gossiper) OpenConnections() error {
-	// Open connections in the background
-	c := make(chan bool, 1)
-	go func() {
-		c <- true
-		// We could use a single client for all peers but to
-		// reduce contention and having more fine grained control, we use one per each peer
-		g.connectionsMutex.Lock()
-		defer g.connectionsMutex.Unlock()
-		peers := g.discoverer.Peers()
-		m := make(clientMap, len(peers))
-		log.Debug().Msgf("Connecting to peers %v", peers)
-		var wg sync.WaitGroup
-		for _, peer := range peers {
-			wg.Add(1)
-			c := g.createClient(peer)
-			m[peer.Ordinal] = c
+// Creates the new clients, without replacing the existing ones, and starts connecting to the peers
+func (g *gossiper) createNewClients(topology *types.TopologyInfo) {
+	// We could use a single client for all peers but to
+	// reduce contention and having fine grained control, we use one per each peer
+	peers := topology.Peers()
+	g.connectionsMutex.Lock()
+	defer g.connectionsMutex.Unlock()
 
-			// Captured in closure
-			broker := peer
-			go func() {
-				defer wg.Done()
-				log.Debug().Msgf("Creating initial peer request to %s", broker.HostName)
-				err := c.makeFirstRequest(g, &broker)
+	var m clientMap
+	existing := g.connections.Load()
+	if existing == nil {
+		m = make(clientMap, len(peers))
+	} else {
+		m = existing.(clientMap).clone()
+	}
 
-				if err != nil {
-					// Reconnection will continue in the background as part of transport logic
-					log.Err(err).Msgf("Initial connection to http peer %s failed", broker.HostName)
-				}
-			}()
+	var wg sync.WaitGroup
+	for _, peer := range peers {
+		if _, ok := m[peer.Ordinal]; ok {
+			// Avoid replacing the existing ones
+			continue
 		}
-		wg.Wait()
+		wg.Add(1)
+		c := g.createClient(peer)
+		m[peer.Ordinal] = c
 
-		g.connections.Store(m)
-	}()
+		// Captured in closure
+		broker := peer
+		go func() {
+			defer wg.Done()
+			log.Debug().Msgf("Creating initial peer request to %s", broker.HostName)
+			err := c.makeFirstRequest(g, &broker)
 
-	<-c
-	log.Info().Msg("Start opening connections to peers")
+			if err != nil {
+				// Reconnection will continue in the background as part of transport logic
+				log.Err(err).Msgf("Initial connection to http peer %s failed", broker.HostName)
+			}
+		}()
+	}
+	wg.Wait()
 
-	return nil
+	g.connections.Store(m)
 }
 
 func (g *gossiper) onHostDown(b *types.BrokerInfo) {

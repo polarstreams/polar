@@ -41,7 +41,7 @@ type Gossiper interface {
 	AcceptConnections() error
 
 	// Starts opening connections to known peers.
-	OpenConnections() error
+	OpenConnections()
 
 	// Sends a message to be handled as a leader of a token
 	SendToLeader(
@@ -122,19 +122,23 @@ type gossiper struct {
 	reroutingListener    ReroutingListener
 	hostUpDownListeners  []HostUpDownListener
 	connectionsMutex     sync.Mutex
-	// Map of connections
-	connections atomic.Value
-	// Map of SegmentWriter to be use for replicating data as a replica
-	replicaWriters *utils.CopyOnWriteMap
+	connections          atomic.Value          // Map of connections with copy-on-write semantics
+	replicaWriters       *utils.CopyOnWriteMap // Map of SegmentWriter to be use for replicating data as a replica
 }
 
 func (g *gossiper) Init() error {
-	g.discoverer.RegisterListener(g.onDiscoveredTopologyChange)
+	g.discoverer.RegisterListener(g)
 	return nil
 }
 
-func (g *gossiper) onDiscoveredTopologyChange() {
+func (g *gossiper) OnTopologyChange(previousTopology *TopologyInfo, topology *TopologyInfo) {
 	// TODO: Create new connections, refresh existing
+	if len(topology.Brokers) > len(previousTopology.Brokers) {
+		log.Info().Msgf("Scaling up detected, opening connections to new brokers")
+		g.createNewClients(topology)
+	} else {
+		panic("Not implemented")
+	}
 }
 
 func (g *gossiper) IsTokenRangeCovered(ordinal int, token Token) (bool, error) {
@@ -230,7 +234,8 @@ func (g *gossiper) SendToLeader(
 }
 
 func (g *gossiper) WaitForPeersUp() {
-	if len(g.discoverer.Peers()) == 0 {
+	peers := g.discoverer.Topology().Peers()
+	if len(peers) == 0 {
 		log.Warn().Msg("No peer detected (dev mode)")
 		return
 	}
@@ -239,7 +244,7 @@ func (g *gossiper) WaitForPeersUp() {
 	lastWarn := 0
 	for {
 		allPeersUp := false
-		for _, peer := range g.discoverer.Peers() {
+		for _, peer := range peers {
 			if g.IsHostUp(peer.Ordinal) {
 				allPeersUp = true
 			} else {

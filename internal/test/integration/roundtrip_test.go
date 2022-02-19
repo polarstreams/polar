@@ -8,6 +8,8 @@ import (
 	"encoding/binary"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -36,7 +38,7 @@ func TestData(t *testing.T) {
 
 var _ = Describe("A 3 node cluster", func() {
 	// Note that on macos you need to manually create the alias for the loopback addresses, for example
-	// sudo ifconfig lo0 alias 127.0.0.2 up && sudo ifconfig lo0 alias 127.0.0.3 up
+	// for i in {0..12}; do sudo ifconfig lo0 alias 127.0.0.$i up; done
 
 	Describe("Producing and consuming", func() {
 		var b0 *TestBroker
@@ -165,6 +167,18 @@ var _ = Describe("A 3 node cluster", func() {
 			time.Sleep(1 * time.Second)
 
 			client.Close()
+		})
+
+		It("should get topology changes and resize the ring", func () {
+			b0.WaitForStart()
+			b1.WaitForStart()
+			b2.WaitForStart()
+
+			newBrokers := "127.0.0.1,127.0.0.2,127.0.0.3,127.0.0.4,127.0.0.5,127.0.0.6"
+			os.WriteFile(filepath.Join("home0", conf.TopologyFileName), []byte(newBrokers), 0644)
+
+			b0.WaitOutput("Topology changed from 3 to 6 brokers")
+			b0.WaitOutput("Creating initial peer request to 127.0.0.6")
 		})
 	})
 })

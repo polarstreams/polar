@@ -49,6 +49,7 @@ func (b *TestBroker) Start() {
 		"BARCO_BROKER_NAMES=127.0.0.1,127.0.0.2,127.0.0.3",
 		"BARCO_SEGMENT_FLUSH_INTERVAL_MS=1000",
 		"BARCO_CONSUMER_ADD_DELAY_MS=200",
+		"BARCO_TOPOLOGY_FILE_POLL_DELAY_MS=400",
 	)
 	stderr, err := cmd.StderrPipe()
 	Expect(err).NotTo(HaveOccurred())

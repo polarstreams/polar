@@ -55,17 +55,15 @@ func main() {
 		}
 	}
 
-	// Initialization phase ended
+	// Basic initialization phase ended
+	metrics.Serve(discoverer, config)
+
 	log.Info().Msg("Start accepting connections from other brokers")
 	if err := gossiper.AcceptConnections(); err != nil {
 		log.Fatal().Err(err).Msg("Gossiper was not able to accept connections, exiting")
 	}
 
-	if err := gossiper.OpenConnections(); err != nil {
-		log.Fatal().Err(err).Msg("Gossiper was not able to open connections, exiting")
-	}
-
-	metrics.Serve(discoverer, config)
+	gossiper.OpenConnections()
 
 	gossiper.WaitForPeersUp()
 

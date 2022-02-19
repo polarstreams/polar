@@ -120,17 +120,8 @@ func (_m *Gossiper) IsTokenRangeCovered(ordinal int, token types.Token) (bool, e
 }
 
 // OpenConnections provides a mock function with given fields:
-func (_m *Gossiper) OpenConnections() error {
-	ret := _m.Called()
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func() error); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
+func (_m *Gossiper) OpenConnections() {
+	_m.Called()
 }
 
 // ReadBrokerIsUp provides a mock function with given fields: ordinal, brokerUpOrdinal

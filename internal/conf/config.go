@@ -17,15 +17,17 @@ const (
 	SegmentFileExtension   = "dlog"
 	IndexFileExtension     = "index"
 	ProducerOffsetFileName = "producer.offset"
+	TopologyFileName       = "topology.txt" // Used for non-k8s envs
 )
 
 const (
-	envHome                   = "BARCO_HOME"
-	envListenOnAllAddresses   = "BARCO_LISTEN_ON_ALL"
-	envGossipPort             = "BARCO_GOSSIP_PORT"
-	envGossipDataPort         = "BARCO_GOSSIP_DATA_PORT"
-	envSegmentFlushIntervalMs = "BARCO_SEGMENT_FLUSH_INTERVAL_MS"
-	envConsumerAddDelay       = "BARCO_CONSUMER_ADD_DELAY_MS"
+	envHome                    = "BARCO_HOME"
+	envListenOnAllAddresses    = "BARCO_LISTEN_ON_ALL"
+	envGossipPort              = "BARCO_GOSSIP_PORT"
+	envGossipDataPort          = "BARCO_GOSSIP_DATA_PORT"
+	envSegmentFlushIntervalMs  = "BARCO_SEGMENT_FLUSH_INTERVAL_MS"
+	envConsumerAddDelay        = "BARCO_CONSUMER_ADD_DELAY_MS"
+	envTopologyFilePollDelayMs = "BARCO_TOPOLOGY_FILE_POLL_DELAY_MS"
 )
 
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
@@ -39,11 +41,11 @@ type Config interface {
 	DiscovererConfig
 	AdminPort() int
 	MetricsPort() int
-	HomePath() string
 	CreateAllDirs() error
 }
 
 type BasicConfig interface {
+	HomePath() string
 	ListenOnAllAddresses() bool
 	ConsumerRanges() int // The number of ranges to partition any token range.
 }
@@ -70,6 +72,7 @@ type DiscovererConfig interface {
 	// BaseHostName is name prefix that should be concatenated with the ordinal to
 	// return the host name of a replica
 	BaseHostName() string
+	FixedTopologyFilePollDelay() time.Duration // The delay between attempts to read file for changes in topology
 }
 
 type ProducerConfig interface {
@@ -239,6 +242,11 @@ func (c *config) Ordinal() int {
 
 func (c *config) BaseHostName() string {
 	return c.baseHostName
+}
+
+func (c *config) FixedTopologyFilePollDelay() time.Duration {
+	ms := envInt(envTopologyFilePollDelayMs, 10000)
+	return time.Duration(ms) * time.Millisecond
 }
 
 func env(name string, defaultValue string) string {

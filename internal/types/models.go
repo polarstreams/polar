@@ -170,6 +170,19 @@ func (t *TopologyInfo) PrimaryToken(token Token, ranges int) (Token, BrokerIndex
 	return t.GetToken(brokerIndex), brokerIndex, rangeIndex
 }
 
+// Returns list of all brokers except itself
+func (t *TopologyInfo) Peers() []BrokerInfo {
+	brokers := t.Brokers
+	result := make([]BrokerInfo, 0, len(brokers)-1)
+	index := int(t.LocalIndex)
+	for i, broker := range brokers {
+		if i != index {
+			result = append(result, broker)
+		}
+	}
+	return result
+}
+
 // TopicDataId contains information to locate a certain piece of data.
 //
 // Specifies a topic, for a token, for a defined gen id.

@@ -201,7 +201,7 @@ func (_m *Discoverer) Peers() []types.BrokerInfo {
 }
 
 // RegisterListener provides a mock function with given fields: l
-func (_m *Discoverer) RegisterListener(l discovery.TopologyChangeHandler) {
+func (_m *Discoverer) RegisterListener(l discovery.TopologyChangeListener) {
 	_m.Called(l)
 }
 

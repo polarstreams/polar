@@ -3,10 +3,12 @@ package discovery
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/localdb"
@@ -28,7 +30,9 @@ var roundRobinRangeIndex uint32 = 0
 type Discoverer interface {
 	Initializer
 	TopologyGetter
-	RegisterListener(l TopologyChangeHandler)
+	// Adds a listener that will be invoked when there are changes in the number of replicas change.
+	// The func will be invoked using in a single thread, if there are multiple changes it will be invoked sequentially
+	RegisterListener(l TopologyChangeListener)
 	Shutdown()
 }
 
@@ -55,7 +59,9 @@ type TopologyGetter interface {
 	Brokers() []BrokerInfo
 }
 
-type TopologyChangeHandler func()
+type TopologyChangeListener interface {
+	OnTopologyChange(previousTopology *TopologyInfo, newTopology *TopologyInfo)
+}
 
 type genMap map[Token]Generation
 
@@ -66,7 +72,7 @@ func NewDiscoverer(config conf.DiscovererConfig, localDb localdb.Client) Discove
 	return &discoverer{
 		config:      config,
 		localDb:     localDb,
-		listeners:   make([]TopologyChangeHandler, 0),
+		listeners:   make([]TopologyChangeListener, 0),
 		topology:    atomic.Value{},
 		k8sClient:   newK8sClient(),
 		generations: generations,
@@ -77,7 +83,7 @@ func NewDiscoverer(config conf.DiscovererConfig, localDb localdb.Client) Discove
 type discoverer struct {
 	config      conf.DiscovererConfig
 	localDb     localdb.Client
-	listeners   []TopologyChangeHandler
+	listeners   []TopologyChangeListener
 	topology    atomic.Value // Gets the current brokers, index and ring
 	k8sClient   k8sClient
 	genMutex    sync.Mutex
@@ -86,15 +92,18 @@ type discoverer struct {
 }
 
 func (d *discoverer) Init() error {
-	if fixedOrdinal, err := strconv.Atoi(os.Getenv(envOrdinal)); err == nil {
-		d.topology.Store(createFixedTopology(fixedOrdinal))
-	} else {
+	if fixedOrdinal, err := strconv.Atoi(os.Getenv(envOrdinal)); err != nil {
 		// Use normal discovery
 		if err := d.k8sClient.init(); err != nil {
 			return err
 		}
 
-		d.loadTopology()
+		if err := d.loadTopology(); err != nil {
+			return err
+		}
+	} else {
+		// Use env var and file system discovery
+		d.loadFixedTopology(fixedOrdinal)
 	}
 
 	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.Topology().Brokers))
@@ -114,6 +123,7 @@ func (d *discoverer) Topology() *TopologyInfo {
 	return value.(*TopologyInfo)
 }
 
+// Gets the desired replicas from k8s api and watches for changes in the statefulset
 func (d *discoverer) loadTopology() error {
 	totalBrokers, err := d.k8sClient.getDesiredReplicas()
 	if err != nil {
@@ -131,23 +141,22 @@ func (d *discoverer) loadTopology() error {
 
 	go func() {
 		for replicasChanged := range d.k8sClient.replicasChangeChan() {
-			currentTopology := d.Topology()
-			log.Info().Msgf("Topology changed from %d to %d brokers", len(currentTopology.Brokers), replicasChanged)
+			previousTopology := d.Topology()
+			log.Info().Msgf("Topology changed from %d to %d brokers", len(previousTopology.Brokers), replicasChanged)
 			normalizedLen := utils.ValidRingLength(replicasChanged)
 			if normalizedLen != replicasChanged {
 				log.Error().Msgf("Not a valid ring size %d, using %d instead", replicasChanged, normalizedLen)
 				replicasChanged = normalizedLen
 			}
-			d.topology.Store(createTopology(replicasChanged, d.config))
+			topology := createTopology(replicasChanged, d.config)
+			d.topology.Store(topology)
+			d.emitTopologyChangeEvent(previousTopology, topology)
 		}
 	}()
 	return nil
 }
 
 func createTopology(totalBrokers int, config conf.DiscovererConfig) *TopologyInfo {
-	if totalBrokers == 0 {
-		totalBrokers = 1
-	}
 	baseHostName := config.BaseHostName()
 	localOrdinal := config.Ordinal()
 
@@ -166,41 +175,83 @@ func createTopology(totalBrokers int, config conf.DiscovererConfig) *TopologyInf
 	return &result
 }
 
-func createFixedTopology(ordinal int) *TopologyInfo {
+// Gets the number of topology from env vars and updates it based on file system changes
+func (d *discoverer) loadFixedTopology(ordinal int) error {
 	names := os.Getenv(envBrokerNames)
-	if names == "" {
-		return &TopologyInfo{}
+	topology, err := createFixedTopology(ordinal, names)
+	if err != nil {
+		return err
 	}
 
-	// We expect the names to be sorted by ordinal (0, 1, 2, 3, 4, 6)
-	parts := strings.Split(names, ",")
-	brokers := make([]BrokerInfo, len(parts), len(parts))
-	// TODO: Validate and round to 3*2^n
-	// ordinalList := utils.OrdinalsPlacementOrder(len(parts))
+	d.topology.Store(topology)
 
-	for i, hostName := range parts {
+	go func() {
+		// Start watching changes in the file system in the background
+		replicas := len(topology.Brokers)
+		for {
+			time.Sleep(d.config.FixedTopologyFilePollDelay())
+			contents, err := os.ReadFile(filepath.Join(d.config.HomePath(), conf.TopologyFileName))
+			if err != nil {
+				continue
+			}
+
+			names := string(contents)
+			if names == "" {
+				log.Debug().Msgf("Topology file is empty")
+				continue
+			}
+
+			previousTopology := topology
+			topology, err := createFixedTopology(ordinal, names)
+			if err != nil {
+				log.Warn().Err(err).Msgf("There was an error reading file-based topology from file contents")
+				continue
+			}
+
+			newReplicas := len(topology.Brokers)
+			if newReplicas != replicas {
+				log.Info().Msgf(
+					"Topology changed from %d to %d brokers based on file information", replicas, newReplicas)
+				replicas = newReplicas
+				d.topology.Store(topology)
+
+				d.emitTopologyChangeEvent(previousTopology, topology)
+			}
+		}
+	}()
+
+	return nil
+}
+
+func createFixedTopology(ordinal int, names string) (*TopologyInfo, error) {
+	// We expect the names or addresses to be sorted by ordinal
+	// e.g. barco-0, barco-1, barco-2, barco-3, barco-4, barco-5
+	if names == "" {
+		return nil, fmt.Errorf(
+			"When fixed topology is used, you need to define both %s and %s env variables", envOrdinal, envBrokerNames)
+	}
+	parts := strings.Split(names, ",")
+	if len(parts) < 3 {
+		return nil, fmt.Errorf("Topology information can't contain less than 3 broker names, obtained %v", parts)
+	}
+
+	length := utils.ValidRingLength(len(parts))
+	brokers := make([]BrokerInfo, length)
+
+	for i := 0; i < length; i++ {
 		brokers[i] = BrokerInfo{
 			Ordinal:  i,
 			IsSelf:   i == ordinal,
-			HostName: hostName,
+			HostName: parts[i],
 		}
 	}
 
 	result := NewTopology(brokers)
-	return &result
+	return &result, nil
 }
 
 func (d *discoverer) Peers() []BrokerInfo {
-	topology := d.Topology()
-	brokers := topology.Brokers
-	result := make([]BrokerInfo, 0, len(brokers)-1)
-	index := int(topology.LocalIndex)
-	for i, broker := range brokers {
-		if i != index {
-			result = append(result, broker)
-		}
-	}
-	return result
+	return d.Topology().Peers()
 }
 
 func (d *discoverer) Brokers() []BrokerInfo {
@@ -247,8 +298,18 @@ func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 	}
 }
 
-func (d *discoverer) RegisterListener(l TopologyChangeHandler) {
+func (d *discoverer) RegisterListener(l TopologyChangeListener) {
 	d.listeners = append(d.listeners, l)
+}
+
+func (d *discoverer) emitTopologyChangeEvent(previousTopology *TopologyInfo, newTopology *TopologyInfo) {
+	if len(d.listeners) == 0 {
+		return
+	}
+
+	for _, listener := range d.listeners {
+		listener.OnTopologyChange(previousTopology, newTopology)
+	}
 }
 
 func (d *discoverer) Shutdown() {}
