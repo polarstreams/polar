@@ -25,6 +25,7 @@ const (
 	GossipGenerationCommmitUrl  = "/v1/generation/%s/commit"
 	GossipTokenHasHistoryUrl    = "/v1/token/%s/has-history"
 	GossipTokenInRange          = "/v1/token/%s/in-range"
+	GossipBrokerIdentifyUrl     = "/v1/broker/identify" // Send/receive my info to the peer
 	GossipHostIsUpUrl           = "/v1/broker/%s/is-up"
 	GossipConsumerGroupsInfoUrl = "/v1/consumer/groups-info"        // Send/receive consumer groups info
 	GossipConsumerOffsetUrl     = "/v1/consumer/offsets"            // Send/receive consumer offsets

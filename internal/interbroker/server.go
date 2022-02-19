@@ -63,6 +63,7 @@ func (g *gossiper) acceptHttpConnections() error {
 			router.GET(conf.StatusUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 				fmt.Fprintf(w, "Peer listening on %d\n", port)
 			})
+			router.POST(conf.GossipBrokerIdentifyUrl, ToPostHandle(g.postBrokerIdentifyHandler))
 			router.GET(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), ToHandle(g.getGenHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationProposeUrl, ":token"), ToPostHandle(g.postGenProposeHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationCommmitUrl, ":token"), ToPostHandle(g.postGenCommitHandler))
@@ -145,6 +146,25 @@ func (g *gossiper) postGenCommitHandler(w http.ResponseWriter, r *http.Request, 
 	}
 	// Use the registered listener
 	return g.genListener.OnRemoteSetAsCommitted(Token(token), message.Tx, message.Origin)
+}
+
+func (g *gossiper) postBrokerIdentifyHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
+	var ordinal int
+	if err := json.NewDecoder(r.Body).Decode(&ordinal); err != nil {
+		return err
+	}
+
+	// We've got a message from a peer, it's ready to accept connections
+	clientInfo := g.getClientInfo(ordinal)
+
+	// Checking whether it's UP before sending the message as ready is prone to race conditions
+	// But it's just a mechanism to avoid waiting, if possible, otherwise it will still reconnect
+	if clientInfo != nil && !clientInfo.isHostUp() {
+		clientInfo.readyNewGossipConnection <- true
+		clientInfo.readyNewDataConnection <- true
+	}
+
+	return nil
 }
 
 func (g *gossiper) getBrokerIsUpHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {

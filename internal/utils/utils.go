@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -167,4 +168,14 @@ func ContainsToken(values []types.TokenRanges, key types.Token) bool {
 		}
 	}
 	return false
+}
+
+// Reads the body as a string and closes it
+func ReadBodyClose(resp *http.Response) (string, error) {
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	return string(body), nil
 }

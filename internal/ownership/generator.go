@@ -147,9 +147,7 @@ func (o *generator) startNew() {
 	if reason == scalingUp {
 		// TODO: Send a message to broker n-1 to start the process
 		// of splitting the token range
-		log.Error().Msgf("Broker considered as scaling up")
-		return
-
+		panic("Broker considered as scaling up")
 	}
 
 	message := localGenMessage{
@@ -191,9 +189,12 @@ func (o *generator) process() {
 		message := message
 		go func() {
 			err := o.processGeneration(message)
-			log.Warn().Err(err).Msgf("Processing generation resulted in error")
 			message.setResult(err)
 			atomic.StoreInt32(processingFlag, 0)
+
+			if err != nil {
+				log.Warn().Err(err).Msgf("Processing generation resulted in error")
+			}
 		}()
 	}
 }

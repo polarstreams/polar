@@ -16,6 +16,10 @@ type BrokerInfo struct {
 	HostName string
 }
 
+func (b *BrokerInfo) String() string {
+	return fmt.Sprintf("%s (B%d)", b.HostName, b.Ordinal)
+}
+
 // ConsumerGroup contains info about a single group of consumers.
 // It's used as an interbroker message to send snapshot of the local view of consumers to other brokers.
 type ConsumerGroup struct {
@@ -29,10 +33,6 @@ type ConsumerGroup struct {
 //
 // e.g. in a cluster composed of {0, 3, 1, 4, 2, 3}, the index of 3 is 1.
 type BrokerIndex int
-
-func (b *BrokerInfo) String() string {
-	return fmt.Sprintf("%s (%d)", b.HostName, b.Ordinal)
-}
 
 type TopicInfo struct {
 	Name string

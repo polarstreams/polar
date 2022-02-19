@@ -1,7 +1,9 @@
 package interbroker
 
 import (
+	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net"
@@ -18,8 +20,8 @@ import (
 )
 
 const (
-	baseReconnectionDelay = 20
-	maxReconnectionDelay  = 10_000
+	baseReconnectionDelayMs = 20
+	maxReconnectionDelayMs  = 10_000
 )
 
 type clientMap map[int]*clientInfo
@@ -47,7 +49,7 @@ func (g *gossiper) OpenConnections() error {
 			go func() {
 				defer wg.Done()
 				log.Debug().Msgf("Creating initial peer request to %s", broker.HostName)
-				_, err := c.gossipClient.Get(g.getPeerUrl(&broker, conf.StatusUrl))
+				err := c.makeFirstRequest(g, &broker)
 
 				if err != nil {
 					// Reconnection will continue in the background as part of transport logic
@@ -88,13 +90,15 @@ func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 	gossipConnection := &atomic.Value{}
 
 	clientInfo := &clientInfo{
-		gossipConnection: gossipConnection,
-		dataConn:         &atomic.Value{},
-		hostName:         broker.HostName,
-		isConnected:      0,
-		dataMessages:     make(chan *dataRequest, 256),
-		onHostDown:       g.onHostDown,
-		onHostUp:         g.onHostUp,
+		gossipConnection:         gossipConnection,
+		dataConn:                 &atomic.Value{},
+		hostName:                 broker.HostName,
+		isConnected:              0,
+		dataMessages:             make(chan *dataRequest, 256),
+		onHostDown:               g.onHostDown,
+		onHostUp:                 g.onHostUp,
+		readyNewDataConnection:   make(chan bool, 2),
+		readyNewGossipConnection: make(chan bool, 2),
 	}
 
 	clientInfo.gossipClient = &http.Client{
@@ -124,6 +128,7 @@ func (g *gossiper) createClient(broker types.BrokerInfo) *clientInfo {
 				})
 
 				// Store it at clientInfo level to retrieve the connection status later
+				// TODO: Unused, maybe remove
 				gossipConnection.Store(c)
 				return c, nil
 			},
@@ -178,16 +183,18 @@ func (g *gossiper) getClientInfo(ordinal int) *clientInfo {
 }
 
 type clientInfo struct {
-	gossipClient     *http.Client  // HTTP/2 client for gossip messages
-	routingClient    *http.Client  // HTTP/2 client for re-routing events to the natural leader
-	gossipConnection *atomic.Value // Tracked connection to determine gossip state
-	dataConn         *atomic.Value // Client data connection
-	isConnected      int32         // Determines whether there's an open connection to gossip HTTP/2 server
-	dataMessages     chan *dataRequest
-	hostName         string
-	isReconnecting   int32                   // Used for concurrency control on reconnection
-	onHostDown       func(*types.BrokerInfo) // Func to be called when broker status changed from up to down
-	onHostUp         func(*types.BrokerInfo) // Func to be called when broker status changed from down to up
+	gossipClient             *http.Client  // HTTP/2 client for gossip messages
+	routingClient            *http.Client  // HTTP/2 client for re-routing events to the natural leader
+	gossipConnection         *atomic.Value // Tracked connection to determine gossip state
+	dataConn                 *atomic.Value // Client data connection
+	isConnected              int32         // Determines whether there's an open connection to gossip HTTP/2 server
+	dataMessages             chan *dataRequest
+	hostName                 string
+	isReconnecting           int32                   // Used for concurrency control on reconnection
+	onHostDown               func(*types.BrokerInfo) // Func to be called when broker status changed from up to down
+	onHostUp                 func(*types.BrokerInfo) // Func to be called when broker status changed from down to up
+	readyNewDataConnection   chan bool               // Gets a message when the peer is ready to accept data connections
+	readyNewGossipConnection chan bool               // Gets a message when the peer is ready to accept gossip connections
 }
 
 func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
@@ -195,15 +202,22 @@ func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 	for {
 		dataConn, err := newDataConnection(c, config)
 		if err != nil {
-			delay := math.Pow(2, float64(i)) * baseReconnectionDelay
-			if delay > maxReconnectionDelay {
-				delay = maxReconnectionDelay
+			delayMs := math.Pow(2, float64(i)) * baseReconnectionDelayMs
+			if delayMs > maxReconnectionDelayMs {
+				delayMs = maxReconnectionDelayMs
 			} else {
 				i++
 			}
+
 			log.Info().Msgf("Client gossip data connection to %s could not be opened, retrying", c.hostName)
-			// TODO: Add jitter
-			time.Sleep(time.Duration(delay) * time.Millisecond)
+			delay := utils.Jitter(time.Duration(delayMs) * time.Millisecond)
+
+			select {
+			case <-c.readyNewDataConnection:
+				log.Debug().Msgf("Attempting new data connection after receiving ready message")
+			case <-time.After(delay):
+			}
+
 			continue
 		}
 
@@ -239,24 +253,24 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
 		i := 0
 		succeeded := false
 		for !g.localDb.IsShuttingDown() {
-			delay := math.Pow(2, float64(i)) * baseReconnectionDelay
-			if delay > maxReconnectionDelay {
-				delay = maxReconnectionDelay
+			delayMs := math.Pow(2, float64(i)) * baseReconnectionDelayMs
+			if delayMs > maxReconnectionDelayMs {
+				delayMs = maxReconnectionDelayMs
 			} else {
 				i++
 			}
 
-			time.Sleep(utils.Jitter(time.Duration(delay) * time.Millisecond))
+			delay := utils.Jitter(time.Duration(delayMs) * time.Millisecond)
 
-			if c := g.getClientInfo(broker.Ordinal); c == nil || c.hostName != broker.HostName {
-				// Topology changed, stop reconnecting
-				break
+			select {
+			case <-c.readyNewGossipConnection:
+				log.Debug().Msgf("Attempting to reconnect to %s after receiving a ready message", broker)
+			case <-time.After(delay):
+				log.Debug().Msgf("Attempting to reconnect to %s after %v ms", broker, delayMs)
 			}
 
-			log.Debug().Msgf("Attempting to reconnect to %s after %v ms", broker, delay)
-
-			response, err := c.gossipClient.Get(g.getPeerUrl(broker, conf.StatusUrl))
-			if err == nil && response.StatusCode == http.StatusOK {
+			err := c.makeFirstRequest(g, broker)
+			if err == nil {
 				succeeded = true
 				break
 			}
@@ -270,4 +284,24 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *types.BrokerInfo) {
 		// Leave field as 0 to allow new reconnections
 		atomic.StoreInt32(&c.isReconnecting, 0)
 	}()
+}
+
+// Makes the first request as a gossip client and returns nil when succeeded
+func (c *clientInfo) makeFirstRequest(g *gossiper, broker *types.BrokerInfo) error {
+	ordinal := g.discoverer.Topology().MyOrdinal()
+	// Serialization can't fail
+	jsonBody, _ := json.Marshal(ordinal)
+
+	resp, err := c.gossipClient.Post(
+		g.getPeerUrl(broker, conf.GossipBrokerIdentifyUrl), contentType, bytes.NewReader(jsonBody))
+
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := utils.ReadBodyClose(resp)
+		log.Error().Msgf("Initial gossip response from %s with status not OK: %s", broker, body)
+		return fmt.Errorf("Initial request to %s failed: %s", broker, body)
+	}
+	return nil
 }

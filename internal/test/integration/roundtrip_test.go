@@ -76,12 +76,12 @@ var _ = Describe("A 3 node cluster", func() {
 			// Test with HTTP/2
 			client := NewTestClient(nil)
 			resp := client.ProduceJson(0, "abc", message, "")
-			expectResponseOk(resp)
+			expectOk(resp)
 
 			// Use different partition keys
 			// expectResponseOk(client.ProduceJson(0, "abc", message, partitionKeyT0Range)) // B0
-			expectResponseOk(client.ProduceJson(0, "abc", message, partitionKeyT1Range)) // Re-routed to B1
-			expectResponseOk(client.ProduceJson(0, "abc", message, partitionKeyT2Range)) // Re-routed to B2
+			expectOk(client.ProduceJson(0, "abc", message, partitionKeyT1Range)) // Re-routed to B1
+			expectOk(client.ProduceJson(0, "abc", message, partitionKeyT2Range)) // Re-routed to B2
 
 			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
 			log.Debug().Msgf("Registered as consumer")
@@ -110,7 +110,7 @@ var _ = Describe("A 3 node cluster", func() {
 			Expect(item.records[0].body).To(Equal(message))
 
 			// Test with HTTP/1
-			expectResponseOk(NewTestClient(&TestClientOptions{HttpVersion: 1}).ProduceJson(0, "abc", message, ""))
+			expectOk(NewTestClient(&TestClientOptions{HttpVersion: 1}).ProduceJson(0, "abc", message, ""))
 
 			client.Close()
 		})
@@ -134,9 +134,9 @@ var _ = Describe("A 3 node cluster", func() {
 			// Test with HTTP/2
 			client := NewTestClient(nil)
 			// Send messages to all brokers
-			expectResponseOk(client.ProduceJson(0, "abc", message, ""))
-			expectResponseOk(client.ProduceJson(1, "abc", message, ""))
-			expectResponseOk(client.ProduceJson(2, "abc", message, ""))
+			expectOk(client.ProduceJson(0, "abc", message, ""))
+			expectOk(client.ProduceJson(1, "abc", message, ""))
+			expectOk(client.ProduceJson(2, "abc", message, ""))
 
 			time.Sleep(1 * time.Second)
 
@@ -153,18 +153,23 @@ var _ = Describe("A 3 node cluster", func() {
 			time.Sleep(1 * time.Second)
 
 			// B2 should ingest data in T1-T2 range
-			expectResponseOk(client.ProduceJson(2, "abc", message, partitionKeyT1Range))
+			expectOk(client.ProduceJson(2, "abc", message, partitionKeyT1Range))
 			time.Sleep(1 * time.Second)
 
 			log.Debug().Msgf("Restarting B1")
 			b1.Start()
+			b1.WaitForStart()
+			// There should be a version 3 of T1
+			b1.WaitOutput("Proposing myself as leader of T1 (-3074457345618259968) in v3")
+			expectOk(client.ProduceJson(1, "abc", message, partitionKeyT1Range))
+			time.Sleep(1 * time.Second)
 
 			client.Close()
 		})
 	})
 })
 
-func expectResponseOk(resp *http.Response) {
+func expectOk(resp *http.Response) {
 	defer resp.Body.Close()
 	Expect(ReadBody(resp)).To(Equal("OK"))
 	Expect(resp.StatusCode).To(Equal(200))
