@@ -35,7 +35,7 @@ var _ = Describe("Gossiper", func() {
 			port, err := strconv.Atoi(strings.Split(ts.URL, ":")[2])
 			Expect(err).NotTo(HaveOccurred())
 
-			const ordinal = 1
+			const ordinal = 0
 			topicId := TopicDataId{
 				Name:       "abc",
 				Token:      1,
@@ -43,7 +43,7 @@ var _ = Describe("Gossiper", func() {
 				GenId:      3,
 			}
 			discoverer := new(dMocks.Discoverer)
-			discoverer.On("Brokers").Return([]BrokerInfo{{HostName: "test-0"}, {HostName: "127.0.0.1"}})
+			discoverer.On("Topology").Return(newTestTopology(3, 2))
 			config := new(cMocks.Config)
 			config.On("GossipPort").Return(port)
 
@@ -69,3 +69,18 @@ var _ = Describe("Gossiper", func() {
 		})
 	})
 })
+
+func newTestTopology(length int, ordinal int) *TopologyInfo {
+	brokers := make([]BrokerInfo, length, length)
+	for i := 0; i < length; i++ {
+		brokers[i] = BrokerInfo{
+			IsSelf:   i == ordinal,
+			Ordinal:  i,
+			HostName: fmt.Sprintf("127.0.0.%d", i+1),
+		}
+	}
+
+	t := NewTopology(brokers)
+	return &t
+}
+
