@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -42,16 +40,15 @@ var _ = Describe("A 3 node cluster", func() {
 	// for i in {0..12}; do sudo ifconfig lo0 alias 127.0.0.$i up; done
 
 	Describe("Producing and consuming", func() {
-		var b0 *TestBroker
-		var b1 *TestBroker
-		var b2 *TestBroker
-		var b3 *TestBroker
+		var b0, b1, b2, b3, b4, b5 *TestBroker
 
 		BeforeEach(func ()  {
 			b0 = NewTestBroker(0)
 			b1 = NewTestBroker(1)
 			b2 = NewTestBroker(2)
 			b3 = nil
+			b4 = nil
+			b5 = nil
 		})
 
 		AfterEach(func ()  {
@@ -62,6 +59,12 @@ var _ = Describe("A 3 node cluster", func() {
 
 			if b3 != nil {
 				b3.Shutdown()
+			}
+			if b4 != nil {
+				b4.Shutdown()
+			}
+			if b5 != nil {
+				b5.Shutdown()
 			}
 		})
 
@@ -131,12 +134,9 @@ var _ = Describe("A 3 node cluster", func() {
 
 			log.Debug().Msgf("All brokers started successfully")
 
-			b0.WaitOutput("Setting committed version 1 with leader 0 for range")
-			log.Debug().Msgf("Waited for first broker")
-			b1.WaitOutput("Setting committed version 1 with leader 1 for range")
-			log.Debug().Msgf("Waited for second broker")
-			b2.WaitOutput("Setting committed version 1 with leader 2 for range")
-			log.Debug().Msgf("Waited for third broker")
+			b0.WaitForVersion1()
+			b1.WaitForVersion1()
+			b2.WaitForVersion1()
 
 			message := `{"hello": "world"}`
 
@@ -181,17 +181,23 @@ var _ = Describe("A 3 node cluster", func() {
 			b1.WaitForStart()
 			b2.WaitForStart()
 
-			newBrokers := "127.0.0.1,127.0.0.2,127.0.0.3,127.0.0.4,127.0.0.5,127.0.0.6"
-			os.WriteFile(filepath.Join("home0", conf.TopologyFileName), []byte(newBrokers), 0644)
+			b0.WaitForVersion1()
+			b1.WaitForVersion1()
+			b2.WaitForVersion1()
+
+			b0.UpdateTopologyFile(6)
+			b1.UpdateTopologyFile(6)
+			b2.UpdateTopologyFile(6)
 
 			b3 = NewTestBroker(3, &TestBrokerOptions{InitialClusterSize: 6})
+			b4 = NewTestBroker(4, &TestBrokerOptions{InitialClusterSize: 6})
+			b5 = NewTestBroker(5, &TestBrokerOptions{InitialClusterSize: 6})
 			time.Sleep(1 * time.Second)
 
 			b0.WaitOutput("Topology changed from 3 to 6 brokers")
+			b1.WaitOutput("Topology changed from 3 to 6 brokers")
+			b2.WaitOutput("Topology changed from 3 to 6 brokers")
 			b0.WaitOutput("Creating initial peer request to 127.0.0.6")
-
-			newBrokers = "127.0.0.1,127.0.0.2,127.0.0.3"
-			os.WriteFile(filepath.Join("home0", conf.TopologyFileName), []byte(newBrokers), 0644)
 
 			fmt.Println("------- Finishing")
 			time.Sleep(2 * time.Second)

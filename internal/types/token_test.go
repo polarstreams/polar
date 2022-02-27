@@ -27,8 +27,8 @@ var _ = Describe("Token", func() {
 		It("should cover all the ring and not have major differences", func() {
 			for factor := 0; factor < 12; factor++ {
 				nTokens := int(3 * math.Pow(2, float64(factor)))
-				previous := Token(startToken)
-				diff := -1 * (startToken - GetTokenAtIndex(nTokens, 1))
+				previous := Token(StartToken)
+				diff := -1 * (StartToken - GetTokenAtIndex(nTokens, 1))
 
 				// All pieces are the same
 				for i := 1; i < nTokens; i++ {
@@ -65,7 +65,7 @@ var _ = Describe("Token", func() {
 
 	Describe("GetPrimaryTokenIndex()", func() {
 		It("Should calculate the RangeIndex", func() {
-			brokerIndex, rangeIndex := GetPrimaryTokenIndex(startToken, 6, 8)
+			brokerIndex, rangeIndex := GetPrimaryTokenIndex(StartToken, 6, 8)
 			Expect(brokerIndex).To(Equal(BrokerIndex(0)))
 			Expect(rangeIndex).To(Equal(RangeIndex(0)))
 
@@ -81,7 +81,7 @@ var _ = Describe("Token", func() {
 			Expect(brokerIndex).To(Equal(BrokerIndex(5)))
 			Expect(rangeIndex).To(Equal(RangeIndex(5)))
 
-			brokerIndex, rangeIndex = GetPrimaryTokenIndex(startToken+Token(chunkSizeUnit*getRingFactor(6)/2), 6, 8)
+			brokerIndex, rangeIndex = GetPrimaryTokenIndex(StartToken+Token(chunkSizeUnit*getRingFactor(6)/2), 6, 8)
 			Expect(brokerIndex).To(Equal(BrokerIndex(0)))
 			Expect(rangeIndex).To(Equal(RangeIndex(4)))
 		})

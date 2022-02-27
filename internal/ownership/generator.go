@@ -15,9 +15,11 @@ import (
 )
 
 const (
-	baseDelay         = 150 * time.Millisecond
-	maxDelay          = 300 * time.Millisecond
-	replicationFactor = 3
+	baseDelay           = 150 * time.Millisecond
+	maxDelay            = 300 * time.Millisecond
+	maxWaitForPrevious  = 10 * time.Second
+	waitForPreviousStep = 500 * time.Millisecond
+	replicationFactor   = 3
 )
 
 var emptyGeneration = Generation{Start: math.MaxInt64, Version: 0, Status: StatusCancelled}
@@ -143,31 +145,57 @@ func (o *generator) OnHostUp(broker BrokerInfo) {
 
 func (o *generator) startNew() {
 	reason := o.determineStartReason()
+	topology := o.discoverer.Topology()
+
+	if topology.MyOrdinal() != 0 {
+		o.waitForPreviousRange(topology)
+	}
 
 	if reason == scalingUp {
 		// TODO: Send a message to broker n-1 to start the process
 		// of splitting the token range
-		panic("Broker considered as scaling up")
+		log.Info().Msgf("Broker considered as scaling up")
+		return
 	}
 
-	message := localGenMessage{
-		isNew:  reason == newCluster,
-		result: make(chan creationError),
-	}
+	for {
+		message := localGenMessage{
+			isNew:  reason == newCluster,
+			result: make(chan creationError),
+		}
 
-	// Send to the processing queue
-	o.items <- &message
+		// Send to the processing queue
+		o.items <- &message
+		err := <-message.result
 
-	for err := <-message.result; err != nil; {
+		if err == nil {
+			break
+		}
+
 		log.Err(err).Msg("Could not create generation when starting")
 
 		if !err.canBeRetried() {
 			log.Panic().Err(err).Msg("Non retryable error found when starting")
 		}
 		time.Sleep(getDelay())
-
-		o.items <- &message
 	}
+}
+
+// Waits for the previous broker to create the generation for the previous token first
+func (o *generator) waitForPreviousRange(topology *TopologyInfo) {
+	start := time.Now()
+
+	for time.Since(start) <= maxWaitForPrevious {
+		prev := topology.PreviousBroker()
+		prevToken := topology.GetToken(topology.GetIndex(prev.Ordinal))
+		if result := o.gossiper.GetGenerations(prev.Ordinal, prevToken); result.Committed != nil {
+			// The previous broker has information about it's own token
+			log.Debug().Msgf("Waited %dms for a successful previous range generation", time.Since(start).Milliseconds())
+			return
+		}
+		time.Sleep(waitForPreviousStep)
+	}
+	log.Panic().Msgf("Waited for previous range generation for more than %s", maxWaitForPrevious)
 }
 
 // process Processes events in order.

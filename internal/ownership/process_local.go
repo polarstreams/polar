@@ -199,12 +199,6 @@ func (o *generator) readStateFromFollowers(gen *Generation) []GenReadResult {
 
 func (o *generator) determineStartReason() startReason {
 	log.Info().Msgf("Trying to determine whether its a new cluster")
-
-	if !o.localDb.DbWasNewlyCreated() {
-		// There's local data, it signals that it has been restarted
-		return restarted
-	}
-
 	topology := o.discoverer.Topology()
 	myToken := topology.MyToken()
 

@@ -22,15 +22,6 @@ func TestSuite(t *testing.T) {
 
 var _ = Describe("generator", func() {
 	Describe("determineStartReason()", func() {
-		It("should mark as restarted when data is there", func() {
-			log.Info().Msgf("Starting first test")
-			dbMock := new(Client)
-			dbMock.On("DbWasNewlyCreated").Return(false)
-			o := &generator{localDb: dbMock}
-
-			Expect(o.determineStartReason()).To(Equal(restarted))
-		})
-
 		It("should mark as scaling up when covered by n-1", func() {
 			log.Info().Msgf("Starting second test")
 			dbMock := new(Client)

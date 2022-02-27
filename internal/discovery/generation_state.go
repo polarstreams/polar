@@ -120,7 +120,7 @@ func (d *discoverer) IsTokenInRange(token Token) bool {
 	for _, gen := range generationMap {
 		// containing the token but not the start token
 		// Note: end token is never contained
-		if token < gen.End && token > gen.Start {
+		if token > gen.Start && (token < gen.End || gen.End == StartToken) {
 			return true
 		}
 	}

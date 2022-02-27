@@ -6,7 +6,7 @@ import (
 	"sort"
 )
 
-const startToken Token = math.MinInt64
+const StartToken Token = math.MinInt64
 
 // Represents a partition token
 type Token int64
@@ -57,7 +57,7 @@ func GetPrimaryTokenIndex(token Token, tokenRangeLength int, ranges int) (Broker
 func GetTokenAtIndex(length int, index int) Token {
 	// Wrap around
 	index = index % length
-	return startToken + Token(chunkSizeUnit*getRingFactor(length)*int64(index))
+	return StartToken + Token(chunkSizeUnit*getRingFactor(length)*int64(index))
 }
 
 func getRingFactor(ringSize int) int64 {

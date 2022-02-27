@@ -1,3 +1,4 @@
+//go:build integration
 // +build integration
 
 package integration
@@ -7,10 +8,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/barcostreams/barco/internal/conf"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/rs/zerolog/log"
@@ -111,6 +114,17 @@ func (b *TestBroker) Start() {
 	b.cmd = cmd
 }
 
+func (b *TestBroker) UpdateTopologyFile(brokerLength int) {
+	names := make([]string, 0)
+	for i := 1; i <= brokerLength; i++ {
+		names = append(names, fmt.Sprintf("127.0.0.%d", i))
+	}
+	os.WriteFile(
+		filepath.Join(fmt.Sprintf("home%d", b.ordinal), conf.TopologyFileName),
+		[]byte(strings.Join(names, ",")),
+		0644)
+}
+
 func (b *TestBroker) WaitForStart() {
 	timerChannel := time.After(5 * time.Second)
 	started := false
@@ -129,9 +143,10 @@ func (b *TestBroker) WaitForStart() {
 }
 
 // Reads the last 100 lines of the output looking for a match
-func (b *TestBroker) WaitOutput(value string) {
+func (b *TestBroker) WaitOutput(format string, a ...interface{}) {
 	start := time.Now()
 	found := false
+	value := fmt.Sprintf(format, a...)
 	for !found && time.Since(start) < 5 * time.Second {
 		time.Sleep(200 * time.Millisecond)
 		b.mu.RLock()
@@ -144,6 +159,10 @@ func (b *TestBroker) WaitOutput(value string) {
 	}
 
 	Expect(found).To(BeTrue(), "Waited 5 seconds for '%s'", value)
+}
+
+func (b *TestBroker) WaitForVersion1() {
+	b.WaitOutput("Setting committed version 1 with leader %d for range", b.ordinal)
 }
 
 func (b *TestBroker) Shutdown() {
