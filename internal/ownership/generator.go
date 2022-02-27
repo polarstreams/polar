@@ -19,6 +19,8 @@ const (
 	maxDelay            = 300 * time.Millisecond
 	maxWaitForPrevious  = 10 * time.Second
 	waitForPreviousStep = 500 * time.Millisecond
+	maxWaitForSplit     = 5 * time.Minute
+	waitForSplitStep    = 5 * time.Second
 	replicationFactor   = 3
 )
 
@@ -83,6 +85,11 @@ func (o *generator) OnRemoteSetAsCommitted(token Token, tx uuid.UUID, origin int
 	return <-message.result
 }
 
+func (o *generator) OnRemoteRangeSplitStart(origin int) error {
+	// TODO: Implement OnRemoteSplitStart
+	return nil
+}
+
 func (o *generator) StartGenerations() {
 	// Register UP/DOWN handler on the main thread
 	o.gossiper.RegisterHostUpDownListener(o)
@@ -144,20 +151,26 @@ func (o *generator) OnHostUp(broker BrokerInfo) {
 }
 
 func (o *generator) startNew() {
-	reason := o.determineStartReason()
 	topology := o.discoverer.Topology()
 
 	if topology.MyOrdinal() != 0 {
 		o.waitForPreviousRange(topology)
 	}
 
+	reason := o.determineStartReason()
+
+	log.Debug().Msgf("Start reason %d", reason)
+
 	if reason == scalingUp {
-		// TODO: Send a message to broker n-1 to start the process
+		// Send a message to broker n-1 to start the process
 		// of splitting the token range
 		log.Info().Msgf("Broker considered as scaling up")
+		o.waitForScaleUp(topology)
+
 		return
 	}
 
+	// Restarting or starting fresh
 	for {
 		message := localGenMessage{
 			isNew:  reason == newCluster,
@@ -196,6 +209,33 @@ func (o *generator) waitForPreviousRange(topology *TopologyInfo) {
 		time.Sleep(waitForPreviousStep)
 	}
 	log.Panic().Msgf("Waited for previous range generation for more than %s", maxWaitForPrevious)
+}
+
+// Sends a message to the broker in the position n-1 to request token split and waits for generation creation/
+//
+// It panics when after waiting for a long time
+func (o *generator) waitForScaleUp(topology *TopologyInfo) {
+	token := topology.MyToken()
+	prevOrdinal := topology.PreviousBroker().Ordinal
+	start := time.Now()
+
+	for o.discoverer.Generation(token) == nil {
+		log.Info().Msgf("Sending message to previous broker B%d to request token range split", prevOrdinal)
+
+		if len(topology.Brokers) != len(o.discoverer.Topology().Brokers) {
+			log.Panic().Msgf("There was a change in the topology since starting")
+		}
+
+		if time.Since(start) > maxWaitForSplit {
+			log.Panic().Msgf("There was a change in the topology since starting")
+		}
+
+		if err := o.gossiper.RangeSplitStart(prevOrdinal); err != nil {
+			log.Err(err).Msgf("There was an error requesting token range split, retrying")
+		}
+
+		time.Sleep(waitForSplitStep)
+	}
 }
 
 // process Processes events in order.

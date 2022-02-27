@@ -94,6 +94,9 @@ type GenerationGossiper interface {
 	// Compare and sets the generation as committed
 	SetAsCommitted(ordinal int, token Token, tx UUID) error
 
+	// Sends a request to the previous broker to start the process of splitting its token range
+	RangeSplitStart(ordinal int) error
+
 	// RegisterGenListener adds a listener for new generations received by the gossipper
 	RegisterGenListener(listener GenListener)
 
@@ -285,12 +288,14 @@ func (g *gossiper) requestGet(ordinal int, baseUrl string) (*http.Response, erro
 		return nil, fmt.Errorf("No connection to broker %d", ordinal)
 	}
 
-	brokers := g.discoverer.Brokers()
-	if len(brokers) <= ordinal {
-		return nil, fmt.Errorf("No broker %d obtained", ordinal)
+	topology := g.discoverer.Topology()
+	broker := topology.BrokerByOrdinal(ordinal)
+
+	if broker == nil {
+		return nil, fmt.Errorf("Broker with ordinal %d not found", ordinal)
 	}
 
-	resp, err := c.gossipClient.Get(g.getPeerUrl(&brokers[ordinal], baseUrl))
+	resp, err := c.gossipClient.Get(g.getPeerUrl(broker, baseUrl))
 
 	if err == nil && resp.StatusCode != http.StatusOK {
 		return nil, errors.New(resp.Status)
@@ -427,6 +432,14 @@ func (g *gossiper) SendCommittedOffset(ordinal int, kv *OffsetStoreKeyValue) err
 	}
 
 	r, err := g.requestPost(ordinal, conf.GossipConsumerOffsetUrl, jsonBody)
+	defer bodyClose(r)
+	return err
+}
+
+func (g *gossiper) RangeSplitStart(ordinal int) error {
+	origin := g.discoverer.Topology().MyOrdinal()
+	jsonBody, _ := json.Marshal(origin)
+	r, err := g.requestPost(ordinal, conf.GossipGenerationSplitUrl, jsonBody)
 	defer bodyClose(r)
 	return err
 }

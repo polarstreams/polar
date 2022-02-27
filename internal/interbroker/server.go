@@ -67,6 +67,7 @@ func (g *gossiper) acceptHttpConnections() error {
 			router.GET(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), ToHandle(g.getGenHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationProposeUrl, ":token"), ToPostHandle(g.postGenProposeHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationCommmitUrl, ":token"), ToPostHandle(g.postGenCommitHandler))
+			router.POST(conf.GossipGenerationSplitUrl, ToPostHandle(g.postGenSplitHandler))
 			router.GET(fmt.Sprintf(conf.GossipTokenInRange, ":token"), ToHandle(g.getTokenInRangeHandler))
 			router.GET(fmt.Sprintf(conf.GossipTokenHasHistoryUrl, ":token"), ToHandle(g.getTokenHasHistoryUrl))
 			router.GET(fmt.Sprintf(
@@ -146,6 +147,15 @@ func (g *gossiper) postGenCommitHandler(w http.ResponseWriter, r *http.Request, 
 	}
 	// Use the registered listener
 	return g.genListener.OnRemoteSetAsCommitted(Token(token), message.Tx, message.Origin)
+}
+
+func (g *gossiper) postGenSplitHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
+	var origin int
+	if err := json.NewDecoder(r.Body).Decode(&origin); err != nil {
+		return err
+	}
+	// Use the registered listener
+	return g.genListener.OnRemoteRangeSplitStart(origin)
 }
 
 func (g *gossiper) postBrokerIdentifyHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {

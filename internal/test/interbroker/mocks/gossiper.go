@@ -124,6 +124,20 @@ func (_m *Gossiper) OpenConnections() {
 	_m.Called()
 }
 
+// RangeSplitStart provides a mock function with given fields: ordinal
+func (_m *Gossiper) RangeSplitStart(ordinal int) error {
+	ret := _m.Called(ordinal)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int) error); ok {
+		r0 = rf(ordinal)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // ReadBrokerIsUp provides a mock function with given fields: ordinal, brokerUpOrdinal
 func (_m *Gossiper) ReadBrokerIsUp(ordinal int, brokerUpOrdinal int) (bool, error) {
 	ret := _m.Called(ordinal, brokerUpOrdinal)

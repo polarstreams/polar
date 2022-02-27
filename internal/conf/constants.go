@@ -22,7 +22,10 @@ const (
 	// Url for setting the generation as proposed/accepted for token
 	GossipGenerationProposeUrl = "/v1/generation/%s/propose"
 	// Url for setting the generation and transaction as committed for token
-	GossipGenerationCommmitUrl  = "/v1/generation/%s/commit"
+	GossipGenerationCommmitUrl = "/v1/generation/%s/commit"
+	// Url for requesting the token range to be split as a consequence of scaling up
+	GossipGenerationSplitUrl = "/v1/token/split"
+
 	GossipTokenHasHistoryUrl    = "/v1/token/%s/has-history"
 	GossipTokenInRange          = "/v1/token/%s/in-range"
 	GossipBrokerIdentifyUrl     = "/v1/broker/identify" // Send/receive my info to the peer

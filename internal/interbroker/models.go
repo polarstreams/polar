@@ -8,10 +8,13 @@ import (
 	. "github.com/google/uuid"
 )
 
+// Represents a gossip listener to generation-related messages
 type GenListener interface {
 	OnRemoteSetAsProposed(newGen *Generation, expectedTx *UUID) error
 
 	OnRemoteSetAsCommitted(token Token, tx UUID, origin int) error
+
+	OnRemoteRangeSplitStart(origin int) error
 }
 
 type ConsumerInfoListener interface {
