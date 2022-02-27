@@ -6,7 +6,6 @@ package integration_test
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"net/http"
 	"testing"
@@ -76,12 +75,9 @@ var _ = Describe("A 3 node cluster", func() {
 
 			log.Debug().Msgf("All brokers started successfully")
 
-			b0.WaitOutput("Setting committed version 1 with leader 0 for range")
-			log.Debug().Msgf("Waited for first broker")
-			b1.WaitOutput("Setting committed version 1 with leader 1 for range")
-			log.Debug().Msgf("Waited for second broker")
-			b2.WaitOutput("Setting committed version 1 with leader 2 for range")
-			log.Debug().Msgf("Waited for third broker")
+			b0.WaitForVersion1()
+			b1.WaitForVersion1()
+			b2.WaitForVersion1()
 
 			message := `{"hello": "world"}`
 
@@ -155,9 +151,9 @@ var _ = Describe("A 3 node cluster", func() {
 			b0.WaitOutput("Broker 127.0.0.2 considered DOWN")
 			b2.WaitOutput("Broker 127.0.0.2 considered DOWN")
 
-			b2.WaitOutput("Accepting myself as leader of T1 (-3074457345618259968) in v2")
-			b2.WaitOutput("Setting transaction for T1 (-3074457345618259968) as committed")
-			b0.WaitOutput("Setting committed version 2 with leader 2 for range [-3074457345618259968, 3074457345618255872]")
+			b2.WaitOutput("Accepting myself as leader of T1 \\(-3074457345618259968\\) in v2")
+			b2.WaitOutput("Committing \\[-3074457345618259968, 3074457345618255872\\] v2 with B2 as leader")
+			b0.WaitOutput("Setting generation for token -3074457345618259968 tx .* as committed")
 
 			time.Sleep(1 * time.Second)
 
@@ -169,7 +165,7 @@ var _ = Describe("A 3 node cluster", func() {
 			b1.Start()
 			b1.WaitForStart()
 			// There should be a version 3 of T1
-			b1.WaitOutput("Proposing myself as leader of T1 (-3074457345618259968) in v3")
+			b1.WaitOutput("Proposing myself as leader of T1 \\(-3074457345618259968\\) in v3")
 			expectOk(client.ProduceJson(1, "abc", message, partitionKeyT1Range))
 			time.Sleep(1 * time.Second)
 
@@ -192,15 +188,21 @@ var _ = Describe("A 3 node cluster", func() {
 			b3 = NewTestBroker(3, &TestBrokerOptions{InitialClusterSize: 6})
 			b4 = NewTestBroker(4, &TestBrokerOptions{InitialClusterSize: 6})
 			b5 = NewTestBroker(5, &TestBrokerOptions{InitialClusterSize: 6})
-			time.Sleep(1 * time.Second)
 
 			b0.WaitOutput("Topology changed from 3 to 6 brokers")
+
 			b1.WaitOutput("Topology changed from 3 to 6 brokers")
 			b2.WaitOutput("Topology changed from 3 to 6 brokers")
-			b0.WaitOutput("Creating initial peer request to 127.0.0.6")
+			b0.WaitOutput("Creating initial peer request to 127\\.0\\.0\\.6")
 
-			fmt.Println("------- Finishing")
-			time.Sleep(2 * time.Second)
+			const commitMultipleMessage = "Committing both \\[-9223372036854775808, -6148914691236517888\\] v2 with B0 as leader and \\[-6148914691236517888, -3074457345618259968\\] v1 with B3 as leader"
+			b0.WaitOutput(commitMultipleMessage)
+			b3.WaitOutput(commitMultipleMessage)
+			b1.WaitOutput(commitMultipleMessage)
+			b4.WaitOutput(commitMultipleMessage)
+
+			b0.LookForErrors(10)
+			b3.LookForErrors(10)
 		})
 	})
 })

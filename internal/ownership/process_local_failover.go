@@ -61,11 +61,11 @@ func (o *generator) processLocalFailover(m *localFailoverGenMessage) creationErr
 			"Generation info could not be read from follower: %s", peerFollowerGenInfo.Error.Error())
 	}
 
-	if err := o.discoverer.SetGenerationProposed(&gen, getTx(proposed)); err != nil {
+	if err := o.discoverer.SetGenerationProposed(&gen, nil, getTx(proposed)); err != nil {
 		return wrapCreationError(err)
 	}
 
-	if err := o.gossiper.SetGenerationAsProposed(peerFollower, &gen, getTx(peerFollowerGenInfo.Proposed)); err != nil {
+	if err := o.gossiper.SetGenerationAsProposed(peerFollower, &gen, nil, getTx(peerFollowerGenInfo.Proposed)); err != nil {
 		return wrapCreationError(err)
 	}
 
@@ -74,11 +74,11 @@ func (o *generator) processLocalFailover(m *localFailoverGenMessage) creationErr
 		Msgf("Accepting myself as leader of T%d (%d) in v%d", downBroker.Ordinal, token, gen.Version)
 	gen.Status = StatusAccepted
 
-	if err := o.gossiper.SetGenerationAsProposed(peerFollower, &gen, &gen.Tx); err != nil {
+	if err := o.gossiper.SetGenerationAsProposed(peerFollower, &gen, nil, &gen.Tx); err != nil {
 		return wrapCreationError(err)
 	}
 
-	if err := o.discoverer.SetGenerationProposed(&gen, &gen.Tx); err != nil {
+	if err := o.discoverer.SetGenerationProposed(&gen, nil, &gen.Tx); err != nil {
 		log.Err(err).Msg("Unexpected error when setting as accepted locally")
 		return newCreationError("Unexpected local error")
 	}
@@ -89,11 +89,11 @@ func (o *generator) processLocalFailover(m *localFailoverGenMessage) creationErr
 		Msgf("Setting transaction for T%d (%d) as committed", downBroker.Ordinal, token)
 
 	// We can now start receiving producer traffic for this token
-	if err := o.discoverer.SetAsCommitted(gen.Start, gen.Tx, topology.MyOrdinal()); err != nil {
+	if err := o.discoverer.SetAsCommitted(gen.Start, nil, gen.Tx, topology.MyOrdinal()); err != nil {
 		log.Err(err).Msg("Set as committed locally failed (probably local db related)")
 		return newCreationError("Set as committed locally failed")
 	}
-	o.gossiper.SetAsCommitted(peerFollower, gen.Start, gen.Tx)
+	o.gossiper.SetAsCommitted(peerFollower, gen.Start, nil, gen.Tx)
 
 	return nil
 }

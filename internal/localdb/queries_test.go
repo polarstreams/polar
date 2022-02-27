@@ -224,10 +224,47 @@ var _ = Describe("Client", func() {
 				Parents:   []GenParent{{Start: 2001, Version: GenVersion(122)}},
 			}
 
-			err := client.CommitGeneration(&gen)
+			err := client.CommitGeneration(&gen, nil)
 			Expect(err).NotTo(HaveOccurred())
 			expectToMatchStored(client, gen)
 			expectTransactionStored(client, gen)
+		})
+
+		It("should one record per each generation plus the tx in each table", func() {
+			client := newTestClient()
+
+			tx := uuid.New()
+			gen1 := Generation{
+				Start:     2001,
+				End:       3001,
+				Version:   123,
+				Timestamp: time.Now().UnixMicro(),
+				Leader:    0,
+				Followers: []int{3, 1},
+				TxLeader:  0,
+				Tx:        tx,
+				Status:    StatusCommitted,
+				Parents:   []GenParent{{Start: 2001, Version: GenVersion(122)}},
+			}
+
+			gen2 := Generation{
+				Start:     3001,
+				End:       4001,
+				Version:   1,
+				Timestamp: time.Now().UnixMicro(),
+				Leader:    3,
+				Followers: []int{1, 4},
+				TxLeader:  0,
+				Tx:        tx,
+				Status:    StatusCommitted,
+				Parents:   []GenParent{{Start: 2001, Version: GenVersion(122)}},
+			}
+
+			err := client.CommitGeneration(&gen1, &gen2)
+			Expect(err).NotTo(HaveOccurred())
+			expectToMatchStored(client, gen1)
+			expectToMatchStored(client, gen2)
+			expectTransactionStored(client, gen1)
 		})
 	})
 

@@ -17,13 +17,13 @@ func (_m *Client) Close() {
 	_m.Called()
 }
 
-// CommitGeneration provides a mock function with given fields: generation
-func (_m *Client) CommitGeneration(generation *types.Generation) error {
-	ret := _m.Called(generation)
+// CommitGeneration provides a mock function with given fields: gen1, gen2
+func (_m *Client) CommitGeneration(gen1 *types.Generation, gen2 *types.Generation) error {
+	ret := _m.Called(gen1, gen2)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*types.Generation) error); ok {
-		r0 = rf(generation)
+	if rf, ok := ret.Get(0).(func(*types.Generation, *types.Generation) error); ok {
+		r0 = rf(gen1, gen2)
 	} else {
 		r0 = ret.Error(0)
 	}

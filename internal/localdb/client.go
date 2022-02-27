@@ -18,7 +18,7 @@ type Client interface {
 	// Determines whether the local db was not present and had to be created
 	DbWasNewlyCreated() bool
 
-	CommitGeneration(generation *Generation) error
+	CommitGeneration(gen1 *Generation, gen2 *Generation) error
 
 	// Stores the group offset for a topic and token+index
 	SaveOffset(offsetKv *OffsetStoreKeyValue) error
@@ -32,7 +32,7 @@ type Client interface {
 	// Gets the following (children) generations
 	GenerationsByParent(gen *Generation) ([]Generation, error)
 
-	// TODO: convert to history
+	// Gets the last two (more recent first) stored generation by start token
 	GetGenerationsByToken(token Token) ([]Generation, error)
 
 	// Gets the generation by token and version, returns nil when not found

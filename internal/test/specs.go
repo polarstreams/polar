@@ -6,3 +6,4 @@ import (
 
 var Describe = ginkgo.Describe
 var It = ginkgo.It
+var XIt = ginkgo.XIt

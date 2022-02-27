@@ -180,6 +180,29 @@ func (_m *Gossiper) ReadProducerOffset(ordinal int, topic *types.TopicDataId) (u
 	return r0, r1
 }
 
+// ReadTokenHistory provides a mock function with given fields: ordinal, token
+func (_m *Gossiper) ReadTokenHistory(ordinal int, token types.Token) (*types.Generation, error) {
+	ret := _m.Called(ordinal, token)
+
+	var r0 *types.Generation
+	if rf, ok := ret.Get(0).(func(int, types.Token) *types.Generation); ok {
+		r0 = rf(ordinal, token)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*types.Generation)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(int, types.Token) error); ok {
+		r1 = rf(ordinal, token)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // RegisterConsumerInfoListener provides a mock function with given fields: listener
 func (_m *Gossiper) RegisterConsumerInfoListener(listener interbroker.ConsumerInfoListener) {
 	_m.Called(listener)
@@ -256,13 +279,13 @@ func (_m *Gossiper) SendToLeader(replicationInfo types.ReplicationInfo, topic st
 	return r0
 }
 
-// SetAsCommitted provides a mock function with given fields: ordinal, token, tx
-func (_m *Gossiper) SetAsCommitted(ordinal int, token types.Token, tx uuid.UUID) error {
-	ret := _m.Called(ordinal, token, tx)
+// SetAsCommitted provides a mock function with given fields: ordinal, token1, token2, tx
+func (_m *Gossiper) SetAsCommitted(ordinal int, token1 types.Token, token2 *types.Token, tx uuid.UUID) error {
+	ret := _m.Called(ordinal, token1, token2, tx)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(int, types.Token, uuid.UUID) error); ok {
-		r0 = rf(ordinal, token, tx)
+	if rf, ok := ret.Get(0).(func(int, types.Token, *types.Token, uuid.UUID) error); ok {
+		r0 = rf(ordinal, token1, token2, tx)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -270,13 +293,13 @@ func (_m *Gossiper) SetAsCommitted(ordinal int, token types.Token, tx uuid.UUID)
 	return r0
 }
 
-// SetGenerationAsProposed provides a mock function with given fields: ordinal, newGen, expectedTx
-func (_m *Gossiper) SetGenerationAsProposed(ordinal int, newGen *types.Generation, expectedTx *uuid.UUID) error {
-	ret := _m.Called(ordinal, newGen, expectedTx)
+// SetGenerationAsProposed provides a mock function with given fields: ordinal, newGen, newGen2, expectedTx
+func (_m *Gossiper) SetGenerationAsProposed(ordinal int, newGen *types.Generation, newGen2 *types.Generation, expectedTx *uuid.UUID) error {
+	ret := _m.Called(ordinal, newGen, newGen2, expectedTx)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(int, *types.Generation, *uuid.UUID) error); ok {
-		r0 = rf(ordinal, newGen, expectedTx)
+	if rf, ok := ret.Get(0).(func(int, *types.Generation, *types.Generation, *uuid.UUID) error); ok {
+		r0 = rf(ordinal, newGen, newGen2, expectedTx)
 	} else {
 		r0 = ret.Error(0)
 	}

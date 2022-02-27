@@ -89,6 +89,29 @@ func (_m *Discoverer) GenerationProposed(token types.Token) (*types.Generation, 
 	return r0, r1
 }
 
+// GetTokenHistory provides a mock function with given fields: token
+func (_m *Discoverer) GetTokenHistory(token types.Token) (*types.Generation, error) {
+	ret := _m.Called(token)
+
+	var r0 *types.Generation
+	if rf, ok := ret.Get(0).(func(types.Token) *types.Generation); ok {
+		r0 = rf(token)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*types.Generation)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(types.Token) error); ok {
+		r1 = rf(token)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // HasTokenHistory provides a mock function with given fields: token
 func (_m *Discoverer) HasTokenHistory(token types.Token) (bool, error) {
 	ret := _m.Called(token)
@@ -205,13 +228,13 @@ func (_m *Discoverer) RegisterListener(l discovery.TopologyChangeListener) {
 	_m.Called(l)
 }
 
-// SetAsCommitted provides a mock function with given fields: token, tx, origin
-func (_m *Discoverer) SetAsCommitted(token types.Token, tx uuid.UUID, origin int) error {
-	ret := _m.Called(token, tx, origin)
+// SetAsCommitted provides a mock function with given fields: token1, token2, tx, origin
+func (_m *Discoverer) SetAsCommitted(token1 types.Token, token2 *types.Token, tx uuid.UUID, origin int) error {
+	ret := _m.Called(token1, token2, tx, origin)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(types.Token, uuid.UUID, int) error); ok {
-		r0 = rf(token, tx, origin)
+	if rf, ok := ret.Get(0).(func(types.Token, *types.Token, uuid.UUID, int) error); ok {
+		r0 = rf(token1, token2, tx, origin)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -219,13 +242,13 @@ func (_m *Discoverer) SetAsCommitted(token types.Token, tx uuid.UUID, origin int
 	return r0
 }
 
-// SetGenerationProposed provides a mock function with given fields: gen, expectedTx
-func (_m *Discoverer) SetGenerationProposed(gen *types.Generation, expectedTx *uuid.UUID) error {
-	ret := _m.Called(gen, expectedTx)
+// SetGenerationProposed provides a mock function with given fields: gen, gen2, expectedTx
+func (_m *Discoverer) SetGenerationProposed(gen *types.Generation, gen2 *types.Generation, expectedTx *uuid.UUID) error {
+	ret := _m.Called(gen, gen2, expectedTx)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*types.Generation, *uuid.UUID) error); ok {
-		r0 = rf(gen, expectedTx)
+	if rf, ok := ret.Get(0).(func(*types.Generation, *types.Generation, *uuid.UUID) error); ok {
+		r0 = rf(gen, gen2, expectedTx)
 	} else {
 		r0 = ret.Error(0)
 	}

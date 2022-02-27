@@ -1,6 +1,7 @@
 package ownership
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"sync/atomic"
@@ -10,6 +11,7 @@ import (
 	"github.com/barcostreams/barco/internal/interbroker"
 	"github.com/barcostreams/barco/internal/localdb"
 	. "github.com/barcostreams/barco/internal/types"
+	"github.com/barcostreams/barco/internal/utils"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
@@ -63,10 +65,15 @@ func (o *generator) Init() error {
 	return nil
 }
 
-func (o *generator) OnRemoteSetAsProposed(newGen *Generation, expectedTx *uuid.UUID) error {
+func (o *generator) OnRemoteSetAsProposed(newGen *Generation, newGen2 *Generation, expectedTx *uuid.UUID) error {
+	if newGen2 != nil && newGen2.Status != StatusAccepted {
+		return fmt.Errorf("Multiple generations can only be accepted (not proposed)")
+	}
+
 	// Create message to channel
 	message := remoteGenProposedMessage{
 		gen:        newGen,
+		gen2:       newGen2,
 		expectedTx: expectedTx,
 		result:     make(chan error),
 	}
@@ -74,9 +81,10 @@ func (o *generator) OnRemoteSetAsProposed(newGen *Generation, expectedTx *uuid.U
 	return <-message.result
 }
 
-func (o *generator) OnRemoteSetAsCommitted(token Token, tx uuid.UUID, origin int) error {
+func (o *generator) OnRemoteSetAsCommitted(token1 Token, token2 *Token, tx uuid.UUID, origin int) error {
 	message := remoteGenCommittedMessage{
-		token:  token,
+		token1: token1,
+		token2: token2,
 		tx:     tx,
 		origin: origin,
 		result: make(chan error),
@@ -86,8 +94,29 @@ func (o *generator) OnRemoteSetAsCommitted(token Token, tx uuid.UUID, origin int
 }
 
 func (o *generator) OnRemoteRangeSplitStart(origin int) error {
-	// TODO: Implement OnRemoteSplitStart
-	return nil
+	topology := o.discoverer.Topology()
+
+	if origin >= len(topology.Brokers) {
+		return utils.CreateErrAndLog(
+			"Received split range request from B%d but topology does not contain it (length: %d)",
+			origin,
+			len(topology.Brokers))
+	}
+
+	if origin != topology.NextBroker().Ordinal {
+		return utils.CreateErrAndLog(
+			"Received split range request from B%d but it's not the next broker (B%d)",
+			origin,
+			topology.NextBroker().Ordinal)
+	}
+
+	message := localSplitRangeGenMessage{
+		topology: topology,
+		origin:   origin,
+		result:   make(chan creationError),
+	}
+	o.items <- &message
+	return <-message.result
 }
 
 func (o *generator) StartGenerations() {
@@ -159,13 +188,11 @@ func (o *generator) startNew() {
 
 	reason := o.determineStartReason()
 
-	log.Debug().Msgf("Start reason %d", reason)
-
 	if reason == scalingUp {
 		// Send a message to broker n-1 to start the process
 		// of splitting the token range
 		log.Info().Msgf("Broker considered as scaling up")
-		o.waitForScaleUp(topology)
+		o.requestRangeSplit(topology)
 
 		return
 	}
@@ -214,11 +241,21 @@ func (o *generator) waitForPreviousRange(topology *TopologyInfo) {
 // Sends a message to the broker in the position n-1 to request token split and waits for generation creation/
 //
 // It panics when after waiting for a long time
-func (o *generator) waitForScaleUp(topology *TopologyInfo) {
+func (o *generator) requestRangeSplit(topology *TopologyInfo) {
 	token := topology.MyToken()
 	prevOrdinal := topology.PreviousBroker().Ordinal
-	start := time.Now()
 
+	// Add initial delay based on the position in the ring to minimize concurrent creation collision
+	prevIndex := topology.GetIndex(prevOrdinal)
+	if prevIndex > 0 {
+		// We could wait for node in n-2 to have their generations
+		i := prevIndex / 2 // The ring double the size
+		delay := waitForSplitStep * time.Duration(i)
+		log.Info().Msgf("Waiting %s before requesting range split", delay)
+		time.Sleep(delay)
+	}
+
+	start := time.Now()
 	for o.discoverer.Generation(token) == nil {
 		log.Info().Msgf("Sending message to previous broker B%d to request token range split", prevOrdinal)
 
@@ -234,8 +271,10 @@ func (o *generator) waitForScaleUp(topology *TopologyInfo) {
 			log.Err(err).Msgf("There was an error requesting token range split, retrying")
 		}
 
-		time.Sleep(waitForSplitStep)
+		time.Sleep(utils.Jitter(waitForSplitStep))
 	}
+
+	log.Info().Msgf("Waited %dms for B%d to split ranges", time.Since(start).Milliseconds(), prevOrdinal)
 }
 
 // process Processes events in order.
@@ -284,6 +323,10 @@ func (o *generator) processGeneration(message genMessage) creationError {
 
 	if m, ok := message.(*localFailoverGenMessage); ok {
 		return o.processLocalFailover(m)
+	}
+
+	if m, ok := message.(*localSplitRangeGenMessage); ok {
+		return o.processLocalSplitRange(m)
 	}
 
 	log.Panic().Msg("Unhandled generation internal message type")

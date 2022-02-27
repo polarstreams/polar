@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -146,23 +147,57 @@ func (b *TestBroker) WaitForStart() {
 func (b *TestBroker) WaitOutput(format string, a ...interface{}) {
 	start := time.Now()
 	found := false
-	value := fmt.Sprintf(format, a...)
-	for !found && time.Since(start) < 5 * time.Second {
-		time.Sleep(200 * time.Millisecond)
-		b.mu.RLock()
-		for _, text := range b.output {
-			if strings.Contains(text, value) {
-				found = true
-			}
+	pattern := fmt.Sprintf(format, a...)
+	for time.Since(start) < 5 * time.Second {
+		output := b.getOutput()
+		r, err := regexp.Compile(pattern)
+		if err != nil {
+			log.Panic().Err(err).Msgf("Invalid search pattern")
 		}
-		b.mu.RUnlock()
+		if found, _ = b.match(output, r); found {
+			break
+		}
+
+		time.Sleep(100 * time.Millisecond)
 	}
 
-	Expect(found).To(BeTrue(), "Waited 5 seconds for '%s'", value)
+	Expect(found).To(BeTrue(), "Waited 5 seconds for B%d output of '%s'", b.ordinal, pattern)
+}
+
+// Gets a copy of the current output
+func (b *TestBroker) getOutput() []string {
+	b.mu.RLock()
+	output := make([]string, len(b.output))
+	copy(output, b.output)
+	b.mu.RUnlock()
+	return output
+}
+
+// Checks for output messages in the last n messages
+func (b *TestBroker) LookForErrors(nMessages int) {
+	output := b.getOutput()
+	output = output[len(output)-nMessages:]
+	r, err := regexp.Compile(`\"level\":\"error\"`)
+	if err != nil {
+		log.Panic().Err(err).Msgf("Invalid search pattern")
+	}
+	if found, occurrence := b.match(output, r); found {
+		Fail(fmt.Sprintf("Found error: %s", occurrence))
+	}
+}
+
+func (b *TestBroker) match(output []string, r *regexp.Regexp) (bool, string) {
+	for i := len(output)-1; i >= 0; i-- {
+		text := output[i]
+		if r.MatchString(text) {
+			return true, text
+		}
+	}
+	return false, ""
 }
 
 func (b *TestBroker) WaitForVersion1() {
-	b.WaitOutput("Setting committed version 1 with leader %d for range", b.ordinal)
+	b.WaitOutput("Committing \\[.*\\] v1 with B%d as leader", b.ordinal)
 }
 
 func (b *TestBroker) Shutdown() {

@@ -34,8 +34,19 @@ func (m *localFailoverGenMessage) setResult(err creationError) {
 	m.result <- err
 }
 
+type localSplitRangeGenMessage struct {
+	topology *TopologyInfo // Point in time topology info
+	origin   int           // Ordinal of the broker requesting the split
+	result   chan creationError
+}
+
+func (m *localSplitRangeGenMessage) setResult(err creationError) {
+	m.result <- err
+}
+
 type remoteGenProposedMessage struct {
 	gen        *Generation
+	gen2       *Generation
 	expectedTx *UUID
 	result     chan error
 }
@@ -45,7 +56,8 @@ func (m *remoteGenProposedMessage) setResult(err creationError) {
 }
 
 type remoteGenCommittedMessage struct {
-	token  Token
+	token1 Token
+	token2 *Token
 	tx     UUID
 	origin int
 	result chan error

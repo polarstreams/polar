@@ -19,7 +19,8 @@ const (
 
 	// Url for getting/setting the generation by token
 	GossipGenerationUrl = "/v1/generation/%s"
-	// Url for setting the generation as proposed/accepted for token
+	// Url for setting one generation as proposed/accepted or two generations as accepted.
+	// Token is part of the route but ignored.
 	GossipGenerationProposeUrl = "/v1/generation/%s/propose"
 	// Url for setting the generation and transaction as committed for token
 	GossipGenerationCommmitUrl = "/v1/generation/%s/commit"
@@ -27,6 +28,7 @@ const (
 	GossipGenerationSplitUrl = "/v1/token/split"
 
 	GossipTokenHasHistoryUrl    = "/v1/token/%s/has-history"
+	GossipTokenGetHistoryUrl    = "/v1/token/%s/history"
 	GossipTokenInRange          = "/v1/token/%s/in-range"
 	GossipBrokerIdentifyUrl     = "/v1/broker/identify" // Send/receive my info to the peer
 	GossipHostIsUpUrl           = "/v1/broker/%s/is-up"

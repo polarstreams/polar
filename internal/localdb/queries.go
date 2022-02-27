@@ -190,7 +190,7 @@ func (c *client) GenerationInfo(token Token, version GenVersion) (*Generation, e
 	return scanGenRow(rows)
 }
 
-func (c *client) CommitGeneration(gen *Generation) error {
+func (c *client) CommitGeneration(gen1 *Generation, gen2 *Generation) error {
 	db := c.db
 	tx, err := db.Begin()
 	if err != nil {
@@ -204,19 +204,28 @@ func (c *client) CommitGeneration(gen *Generation) error {
 	insertTxStatement := tx.StmtContext(context.TODO(), c.queries.insertTransaction)
 
 	if _, err := insertTxStatement.Exec(
-		gen.Tx, gen.TxLeader, gen.Timestamp, StatusCommitted); err != nil {
+		gen1.Tx, gen1.TxLeader, gen1.Timestamp, StatusCommitted); err != nil {
 		return err
 	}
 
-	followers := utils.ToCsv(gen.Followers)
-
-	if _, err := insertGenStatement.Exec(
-		gen.Start, gen.End, gen.Version, gen.Timestamp, gen.Tx, gen.TxLeader,
-		StatusCommitted, gen.Leader, followers, parentsToString(gen.Parents)); err != nil {
+	if err := execInsertGeneration(insertGenStatement, gen1); err != nil {
 		return err
+	}
+
+	if gen2 != nil {
+		if err := execInsertGeneration(insertGenStatement, gen2); err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()
+}
+
+func execInsertGeneration(stmt *sql.Stmt, gen *Generation) error {
+	_, err := stmt.Exec(
+		gen.Start, gen.End, gen.Version, gen.Timestamp, gen.Tx, gen.TxLeader,
+		StatusCommitted, gen.Leader, utils.ToCsv(gen.Followers), parentsToString(gen.Parents))
+	return err
 }
 
 func (c *client) SaveOffset(kv *OffsetStoreKeyValue) error {

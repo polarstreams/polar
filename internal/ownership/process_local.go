@@ -75,7 +75,7 @@ func (o *generator) processLocalMyToken(message *localGenMessage) creationError 
 			"Proposing myself as leader of T%d (%d) in v%d", topology.MyOrdinal(), topology.MyToken(), gen.Version)
 	}
 
-	followerErrors := o.setStateToFollowers(&gen, []error{nil, nil}, readResults)
+	followerErrors := o.setStateToFollowers(&gen, nil, readResults)
 	if followerErrors[0] != nil && followerErrors[1] != nil {
 		return newCreationError("Followers state could not be set to proposed")
 	}
@@ -85,7 +85,7 @@ func (o *generator) processLocalMyToken(message *localGenMessage) creationError 
 		localTx = &localProposed.Tx
 	}
 
-	if err := o.discoverer.SetGenerationProposed(&gen, localTx); err != nil {
+	if err := o.discoverer.SetGenerationProposed(&gen, nil, localTx); err != nil {
 		log.Err(err).Msg("Unexpected error when setting as proposed locally")
 		// Don't retry
 		return newNonRetryableError("Unexpected local error")
@@ -99,7 +99,7 @@ func (o *generator) processLocalMyToken(message *localGenMessage) creationError 
 		return newCreationError("Followers state could not be set to accepted")
 	}
 
-	if err := o.discoverer.SetGenerationProposed(&gen, &gen.Tx); err != nil {
+	if err := o.discoverer.SetGenerationProposed(&gen, nil, &gen.Tx); err != nil {
 		log.Err(err).Msg("Unexpected error when setting as proposed locally")
 		return newCreationError("Unexpected local error")
 	}
@@ -108,7 +108,7 @@ func (o *generator) processLocalMyToken(message *localGenMessage) creationError 
 	log.Info().Msgf("Setting transaction for T%d (%d) as committed", topology.MyOrdinal(), topology.MyToken())
 
 	// We can now start receiving producer traffic for this token
-	if err := o.discoverer.SetAsCommitted(gen.Start, gen.Tx, topology.MyOrdinal()); err != nil {
+	if err := o.discoverer.SetAsCommitted(gen.Start, nil, gen.Tx, topology.MyOrdinal()); err != nil {
 		log.Err(err).Msg("Set as committed locally failed (probably local db related)")
 		return newCreationError("Set as committed locally failed")
 	}
@@ -138,6 +138,10 @@ func (o *generator) setStateToFollowers(
 ) []error {
 	error1 := make(chan error)
 	error2 := make(chan error)
+
+	if previousErrors == nil {
+		previousErrors = []error{nil, nil}
+	}
 
 	setFunc := func(i int, errorChan chan error) {
 		o.setRemoteState(gen.Followers[i], gen, previousErrors[i], readResults[i], errorChan)
@@ -174,10 +178,10 @@ func (o *generator) setRemoteState(
 
 	if gen.Status != StatusCommitted {
 		// Use proposed CAS
-		errorChan <- o.gossiper.SetGenerationAsProposed(ordinal, gen, tx)
+		errorChan <- o.gossiper.SetGenerationAsProposed(ordinal, gen, nil, tx)
 	} else {
 		// Use committed CAS
-		errorChan <- o.gossiper.SetAsCommitted(ordinal, gen.Start, *tx)
+		errorChan <- o.gossiper.SetAsCommitted(ordinal, gen.Start, nil, *tx)
 	}
 }
 

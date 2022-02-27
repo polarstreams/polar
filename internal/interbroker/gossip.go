@@ -88,11 +88,14 @@ type GenerationGossiper interface {
 	// HasTokenHistoryForToken determines whether the broker has any history matching the token
 	HasTokenHistoryForToken(ordinal int, token Token) (bool, error)
 
-	// Compare and sets the generation value to the proposed state
-	SetGenerationAsProposed(ordinal int, newGen *Generation, expectedTx *UUID) error
+	// Gets the last known generation (not necessary the active one) of a given start token
+	ReadTokenHistory(ordinal int, token Token) (*Generation, error)
+
+	// Compare and sets the generation value to the proposed/accepted state
+	SetGenerationAsProposed(ordinal int, newGen *Generation, newGen2 *Generation, expectedTx *UUID) error
 
 	// Compare and sets the generation as committed
-	SetAsCommitted(ordinal int, token Token, tx UUID) error
+	SetAsCommitted(ordinal int, token1 Token, token2 *Token, tx UUID) error
 
 	// Sends a request to the previous broker to start the process of splitting its token range
 	RangeSplitStart(ordinal int) error
@@ -168,6 +171,20 @@ func (g *gossiper) HasTokenHistoryForToken(ordinal int, token Token) (bool, erro
 	var result bool
 	err = json.NewDecoder(r.Body).Decode(&result)
 	return result, err
+}
+
+func (g *gossiper) ReadTokenHistory(ordinal int, token Token) (*Generation, error) {
+	r, err := g.requestGet(ordinal, fmt.Sprintf(conf.GossipTokenGetHistoryUrl, token))
+	if err != nil {
+		return nil, err
+	}
+	defer r.Body.Close()
+	var result Generation
+	err = json.NewDecoder(r.Body).Decode(&result)
+	if result.Version == 0 {
+		return nil, nil
+	}
+	return &result, nil
 }
 
 func (g *gossiper) RegisterGenListener(listener GenListener) {
@@ -379,10 +396,20 @@ func (g *gossiper) ReadProducerOffset(ordinal int, topic *TopicDataId) (uint64, 
 	return value, err
 }
 
-func (g *gossiper) SetGenerationAsProposed(ordinal int, newGen *Generation, expectedTx *UUID) error {
+func (g *gossiper) SetGenerationAsProposed(
+	ordinal int,
+	newGen *Generation,
+	newGen2 *Generation,
+	expectedTx *UUID,
+) error {
 	message := GenerationProposeMessage{
-		Generation: newGen,
-		ExpectedTx: expectedTx,
+		Generation:  newGen,
+		Generation2: newGen2,
+		ExpectedTx:  expectedTx,
+	}
+
+	if newGen2 != nil && newGen2.Status != StatusAccepted {
+		log.Fatal().Msgf("it is only possible to accept two generations at the same time")
 	}
 
 	jsonBody, err := json.Marshal(message)
@@ -395,9 +422,11 @@ func (g *gossiper) SetGenerationAsProposed(ordinal int, newGen *Generation, expe
 	return err
 }
 
-func (g *gossiper) SetAsCommitted(ordinal int, token Token, tx UUID) error {
+func (g *gossiper) SetAsCommitted(ordinal int, token1 Token, token2 *Token, tx UUID) error {
 	message := GenerationCommitMessage{
 		Tx:     tx,
+		Token1: token1,
+		Token2: token2,
 		Origin: g.discoverer.Topology().MyOrdinal(),
 	}
 	jsonBody, err := json.Marshal(message)
@@ -405,7 +434,12 @@ func (g *gossiper) SetAsCommitted(ordinal int, token Token, tx UUID) error {
 		log.Fatal().Err(err).Msgf("json marshalling failed when setting generation as committed")
 	}
 
-	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationCommmitUrl, token), jsonBody)
+	tokenParam := token1.String()
+	if token2 != nil {
+		tokenParam += token2.String()
+	}
+
+	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipGenerationCommmitUrl, tokenParam), jsonBody)
 	defer bodyClose(r)
 	return err
 }

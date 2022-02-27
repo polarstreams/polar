@@ -70,6 +70,7 @@ func (g *gossiper) acceptHttpConnections() error {
 			router.POST(conf.GossipGenerationSplitUrl, ToPostHandle(g.postGenSplitHandler))
 			router.GET(fmt.Sprintf(conf.GossipTokenInRange, ":token"), ToHandle(g.getTokenInRangeHandler))
 			router.GET(fmt.Sprintf(conf.GossipTokenHasHistoryUrl, ":token"), ToHandle(g.getTokenHasHistoryUrl))
+			router.GET(fmt.Sprintf(conf.GossipTokenGetHistoryUrl, ":token"), ToHandle(g.getTokenHistoryUrl))
 			router.GET(fmt.Sprintf(
 				conf.GossipReadProducerOffsetUrl,
 				":topic",
@@ -125,28 +126,21 @@ func (g *gossiper) getGenHandler(w http.ResponseWriter, r *http.Request, ps http
 }
 
 func (g *gossiper) postGenProposeHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
-	if _, err := strconv.ParseInt(strings.TrimSpace(ps.ByName("token")), 10, 64); err != nil {
-		return err
-	}
 	var message GenerationProposeMessage
 	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
 		return err
 	}
 	// Use the registered listener
-	return g.genListener.OnRemoteSetAsProposed(message.Generation, message.ExpectedTx)
+	return g.genListener.OnRemoteSetAsProposed(message.Generation, message.Generation2, message.ExpectedTx)
 }
 
 func (g *gossiper) postGenCommitHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
-	token, err := strconv.ParseInt(strings.TrimSpace(ps.ByName("token")), 10, 64)
-	if err != nil {
-		return err
-	}
-	var message GenerationCommitMessage
-	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
+	var m GenerationCommitMessage
+	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
 		return err
 	}
 	// Use the registered listener
-	return g.genListener.OnRemoteSetAsCommitted(Token(token), message.Tx, message.Origin)
+	return g.genListener.OnRemoteSetAsCommitted(m.Token1, m.Token2, m.Tx, m.Origin)
 }
 
 func (g *gossiper) postGenSplitHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
@@ -215,6 +209,22 @@ func (g *gossiper) getTokenHasHistoryUrl(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Content-Type", contentType)
 	// Encode can't fail for a bool
 	_ = json.NewEncoder(w).Encode(result)
+	return nil
+}
+
+func (g *gossiper) getTokenHistoryUrl(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	token, err := strconv.ParseInt(strings.TrimSpace(ps.ByName("token")), 10, 64)
+	if err != nil {
+		return err
+	}
+
+	gen, err := g.discoverer.GetTokenHistory(Token(token))
+	if err != nil {
+		return err
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	PanicIfErr(json.NewEncoder(w).Encode(gen), "Unexpected error when serializing generation")
 	return nil
 }
 

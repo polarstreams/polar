@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -112,6 +113,12 @@ func PanicIfErr(err error, message string) {
 	if err != nil {
 		log.Panic().Err(err).Msg(message)
 	}
+}
+
+func CreateErrAndLog(format string, v ...interface{}) error {
+	message := fmt.Sprintf(format, v...)
+	log.Error().Msgf(message)
+	return errors.New(message)
 }
 
 func ToBlob(v uuid.UUID) []byte {
