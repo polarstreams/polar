@@ -98,7 +98,7 @@ var _ = Describe("discoverer", func() {
 		})
 	})
 
-	Describe("Peers()", func() {
+	Describe("Topology().Peers()", func() {
 		It("should return all brokers except self", func() {
 			d := &discoverer{
 				config: &configFake{
@@ -111,7 +111,7 @@ var _ = Describe("discoverer", func() {
 
 			d.Init()
 
-			Expect(d.Peers()).To(Equal([]BrokerInfo{
+			Expect(d.Topology().Peers()).To(Equal([]BrokerInfo{
 				{
 					IsSelf:   false,
 					Ordinal:  0,

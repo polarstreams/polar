@@ -173,9 +173,15 @@ func (d *discoverer) SetGenerationProposed(gen *Generation, gen2 *Generation, ex
 		return err
 	}
 
-	log.Info().Msgf(
-		"%s version %d with B%d as leader for range [%d, %d]",
-		gen.Status, gen.Version, gen.Leader, gen.Start, gen.End)
+	if !gen.ToDelete {
+		log.Info().Msgf(
+			"%s v%d with B%d as leader for range [%d, %d]",
+			gen.Status, gen.Version, gen.Leader, gen.Start, gen.End)
+	} else {
+		log.Info().Msgf(
+			"%s delete of token range [%d, %d] with last known version v%d",
+			gen.Status, gen.Start, gen.End, gen.Parents[0].Version)
+	}
 
 	// Replace entire proposed value
 	d.genProposed[gen.Start] = *gen
@@ -218,9 +224,15 @@ func (d *discoverer) acceptMultiple(gen1 *Generation, gen2 *Generation) error {
 	d.genProposed[gen1.Start] = *gen1
 	d.genProposed[gen2.Start] = *gen2
 
-	log.Info().Msgf(
-		"Accepted two generations: [%d, %d] v%d with B%d as leader and [%d, %d] v%d with B%d as leader (B%d as tx leader)",
-		gen1.Start, gen1.End, gen1.Version, gen1.Leader, gen2.Start, gen2.End, gen2.Version, gen2.Leader, gen2.TxLeader)
+	if !gen2.ToDelete {
+		log.Info().Msgf(
+			"Accepted two generations: [%d, %d] v%d with B%d as leader and [%d, %d] v%d with B%d as leader (B%d as tx leader)",
+			gen1.Start, gen1.End, gen1.Version, gen1.Leader, gen2.Start, gen2.End, gen2.Version, gen2.Leader, gen2.TxLeader)
+	} else {
+		log.Info().Msgf(
+			"Accepted two generations: [%d, %d] v%d with B%d as leader and a generation to delete range [%d, %d] (B%d as tx leader)",
+			gen1.Start, gen1.End, gen1.Version, gen1.Leader, gen2.Start, gen2.End, gen2.TxLeader)
+	}
 	return nil
 }
 
@@ -241,9 +253,9 @@ func (d *discoverer) SetAsCommitted(token1 Token, token2 *Token, tx UUID, origin
 
 	if token2 != nil {
 		if g, ok := d.genProposed[*token2]; !ok {
-			return fmt.Errorf("No proposed value found for token %d", *token2)
+			return fmt.Errorf("No proposed value found for second token %d, %v", *token2, d.genProposed)
 		} else if g.Tx != tx {
-			return fmt.Errorf("Transaction does not match")
+			return fmt.Errorf("Transaction does not match for token %d (%s != %s)", *token2, g.Tx, tx)
 		} else {
 			gen2 = &g
 		}
@@ -255,19 +267,28 @@ func (d *discoverer) SetAsCommitted(token1 Token, token2 *Token, tx UUID, origin
 		log.Info().Msgf(
 			"Committing [%d, %d] v%d with B%d as leader", gen1.Start, gen1.End, gen1.Version, gen1.Leader)
 	} else {
-		log.Info().Msgf(
-			"Committing both [%d, %d] v%d with B%d as leader and [%d, %d] v%d with B%d as leader",
-			gen1.Start, gen1.End, gen1.Version, gen1.Leader,
-			gen2.Start, gen2.End, gen2.Version, gen2.Leader)
+		if !gen2.ToDelete {
+			log.Info().Msgf(
+				"Committing both [%d, %d] v%d with B%d as leader and [%d, %d] v%d with B%d as leader",
+				gen1.Start, gen1.End, gen1.Version, gen1.Leader,
+				gen2.Start, gen2.End, gen2.Version, gen2.Leader)
+		} else {
+			log.Info().Msgf(
+				"Committing [%d, %d] v%d with B%d as leader for joined ranges",
+				gen1.Start, gen1.End, gen1.Version, gen1.Leader)
+		}
 		gen2.Status = StatusCommitted
 	}
 
-	if gen2 != nil {
+	gen2ForDb := gen2
+	if gen2 != nil && gen2.ToDelete {
+		// Don't persist in the database the removed generation
+		gen2ForDb = nil
 	}
 
 	// Store the history and the tx table first
 	// that way db failures don't affect local state
-	if err := d.localDb.CommitGeneration(&gen1, gen2); err != nil {
+	if err := d.localDb.CommitGeneration(&gen1, gen2ForDb); err != nil {
 		return err
 	}
 

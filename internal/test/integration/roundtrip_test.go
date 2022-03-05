@@ -255,18 +255,28 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 		b4.UpdateTopologyFile(3)
 		b5.UpdateTopologyFile(3)
 
-		time.Sleep(1 * time.Second)
+		const commitJoinMessage = "Committing \\[-9223372036854775808, -3074457345618259968\\] v2 with B0 as leader for joined ranges"
+		b0.WaitOutput(commitJoinMessage)
+		b1.WaitOutput(commitJoinMessage)
+		b2.WaitOutput(commitJoinMessage)
+
+		b0.LookForErrors(30)
+		b1.LookForErrors(30)
+		b2.LookForErrors(30)
 
 		b3.Shutdown()
 		b3 = nil
+		time.Sleep(200 * time.Millisecond)
 		b4.Shutdown()
 		b4 = nil
+		time.Sleep(200 * time.Millisecond)
 		b5.Shutdown()
 		b5 = nil
 
-		fmt.Println("------------------Waiting")
-		time.Sleep(6 * time.Second)
-		fmt.Println("------------------Finishing")
+		time.Sleep(2 * time.Second)
+		b0.WaitOutput("Gossip now contains 2 clients for 2 peers")
+		b1.WaitOutput("Gossip now contains 2 clients for 2 peers")
+		b2.WaitOutput("Gossip now contains 2 clients for 2 peers")
 	})
 })
 

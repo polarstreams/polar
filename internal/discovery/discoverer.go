@@ -47,8 +47,8 @@ type TopologyGetter interface {
 	// LocalInfo returns the information of the current broker (self)
 	LocalInfo() *BrokerInfo
 
-	// Returns a point-in-time list of all brokers except itself
-	Peers() []BrokerInfo
+	// Returns broker information from current or previous topology
+	CurrentOrPastBroker(ordinal int) *BrokerInfo
 
 	// Returns a point-in-time list of all brokers and local info.
 	Topology() *TopologyInfo
@@ -70,25 +70,27 @@ func NewDiscoverer(config conf.DiscovererConfig, localDb localdb.Client) Discove
 	generations.Store(make(genMap))
 
 	return &discoverer{
-		config:      config,
-		localDb:     localDb,
-		listeners:   make([]TopologyChangeListener, 0),
-		topology:    atomic.Value{},
-		k8sClient:   newK8sClient(),
-		generations: generations,
-		genProposed: genMap{},
+		config:           config,
+		localDb:          localDb,
+		listeners:        make([]TopologyChangeListener, 0),
+		topology:         atomic.Value{},
+		previousTopology: atomic.Value{},
+		k8sClient:        newK8sClient(),
+		generations:      generations,
+		genProposed:      genMap{},
 	}
 }
 
 type discoverer struct {
-	config      conf.DiscovererConfig
-	localDb     localdb.Client
-	listeners   []TopologyChangeListener
-	topology    atomic.Value // Gets the current brokers, index and ring
-	k8sClient   k8sClient
-	genMutex    sync.Mutex
-	genProposed genMap
-	generations atomic.Value // copy on write semantics
+	config           conf.DiscovererConfig
+	localDb          localdb.Client
+	listeners        []TopologyChangeListener
+	topology         atomic.Value // Gets the current brokers, index and ring
+	previousTopology atomic.Value // Stores the previous topology to try to access the peers that are going away, if possible
+	k8sClient        k8sClient
+	genMutex         sync.Mutex
+	genProposed      genMap
+	generations      atomic.Value // copy on write semantics
 }
 
 func (d *discoverer) Init() error {
@@ -123,6 +125,20 @@ func (d *discoverer) Topology() *TopologyInfo {
 	return value.(*TopologyInfo)
 }
 
+func (d *discoverer) CurrentOrPastBroker(ordinal int) *BrokerInfo {
+	topology := d.Topology()
+	broker := topology.BrokerByOrdinal(ordinal)
+
+	if broker != nil {
+		return broker
+	}
+
+	if previousTopology := d.previousTopology.Load(); previousTopology != nil {
+		return previousTopology.(*TopologyInfo).BrokerByOrdinal(ordinal)
+	}
+	return nil
+}
+
 // Gets the desired replicas from k8s api and watches for changes in the statefulset
 func (d *discoverer) loadTopology() error {
 	totalBrokers, err := d.k8sClient.getDesiredReplicas()
@@ -149,7 +165,7 @@ func (d *discoverer) loadTopology() error {
 				replicasChanged = normalizedLen
 			}
 			topology := createTopology(replicasChanged, d.config)
-			d.topology.Store(topology)
+			d.swapTopology(topology)
 			d.emitTopologyChangeEvent(previousTopology, topology)
 		}
 	}()
@@ -212,13 +228,18 @@ func (d *discoverer) loadFixedTopology(ordinal int) error {
 					"Topology changed from %d to %d brokers based on file information",
 					len(previousTopology.Brokers),
 					len(topology.Brokers))
-				d.topology.Store(topology)
+				d.swapTopology(topology)
 				d.emitTopologyChangeEvent(previousTopology, topology)
 			}
 		}
 	}()
 
 	return nil
+}
+
+func (d *discoverer) swapTopology(topology *TopologyInfo) {
+	previousTopology := d.topology.Swap(topology)
+	d.previousTopology.Store(previousTopology)
 }
 
 func createFixedTopology(ordinal int, names string) (*TopologyInfo, error) {
@@ -246,10 +267,6 @@ func createFixedTopology(ordinal int, names string) (*TopologyInfo, error) {
 
 	result := NewTopology(brokers)
 	return &result, nil
-}
-
-func (d *discoverer) Peers() []BrokerInfo {
-	return d.Topology().Peers()
 }
 
 func (d *discoverer) Brokers() []BrokerInfo {

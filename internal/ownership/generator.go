@@ -23,6 +23,7 @@ const (
 	waitForPreviousStep = 500 * time.Millisecond
 	maxWaitForSplit     = 5 * time.Minute
 	waitForSplitStep    = 5 * time.Second
+	waitForJoinBase     = 5 * time.Second
 	replicationFactor   = 3
 )
 
@@ -279,6 +280,13 @@ func (o *generator) requestRangeSplit(topology *TopologyInfo) {
 
 func (o *generator) OnJoinRange(previousTopology *TopologyInfo, topology *TopologyInfo) {
 	go func() {
+		// Avoid unnecessary noise
+		if topology.LocalIndex > 0 {
+			delay := time.Duration(topology.LocalIndex) * waitForJoinBase
+			log.Debug().Msgf("Waiting for %s before start joining the token ranges", delay)
+			time.Sleep(delay)
+		}
+
 		for len(topology.Brokers) == len(o.discoverer.Topology().Brokers) && !o.localDb.IsShuttingDown() {
 			message := localJoinRangeGenMessage{
 				topology:         topology,

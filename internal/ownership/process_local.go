@@ -185,20 +185,26 @@ func (o *generator) setRemoteState(
 	}
 }
 
-// Reads from followers, when there's no information, nil property values are returned
 func (o *generator) readStateFromFollowers(gen *Generation) []GenReadResult {
-	r1 := make(chan GenReadResult)
-	r2 := make(chan GenReadResult)
+	return o.readStateFromPeers(gen.Start, gen.Followers)
+}
 
-	go func() {
-		r1 <- o.gossiper.GetGenerations(gen.Followers[0], gen.Start)
-	}()
+func (o *generator) readStateFromPeers(token Token, peers []int) []GenReadResult {
+	resultChannels := make([]chan GenReadResult, len(peers))
+	for i, peer := range peers {
+		ordinal := peer
+		c := make(chan GenReadResult)
+		resultChannels[i] = c
+		go func() {
+			c <- o.gossiper.GetGenerations(ordinal, token)
+		}()
+	}
 
-	go func() {
-		r2 <- o.gossiper.GetGenerations(gen.Followers[1], gen.Start)
-	}()
-
-	return []GenReadResult{<-r1, <-r2}
+	result := make([]GenReadResult, len(peers))
+	for i, c := range resultChannels {
+		result[i] = <-c
+	}
+	return result
 }
 
 func (o *generator) determineStartReason() startReason {

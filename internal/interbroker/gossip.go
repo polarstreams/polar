@@ -307,9 +307,7 @@ func (g *gossiper) requestGet(ordinal int, baseUrl string) (*http.Response, erro
 		return nil, fmt.Errorf("No connection to broker %d", ordinal)
 	}
 
-	topology := g.discoverer.Topology()
-	broker := topology.BrokerByOrdinal(ordinal)
-
+	broker := g.discoverer.CurrentOrPastBroker(ordinal)
 	if broker == nil {
 		return nil, fmt.Errorf("Broker with ordinal %d not found", ordinal)
 	}
@@ -329,9 +327,7 @@ func (g *gossiper) requestPost(ordinal int, baseUrl string, body []byte) (*http.
 		return nil, fmt.Errorf("No connection to broker %d", ordinal)
 	}
 
-	topology := g.discoverer.Topology()
-	broker := topology.BrokerByOrdinal(ordinal)
-
+	broker := g.discoverer.CurrentOrPastBroker(ordinal)
 	if broker == nil {
 		return nil, fmt.Errorf("Broker with ordinal %d not found", ordinal)
 	}

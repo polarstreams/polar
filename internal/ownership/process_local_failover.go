@@ -86,7 +86,7 @@ func (o *generator) processLocalFailover(m *localFailoverGenMessage) creationErr
 	// Now we have a majority of replicas
 	log.Info().
 		Str("reason", reason).
-		Msgf("Setting transaction for T%d (%d) as committed", downBroker.Ordinal, token)
+		Msgf("Setting transaction for T%d (%d) as committed (failover)", downBroker.Ordinal, token)
 
 	// We can now start receiving producer traffic for this token
 	if err := o.discoverer.SetAsCommitted(gen.Start, nil, gen.Tx, topology.MyOrdinal()); err != nil {

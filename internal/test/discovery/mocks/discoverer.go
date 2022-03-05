@@ -32,6 +32,22 @@ func (_m *Discoverer) Brokers() []types.BrokerInfo {
 	return r0
 }
 
+// CurrentOrPastBroker provides a mock function with given fields: ordinal
+func (_m *Discoverer) CurrentOrPastBroker(ordinal int) *types.BrokerInfo {
+	ret := _m.Called(ordinal)
+
+	var r0 *types.BrokerInfo
+	if rf, ok := ret.Get(0).(func(int) *types.BrokerInfo); ok {
+		r0 = rf(ordinal)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*types.BrokerInfo)
+		}
+	}
+
+	return r0
+}
+
 // Generation provides a mock function with given fields: token
 func (_m *Discoverer) Generation(token types.Token) *types.Generation {
 	ret := _m.Called(token)
@@ -201,22 +217,6 @@ func (_m *Discoverer) NextGeneration(token types.Token, version types.GenVersion
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]types.Generation)
-		}
-	}
-
-	return r0
-}
-
-// Peers provides a mock function with given fields:
-func (_m *Discoverer) Peers() []types.BrokerInfo {
-	ret := _m.Called()
-
-	var r0 []types.BrokerInfo
-	if rf, ok := ret.Get(0).(func() []types.BrokerInfo); ok {
-		r0 = rf()
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]types.BrokerInfo)
 		}
 	}
 

@@ -15,6 +15,7 @@ import (
 	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 )
 
 var _ = Describe("Gossiper", func() {
@@ -43,7 +44,7 @@ var _ = Describe("Gossiper", func() {
 				GenId:      3,
 			}
 			discoverer := new(dMocks.Discoverer)
-			discoverer.On("Topology").Return(newTestTopology(3, 2))
+			discoverer.On("CurrentOrPastBroker", mock.Anything).Return(&BrokerInfo{HostName: "127.0.0.1"})
 			config := new(cMocks.Config)
 			config.On("GossipPort").Return(port)
 

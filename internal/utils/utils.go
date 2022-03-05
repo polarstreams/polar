@@ -197,3 +197,17 @@ func ValidRingLength(length int) int {
 	exponent := math.Floor(math.Log2(float64(length) / 3))
 	return int(3 * math.Exp2(exponent))
 }
+
+// Runs in parallel and collects the results in channels
+func InParallel(length int, f func(int) error) []chan error {
+	result := make([]chan error, length)
+	for i := 0; i < length; i++ {
+		c := make(chan error)
+		result[i] = c
+		index := i
+		go func() {
+			c <- f(index)
+		}()
+	}
+	return result
+}
