@@ -75,7 +75,7 @@ spec:
         app.kubernetes.io/name: barco
     spec:
       serviceAccountName: barco
-      terminationGracePeriodSeconds: 1
+      terminationGracePeriodSeconds: 30
       containers:
       - name: barco
         image: golang:1.17-buster

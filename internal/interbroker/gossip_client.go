@@ -22,6 +22,7 @@ import (
 const (
 	baseReconnectionDelayMs = 20
 	maxReconnectionDelayMs  = 10_000
+	removeClientCheckDelay  = 5 * time.Second
 )
 
 func (g *gossiper) OpenConnections() {
@@ -74,37 +75,80 @@ func (g *gossiper) createNewClients(topology *TopologyInfo) {
 	g.connections.Store(m)
 }
 
-// Closes the connections and remove
-func (g *gossiper) removeClients(previousTopology *TopologyInfo, topology *TopologyInfo) {
+// Mark the clients pointing to the brokers that are leaving
+func (g *gossiper) markAsLeaving(previousTopology *TopologyInfo, topology *TopologyInfo) {
 	ordinals := make([]int, 0)
 	for i := len(topology.Brokers); i < len(previousTopology.Brokers); i++ {
 		ordinals = append(ordinals, i)
 	}
-	log.Debug().Msgf("Removing brokers with ordinals %v", ordinals)
+	log.Debug().Msgf("Marking brokers with ordinals %v as leaving", ordinals)
 
-	g.connectionsMutex.Lock()
-	defer g.connectionsMutex.Unlock()
-
-	m := g.connections.Load().(clientMap).clone()
 	for _, ordinal := range ordinals {
-		c, ok := m[ordinal]
-		if !ok {
+		c := g.getClientInfo(ordinal)
+		if c == nil {
 			log.Error().Msgf("Client for broker with ordinal %d not found", ordinal)
 			continue
 		}
 
-		delete(m, ordinal)
-		// Avoid reconnection attempts
-		c.readyNewDataConnection <- false
-		c.readyNewGossipConnection <- false
-		c.gossipClient.CloseIdleConnections()
-		c.routingClient.CloseIdleConnections()
-		if dataConnValue := c.dataConn.Load(); dataConnValue != nil {
-			dataConn := dataConnValue.(*dataConnection)
-			dataConn.close()
-		}
+		c.setAsLeaving()
 	}
-	g.connections.Store(m)
+}
+
+// Waits on a different goroutine for hosts to be considered as down and then removes the clients
+func (g *gossiper) waitForDownAndRemoveClients(previousTopology *TopologyInfo, topology *TopologyInfo) {
+	ordinals := make([]int, 0)
+	for i := len(topology.Brokers); i < len(previousTopology.Brokers); i++ {
+		ordinals = append(ordinals, i)
+	}
+
+	go func() {
+		allHostAreDown := false
+		for !allHostAreDown {
+			log.Debug().Msgf("Waiting for brokers %v to be down before removing them", ordinals)
+			time.Sleep(removeClientCheckDelay)
+
+			for _, ordinal := range ordinals {
+				c := g.getClientInfo(ordinal)
+				isHostUp := c != nil && c.isHostUp()
+				allHostAreDown = !isHostUp
+
+				if isHostUp {
+					log.Debug().Msgf("B%d is still considered UP", ordinal)
+					break
+				}
+			}
+		}
+
+		log.Info().Msgf("Removing brokers with ordinals %v", ordinals)
+
+		g.connectionsMutex.Lock()
+		defer g.connectionsMutex.Unlock()
+
+		m := g.connections.Load().(clientMap).clone()
+		for _, ordinal := range ordinals {
+			c, ok := m[ordinal]
+			if !ok {
+				log.Error().Msgf("Client for B%d not found", ordinal)
+				continue
+			}
+
+			if !c.isHostLeaving() {
+				log.Error().Msgf("Race condition when removing client info for B%d", ordinal)
+				continue
+			}
+
+			delete(m, ordinal)
+
+			c.gossipClient.CloseIdleConnections()
+			c.routingClient.CloseIdleConnections()
+			if dataConnValue := c.dataConn.Load(); dataConnValue != nil {
+				dataConn := dataConnValue.(*dataConnection)
+				dataConn.close()
+			}
+		}
+		g.connections.Store(m)
+		log.Info().Msgf("Gossip now contains %d clients for %d peers", len(m), len(topology.Brokers)-1)
+	}()
 }
 
 func (g *gossiper) onHostDown(b *BrokerInfo) {
@@ -230,6 +274,7 @@ type clientInfo struct {
 	dataMessages             chan *dataRequest
 	hostName                 string
 	isReconnecting           int32             // Used for concurrency control on reconnection
+	isLeaving                int32             // Determines whether the host is leaving the cluster
 	onHostDown               func(*BrokerInfo) // Func to be called when broker status changed from up to down
 	onHostUp                 func(*BrokerInfo) // Func to be called when broker status changed from down to up
 	readyNewDataConnection   chan bool         // Gets a message when the peer is ready to accept data connections
@@ -239,7 +284,7 @@ type clientInfo struct {
 func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 	i := 0
 	shouldExit := false
-	for !shouldExit {
+	for !shouldExit || !c.isHostLeaving() {
 		dataConn, err := newDataConnection(c, config)
 		if err != nil {
 			delayMs := math.Pow(2, float64(i)) * baseReconnectionDelayMs
@@ -256,7 +301,7 @@ func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 			case shouldConnect := <-c.readyNewDataConnection:
 				if !shouldConnect {
 					shouldExit = true
-					log.Debug().Msgf("Not attempting further data reconnections to %s", c.hostName)
+					log.Info().Msgf("Not attempting further data reconnections to %s", c.hostName)
 				} else {
 					log.Debug().Msgf("Attempting new data connection after receiving ready message")
 				}
@@ -289,8 +334,15 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *BrokerInfo) {
 
 	// Set as not connected
 	if atomic.CompareAndSwapInt32(&c.isConnected, 1, 0) {
-		log.Warn().Msgf("Broker %s considered DOWN", broker.HostName)
-		c.onHostDown(broker)
+		if !c.isHostLeaving() {
+			log.Warn().Msgf("Broker %s considered DOWN", broker.HostName)
+			c.onHostDown(broker)
+		}
+	}
+
+	if c.isHostLeaving() {
+		log.Info().Msgf("Not starting reconnection flow as %s is leaving", broker.HostName)
+		return
 	}
 
 	log.Info().Msgf("Start reconnecting to %s", broker.HostName)
@@ -298,7 +350,7 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *BrokerInfo) {
 	go func() {
 		i := 0
 		succeeded := false
-		for !g.localDb.IsShuttingDown() {
+		for !c.isHostLeaving() {
 			delayMs := math.Pow(2, float64(i)) * baseReconnectionDelayMs
 			if delayMs > maxReconnectionDelayMs {
 				delayMs = maxReconnectionDelayMs
@@ -359,4 +411,14 @@ func (c *clientInfo) makeFirstRequest(g *gossiper, broker *BrokerInfo) error {
 		return fmt.Errorf("Initial request to %s failed: %s", broker, body)
 	}
 	return nil
+}
+
+func (c *clientInfo) setAsLeaving() {
+	atomic.StoreInt32(&c.isLeaving, 1)
+	c.readyNewDataConnection <- false
+	c.readyNewGossipConnection <- false
+}
+
+func (c *clientInfo) isHostLeaving() bool {
+	return atomic.LoadInt32(&c.isLeaving) == 1
 }

@@ -277,6 +277,32 @@ func (o *generator) requestRangeSplit(topology *TopologyInfo) {
 	log.Info().Msgf("Waited %dms for B%d to split ranges", time.Since(start).Milliseconds(), prevOrdinal)
 }
 
+func (o *generator) OnJoinRange(previousTopology *TopologyInfo, topology *TopologyInfo) {
+	go func() {
+		for len(topology.Brokers) == len(o.discoverer.Topology().Brokers) && !o.localDb.IsShuttingDown() {
+			message := localJoinRangeGenMessage{
+				topology:         topology,
+				previousTopology: previousTopology,
+				result:           make(chan creationError, 1),
+			}
+
+			// Send to the processing queue
+			o.items <- &message
+
+			// Wait for the result
+			err := <-message.result
+			if err == nil {
+				log.Debug().Msgf(
+					"Generator was able to become leader of joined range for T%d", topology.MyOrdinal())
+				break
+			}
+
+			// Don't wait for long time as it can result in unavailability of the system
+			time.Sleep(baseDelay)
+		}
+	}()
+}
+
 // process Processes events in order.
 //
 // Reject (not block) concurrent event processing to allow it to be retried quickly.
@@ -327,6 +353,10 @@ func (o *generator) processGeneration(message genMessage) creationError {
 
 	if m, ok := message.(*localSplitRangeGenMessage); ok {
 		return o.processLocalSplitRange(m)
+	}
+
+	if m, ok := message.(*localJoinRangeGenMessage); ok {
+		return o.processLocalJoinRange(m)
 	}
 
 	log.Panic().Msg("Unhandled generation internal message type")

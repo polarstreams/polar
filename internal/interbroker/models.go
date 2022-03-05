@@ -15,6 +15,9 @@ type GenListener interface {
 	OnRemoteSetAsCommitted(token1 Token, token2 *Token, tx UUID, origin int) error
 
 	OnRemoteRangeSplitStart(origin int) error
+
+	// Invoked when scaling down is detected and ranges need to be joined
+	OnJoinRange(previousTopology *TopologyInfo, topology *TopologyInfo)
 }
 
 type ConsumerInfoListener interface {

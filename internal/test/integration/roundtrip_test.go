@@ -6,6 +6,7 @@ package integration_test
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net/http"
 	"testing"
@@ -204,6 +205,68 @@ var _ = Describe("A 3 node cluster", func() {
 			b0.LookForErrors(10)
 			b3.LookForErrors(10)
 		})
+	})
+})
+
+var _ = Describe("With a non-reusable cluster", func ()  {
+	var b0, b1, b2, b3, b4, b5 *TestBroker
+
+	BeforeEach(func ()  {
+		b0 = nil
+		b1 = nil
+		b2 = nil
+		b3 = nil
+		b4 = nil
+		b5 = nil
+	})
+
+	AfterEach(func ()  {
+		log.Debug().Msgf("Cleaning up cluster")
+		brokers := []*TestBroker{b0, b1, b2, b3, b4, b5}
+		for _, b := range brokers {
+			if b != nil {
+				b.Shutdown()
+			}
+		}
+	})
+
+	It("should scale down", func () {
+		b0 = NewTestBroker(0, &TestBrokerOptions{InitialClusterSize: 6})
+		b1 = NewTestBroker(1, &TestBrokerOptions{InitialClusterSize: 6})
+		b2 = NewTestBroker(2, &TestBrokerOptions{InitialClusterSize: 6})
+		b3 = NewTestBroker(3, &TestBrokerOptions{InitialClusterSize: 6})
+		b4 = NewTestBroker(4, &TestBrokerOptions{InitialClusterSize: 6})
+		b5 = NewTestBroker(5, &TestBrokerOptions{InitialClusterSize: 6})
+
+		b0.WaitForStart().WaitForVersion1()
+		b1.WaitForStart().WaitForVersion1()
+		b2.WaitForStart().WaitForVersion1()
+		b3.WaitForStart().WaitForVersion1()
+		b4.WaitForStart().WaitForVersion1()
+		b5.WaitForStart().WaitForVersion1()
+
+		time.Sleep(1 * time.Second)
+		fmt.Println("------------------Updating the topology")
+
+		b0.UpdateTopologyFile(3)
+		b1.UpdateTopologyFile(3)
+		b2.UpdateTopologyFile(3)
+		b3.UpdateTopologyFile(3)
+		b4.UpdateTopologyFile(3)
+		b5.UpdateTopologyFile(3)
+
+		time.Sleep(1 * time.Second)
+
+		b3.Shutdown()
+		b3 = nil
+		b4.Shutdown()
+		b4 = nil
+		b5.Shutdown()
+		b5 = nil
+
+		fmt.Println("------------------Waiting")
+		time.Sleep(6 * time.Second)
+		fmt.Println("------------------Finishing")
 	})
 })
 

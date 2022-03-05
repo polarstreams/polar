@@ -126,7 +126,7 @@ func (b *TestBroker) UpdateTopologyFile(brokerLength int) {
 		0644)
 }
 
-func (b *TestBroker) WaitForStart() {
+func (b *TestBroker) WaitForStart() *TestBroker {
 	timerChannel := time.After(5 * time.Second)
 	started := false
 
@@ -141,6 +141,8 @@ func (b *TestBroker) WaitForStart() {
 		b.Kill()
 		Fail(fmt.Sprintf("Broker %d could not be started", b.ordinal))
 	}
+
+	return b
 }
 
 // Reads the last 100 lines of the output looking for a match

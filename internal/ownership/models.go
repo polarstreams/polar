@@ -44,6 +44,16 @@ func (m *localSplitRangeGenMessage) setResult(err creationError) {
 	m.result <- err
 }
 
+type localJoinRangeGenMessage struct {
+	topology         *TopologyInfo // Point in time topology info
+	previousTopology *TopologyInfo // Previous topology info
+	result           chan creationError
+}
+
+func (m *localJoinRangeGenMessage) setResult(err creationError) {
+	m.result <- err
+}
+
 type remoteGenProposedMessage struct {
 	gen        *Generation
 	gen2       *Generation

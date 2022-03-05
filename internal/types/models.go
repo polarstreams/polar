@@ -140,7 +140,12 @@ func (t *TopologyInfo) PreviousBroker() *BrokerInfo {
 
 // NextBroker returns the broker in the position n+1
 func (t *TopologyInfo) NextBroker() *BrokerInfo {
-	return &t.Brokers[(int(t.LocalIndex)+1)%len(t.Brokers)]
+	return &t.Brokers[t.NextIndex()]
+}
+
+// NextBroker returns the broker in the position n+1
+func (t *TopologyInfo) NextIndex() BrokerIndex {
+	return BrokerIndex((int(t.LocalIndex) + 1) % len(t.Brokers))
 }
 
 // NextBrokers returns the broker in the position n+1, n+2, n...
