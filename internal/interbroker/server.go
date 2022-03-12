@@ -53,7 +53,9 @@ func (g *gossiper) acceptHttpConnections() error {
 			// HTTP/2 only server (prior knowledge)
 			conn, err := listener.Accept()
 			if err != nil {
-				log.Err(err).Msgf("Failed to accept new connections")
+				if !g.localDb.IsShuttingDown() {
+					log.Err(err).Msgf("Failed to accept new connections")
+				}
 				break
 			}
 
@@ -79,8 +81,8 @@ func (g *gossiper) acceptHttpConnections() error {
 				":version"), ToHandle(g.getProducerOffset))
 			router.GET(fmt.Sprintf(conf.GossipHostIsUpUrl, ":broker"), ToHandle(g.getBrokerIsUpHandler))
 
-			router.POST(conf.GossipConsumerGroupsInfoUrl, ToPostHandle(g.postConsumerGroupInfo))
-			router.POST(conf.GossipConsumerOffsetUrl, ToPostHandle(g.postConsumerOffset))
+			router.POST(conf.GossipConsumerGroupsInfoUrl, ToPostHandle(g.postConsumerGroupInfoHandler))
+			router.POST(conf.GossipConsumerOffsetUrl, ToPostHandle(g.postConsumerOffsetHandler))
 
 			// Routing message is part of gossip but it's usually made using a different client connection
 			router.POST(fmt.Sprintf(conf.RoutingMessageUrl, ":topic"), ToPostHandle(g.postReroutingHandler))
@@ -96,10 +98,16 @@ func (g *gossiper) acceptHttpConnections() error {
 	}()
 
 	<-c
+	g.httpListener = listener
 
 	log.Info().Msgf("Start listening to peers for http requests on port %d", port)
 
 	return nil
+}
+
+func (g *gossiper) Close() {
+	g.httpListener.Close()
+	g.dataListener.Close()
 }
 
 func (g *gossiper) getGenHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
@@ -262,7 +270,7 @@ func (g *gossiper) getProducerOffset(w http.ResponseWriter, r *http.Request, ps 
 	return nil
 }
 
-func (g *gossiper) postConsumerGroupInfo(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+func (g *gossiper) postConsumerGroupInfoHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
 	var message ConsumerGroupInfoMessage
 	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
 		return err
@@ -272,7 +280,7 @@ func (g *gossiper) postConsumerGroupInfo(w http.ResponseWriter, r *http.Request,
 	return nil
 }
 
-func (g *gossiper) postConsumerOffset(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+func (g *gossiper) postConsumerOffsetHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
 	var message OffsetStoreKeyValue
 	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
 		return err

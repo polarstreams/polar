@@ -79,6 +79,7 @@ func (b *TestBroker) Start() {
 		"BARCO_SEGMENT_FLUSH_INTERVAL_MS=1000",
 		"BARCO_CONSUMER_ADD_DELAY_MS=200",
 		"BARCO_TOPOLOGY_FILE_POLL_DELAY_MS=400",
+		"BARCO_SHUTDOWN_DELAY_SECS=1",
 	)
 	stderr, err := cmd.StderrPipe()
 	Expect(err).NotTo(HaveOccurred())
@@ -203,12 +204,12 @@ func (b *TestBroker) WaitForVersion1() {
 }
 
 func (b *TestBroker) Shutdown() {
-	log.Debug().Msgf("Shutting down broker %d", b.ordinal)
+	log.Debug().Msgf("Shutting down test broker B%d", b.ordinal)
 	err := b.cmd.Process.Signal(os.Interrupt)
 	Expect(err).NotTo(HaveOccurred())
 
 	exited := false
-	timerChan := time.After(2 * time.Second)
+	timerChan := time.After(5 * time.Second)
 	exitChan := make(chan bool, 1)
 	go func() {
 		b.cmd.Wait()

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -135,18 +136,19 @@ var _ = Describe("A 3 node cluster", func() {
 			b1.WaitForVersion1()
 			b2.WaitForVersion1()
 
-			message := `{"hello": "world"}`
-
 			// Test with HTTP/2
 			client := NewTestClient(nil)
 			// Send messages to all brokers
-			expectOk(client.ProduceJson(0, "abc", message, ""))
-			expectOk(client.ProduceJson(1, "abc", message, ""))
-			expectOk(client.ProduceJson(2, "abc", message, ""))
+			expectOk(client.ProduceJson(0, "abc", `{"hello": "world0"}`, ""))
+			expectOk(client.ProduceJson(1, "abc", `{"hello": "world1_1"}`, ""))
+			expectOk(client.ProduceJson(2, "abc", `{"hello": "world2_1"}`, ""))
+
+			log.Debug().Msgf("Consuming from B2")
+			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
+			log.Debug().Msgf("Registered as consumer")
 
 			time.Sleep(1 * time.Second)
 
-			log.Debug().Msgf("Shutting down B1")
 			b1.Shutdown()
 
 			b0.WaitOutput("Broker 127.0.0.2 considered DOWN")
@@ -159,15 +161,34 @@ var _ = Describe("A 3 node cluster", func() {
 			time.Sleep(1 * time.Second)
 
 			// B2 should ingest data in T1-T2 range
-			expectOk(client.ProduceJson(2, "abc", message, partitionKeyT1Range))
+			expectOk(client.ProduceJson(2, "abc", `{"hello": "world1_2"}`, partitionKeyT1Range))
 			time.Sleep(1 * time.Second)
 
-			log.Debug().Msgf("Restarting B1")
+
+			// Wait for the consumer to be considered
+			time.Sleep(500 * time.Millisecond)
+
+			// Try to find the record for T1 v2
+			resp := client.ConsumerPoll(2)
+			messages := readConsumerResponse(resp)
+			topicId, r := findRecord(messages, `{"hello": "world1_1"}`)
+			Expect(r).NotTo(BeNil())
+			Expect(topicId.Token).To(Equal(GetTokenAtIndex(3, 1)), "Token should be T1")
+
+
+			// Try to find the record for T1 v2
+			resp = client.ConsumerPoll(2)
+			messages = readConsumerResponse(resp)
+			topicId, r = findRecord(messages, `{"hello": "world1_2"}`)
+			Expect(r).NotTo(BeNil())
+			Expect(topicId.Token).To(Equal(GetTokenAtIndex(3, 1)), "Token should be T1")
+
 			b1.Start()
 			b1.WaitForStart()
+
 			// There should be a version 3 of T1
 			b1.WaitOutput("Proposing myself as leader of T1 \\(-3074457345618259968\\) in v3")
-			expectOk(client.ProduceJson(1, "abc", message, partitionKeyT1Range))
+			expectOk(client.ProduceJson(1, "abc", `{"hello": "world1_2"}`, partitionKeyT1Range))
 			time.Sleep(1 * time.Second)
 
 			client.Close()
@@ -316,6 +337,31 @@ func unmarshalConsumerResponseItem(r io.Reader) consumerResponseItem {
 	item.records = append(item.records, unmarshalRecord(recordsReader))
 
 	return item
+}
+
+func readConsumerResponse(resp *http.Response) []consumerResponseItem {
+	defer resp.Body.Close()
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+	Expect(resp.Header.Get("Content-Type")).To(Equal(consumerContentType))
+	var messageLength uint16
+	binary.Read(resp.Body, conf.Endianness, &messageLength)
+	result := make([]consumerResponseItem, 0)
+	for i := 0; i < int(messageLength); i++ {
+		item := unmarshalConsumerResponseItem(resp.Body)
+		result = append(result, item)
+	}
+	return result
+}
+
+func findRecord(items []consumerResponseItem, value string) (*TopicDataId, *record) {
+	for _, responseItem := range items {
+		for _, r := range responseItem.records {
+			if strings.Contains(r.body, value) {
+				return responseItem.topic, &r
+			}
+		}
+	}
+	return nil, nil
 }
 
 func unmarshalTopicId(r io.Reader) *TopicDataId {

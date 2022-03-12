@@ -27,10 +27,11 @@ type ConsumerState struct {
 	topologyGetter discovery.TopologyGetter
 	removeDelay    time.Duration
 
-	mu              sync.Mutex
-	connections     map[UUID]ConsumerInfo       // Consumers by connection id
-	peerGroups      map[int]peerGroupInfo       // Group information provided by a peer, by ordinal
-	recentlyRemoved map[consumerKey]removedInfo // Consumers which connections were recently removed by key
+	mu                 sync.Mutex
+	connections        map[UUID]ConsumerInfo       // Consumers by connection id
+	trackedConnections map[UUID]*TrackedConnection // Connections by id
+	peerGroups         map[int]peerGroupInfo       // Group information provided by a peer, by ordinal
+	recentlyRemoved    map[consumerKey]removedInfo // Consumers which connections were recently removed by key
 
 	// Snapshot information recalculated periodically
 	groups    atomic.Value // Precalculated info of consumer groups for peers
@@ -54,23 +55,26 @@ func (c *ConsumerInfo) key() consumerKey {
 
 func NewConsumerState(config conf.BasicConfig, topologyGetter discovery.TopologyGetter) *ConsumerState {
 	return &ConsumerState{
-		config:          config,
-		topologyGetter:  topologyGetter,
-		mu:              sync.Mutex{},
-		connections:     map[UUID]ConsumerInfo{},
-		peerGroups:      map[int]peerGroupInfo{},
-		recentlyRemoved: map[consumerKey]removedInfo{},
-		removeDelay:     removeDelay - timerPrecision,
+		config:             config,
+		topologyGetter:     topologyGetter,
+		mu:                 sync.Mutex{},
+		connections:        map[UUID]ConsumerInfo{},
+		trackedConnections: map[UUID]*TrackedConnection{},
+		peerGroups:         map[int]peerGroupInfo{},
+		recentlyRemoved:    map[consumerKey]removedInfo{},
+		removeDelay:        removeDelay - timerPrecision,
 	}
 }
 
-func (m *ConsumerState) AddConnection(id UUID, consumer ConsumerInfo) bool {
+func (m *ConsumerState) AddConnection(conn *TrackedConnection, consumer ConsumerInfo) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	id := conn.Id()
 	_, found := m.connections[id]
 
 	m.connections[id] = consumer
+	m.trackedConnections[id] = conn
 
 	return !found
 }
@@ -82,6 +86,7 @@ func (m *ConsumerState) RemoveConnection(id UUID) bool {
 	consumer, found := m.connections[id]
 	if found {
 		delete(m.connections, id)
+		delete(m.trackedConnections, id)
 
 		// Add it to a pending remove list
 		m.recentlyRemoved[consumer.key()] = removedInfo{
@@ -90,6 +95,17 @@ func (m *ConsumerState) RemoveConnection(id UUID) bool {
 		}
 	}
 	return found
+}
+
+// Gets a copy of the current open connections
+func (m *ConsumerState) GetConnections() []*TrackedConnection {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]*TrackedConnection, 0, len(m.trackedConnections))
+	for _, conn := range m.trackedConnections {
+		result = append(result, conn)
+	}
+	return result
 }
 
 func (m *ConsumerState) SetInfoFromPeer(ordinal int, groups []ConsumerGroup) {

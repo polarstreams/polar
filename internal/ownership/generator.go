@@ -189,6 +189,10 @@ func (o *generator) startNew() {
 
 	reason := o.determineStartReason()
 
+	if reason == scalingUp || reason == restarted {
+		// TODO: Retrieve current generations from Bn-1 & Bn+1
+	}
+
 	if reason == scalingUp {
 		// Send a message to broker n-1 to start the process
 		// of splitting the token range
@@ -268,7 +272,9 @@ func (o *generator) requestRangeSplit(topology *TopologyInfo) {
 			log.Panic().Msgf("There was a change in the topology since starting")
 		}
 
-		if err := o.gossiper.RangeSplitStart(prevOrdinal); err != nil {
+		if !o.gossiper.IsHostUp(prevOrdinal) {
+			log.Error().Msgf("B%d is DOWN waiting for it to be UP to request a range split", prevOrdinal)
+		} else if err := o.gossiper.RangeSplitStart(prevOrdinal); err != nil {
 			log.Err(err).Msgf("There was an error requesting token range split, retrying")
 		}
 

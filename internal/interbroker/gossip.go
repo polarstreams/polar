@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -34,6 +35,7 @@ const contentType = "application/json"
 // Gossiper is responsible for communicating with other peers.
 type Gossiper interface {
 	Initializer
+	Closer
 	Replicator
 	GenerationGossiper
 
@@ -123,6 +125,8 @@ type gossiper struct {
 	config               conf.GossipConfig
 	discoverer           discovery.Discoverer
 	localDb              localdb.Client
+	httpListener         net.Listener
+	dataListener         net.Listener
 	genListener          GenListener
 	consumerInfoListener ConsumerInfoListener
 	reroutingListener    ReroutingListener
@@ -302,14 +306,9 @@ func (g *gossiper) IsHostUp(ordinal int) bool {
 }
 
 func (g *gossiper) requestGet(ordinal int, baseUrl string) (*http.Response, error) {
-	c := g.getClientInfo(ordinal)
-	if c == nil {
-		return nil, fmt.Errorf("No connection to broker %d", ordinal)
-	}
-
-	broker := g.discoverer.CurrentOrPastBroker(ordinal)
-	if broker == nil {
-		return nil, fmt.Errorf("Broker with ordinal %d not found", ordinal)
+	c, broker, err := g.getClientForRequest(ordinal)
+	if err != nil {
+		return nil, err
 	}
 
 	resp, err := c.gossipClient.Get(g.getPeerUrl(broker, baseUrl))
@@ -321,15 +320,28 @@ func (g *gossiper) requestGet(ordinal int, baseUrl string) (*http.Response, erro
 	return resp, err
 }
 
-func (g *gossiper) requestPost(ordinal int, baseUrl string, body []byte) (*http.Response, error) {
+func (g *gossiper) getClientForRequest(ordinal int) (*clientInfo, *BrokerInfo, error) {
 	c := g.getClientInfo(ordinal)
 	if c == nil {
-		return nil, fmt.Errorf("No connection to broker %d", ordinal)
+		return nil, nil, fmt.Errorf("No connection to broker %d", ordinal)
 	}
 
 	broker := g.discoverer.CurrentOrPastBroker(ordinal)
 	if broker == nil {
-		return nil, fmt.Errorf("Broker with ordinal %d not found", ordinal)
+		return nil, nil, fmt.Errorf("B%d not found", ordinal)
+	}
+
+	if !c.isHostUp() {
+		return nil, nil, fmt.Errorf("Can't send request to B%d, as B%d is DOWN", ordinal, ordinal)
+	}
+
+	return c, broker, nil
+}
+
+func (g *gossiper) requestPost(ordinal int, baseUrl string, body []byte) (*http.Response, error) {
+	c, broker, err := g.getClientForRequest(ordinal)
+	if err != nil {
+		return nil, err
 	}
 
 	resp, err := c.gossipClient.Post(g.getPeerUrl(broker, baseUrl), contentType, bytes.NewReader(body))

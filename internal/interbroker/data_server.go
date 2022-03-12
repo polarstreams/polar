@@ -30,7 +30,9 @@ func (g *gossiper) acceptDataConnections() error {
 			// HTTP/2 only server (prior knowledge)
 			conn, err := listener.Accept()
 			if err != nil {
-				log.Err(err).Msgf("Failed to accept new data connections")
+				if !g.localDb.IsShuttingDown() {
+					log.Err(err).Msgf("Failed to accept new data connections")
+				}
 				break
 			}
 
@@ -40,6 +42,7 @@ func (g *gossiper) acceptDataConnections() error {
 	}()
 
 	<-c
+	g.dataListener = listener
 
 	log.Info().Msgf("Start listening to peers for data streams on port %d", port)
 

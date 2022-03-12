@@ -1,6 +1,7 @@
 package producing
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 
 type Producer interface {
 	types.Initializer
+	types.Closer
 
 	AcceptConnections() error
 }
@@ -37,12 +39,12 @@ func NewProducer(
 	coalescerMap := utils.NewCopyOnWriteMap()
 
 	return &producer{
-		config,
-		topicGetter,
-		datalog,
-		gossiper,
-		leaderGetter,
-		coalescerMap,
+		config:       config,
+		topicGetter:  topicGetter,
+		datalog:      datalog,
+		gossiper:     gossiper,
+		leaderGetter: leaderGetter,
+		coalescerMap: coalescerMap,
 	}
 }
 
@@ -54,6 +56,7 @@ type producer struct {
 	leaderGetter discovery.TopologyGetter
 	// We use a single coalescer per topics
 	coalescerMap *utils.CopyOnWriteMap
+	server       *http.Server
 }
 
 func (p *producer) Init() error {
@@ -88,13 +91,24 @@ func (p *producer) AcceptConnections() error {
 	go func() {
 		c <- true
 		if err := server.ListenAndServe(); err != nil {
-			log.Fatal().Err(err)
+			if err == http.ErrServerClosed {
+				log.Info().Msgf("Producer server stopped")
+			} else {
+				log.Err(err).Msgf("Producer stopped serving")
+			}
 		}
 	}()
 
 	<-c
+	p.server = server
 	log.Info().Msgf("Start listening to producers on port %d", port)
 	return nil
+}
+
+func (p *producer) Close() {
+	if err := p.server.Shutdown(context.Background()); err != nil {
+		log.Err(err).Msgf("There was an error shutting down server")
+	}
 }
 
 func (p *producer) OnReroutedMessage(topic string, querystring url.Values, contentLength int64, body io.ReadCloser) error {

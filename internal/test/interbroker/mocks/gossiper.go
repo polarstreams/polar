@@ -35,6 +35,11 @@ func (_m *Gossiper) AcceptConnections() error {
 	return r0
 }
 
+// Close provides a mock function with given fields:
+func (_m *Gossiper) Close() {
+	_m.Called()
+}
+
 // GetGenerations provides a mock function with given fields: ordinal, token
 func (_m *Gossiper) GetGenerations(ordinal int, token types.Token) interbroker.GenReadResult {
 	ret := _m.Called(ordinal, token)

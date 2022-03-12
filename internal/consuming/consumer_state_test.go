@@ -385,11 +385,11 @@ func assertTopics(state *ConsumerState, topics []string, consumerIds ...uuid.UUI
 }
 
 func addConnection(state *ConsumerState, consumerId string, group string, topics ...string) uuid.UUID {
-	id := uuid.New()
-	state.AddConnection(id, ConsumerInfo{
+	conn := NewTrackedConnection(nil, nil)
+	state.AddConnection(conn, ConsumerInfo{
 		Id:     consumerId,
 		Group:  group,
 		Topics: topics,
 	})
-	return id
+	return conn.Id()
 }

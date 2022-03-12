@@ -165,6 +165,11 @@ func (_m *Client) LatestGenerations() ([]types.Generation, error) {
 	return r0, r1
 }
 
+// MarkAsShuttingDown provides a mock function with given fields:
+func (_m *Client) MarkAsShuttingDown() {
+	_m.Called()
+}
+
 // Offsets provides a mock function with given fields:
 func (_m *Client) Offsets() ([]types.OffsetStoreKeyValue, error) {
 	ret := _m.Called()

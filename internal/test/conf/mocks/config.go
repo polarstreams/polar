@@ -395,3 +395,17 @@ func (_m *Config) SegmentFlushInterval() time.Duration {
 
 	return r0
 }
+
+// ShutdownDelay provides a mock function with given fields:
+func (_m *Config) ShutdownDelay() time.Duration {
+	ret := _m.Called()
+
+	var r0 time.Duration
+	if rf, ok := ret.Get(0).(func() time.Duration); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(time.Duration)
+	}
+
+	return r0
+}

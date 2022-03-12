@@ -3,7 +3,6 @@ package consuming
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
@@ -204,14 +203,17 @@ func (q *groupReadQueue) maybeCloseReader(reader *SegmentReader, chunk SegmentCh
 		// There will be no more data, we should dispose the reader
 		q.closeReader(reader)
 
-		//  Move offset to new generation
-		topicId := reader.Topic
-		nextGens := q.topologyGetter.NextGeneration(topicId.Token, topicId.GenId)
-		for _, gen := range nextGens {
-			offset := Offset{Offset: 0, Version: gen.Version}
-			q.offsetState.Set(
-				q.group, topicId.Name, gen.Start, topicId.RangeIndex, offset, OffsetCommitAll)
-		}
+		q.moveOffsetToNextGeneration(reader.Topic)
+	}
+}
+
+// Moves offset to next generation
+func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId) {
+	nextGens := q.topologyGetter.NextGeneration(topicId.Token, topicId.GenId)
+	for _, gen := range nextGens {
+		offset := Offset{Offset: 0, Version: gen.Version}
+		q.offsetState.Set(
+			q.group, topicId.Name, gen.Start, topicId.RangeIndex, offset, OffsetCommitAll)
 	}
 }
 
@@ -316,7 +318,13 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 						// We need to set the max offset produced
 						value, err := q.getMaxProducedOffset(&topicId)
 						if err != nil {
-							// Hopefully in the future it will resolve itself
+							if q.hasData(&topicId) {
+								// Hopefully in the future it will resolve itself
+								continue
+							}
+
+							log.Info().Msgf("No data found for topic %s, moving offset", &topicId)
+							q.moveOffsetToNextGeneration(topicId)
 							continue
 						}
 						maxProducedOffset = &value
@@ -339,6 +347,11 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 	}
 
 	return result
+}
+
+func (q *groupReadQueue) hasData(topicId *TopicDataId) bool {
+	// TODO: Implement hasData() by checking folder
+	return false
 }
 
 func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (uint64, error) {
@@ -397,67 +410,9 @@ func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (uint64, err
 
 	if result == nil {
 		message := fmt.Sprintf("Max producer offset could not be retrieved from peers or local for %s", topicId)
-		log.Error().Msgf(message)
+		log.Warn().Msgf(message)
 		return 0, fmt.Errorf(message)
 	}
 
 	return *result, nil
-}
-
-type segmentReadItem struct {
-	chunkResult chan SegmentChunk
-	errorResult chan error
-}
-
-func newSegmentReadItem() *segmentReadItem {
-	return &segmentReadItem{
-		chunkResult: make(chan SegmentChunk, 1),
-		errorResult: make(chan error, 1),
-	}
-}
-
-func (r *segmentReadItem) SetResult(err error, chunk SegmentChunk) {
-	r.chunkResult <- chunk
-	r.errorResult <- err
-}
-
-func (r *segmentReadItem) result() (err error, chunk SegmentChunk) {
-	return <-r.errorResult, <-r.chunkResult
-}
-
-type consumerResponseItem struct {
-	chunk SegmentChunk
-	topic TopicDataId
-}
-
-func (i *consumerResponseItem) Marshal(w io.Writer) error {
-	// Can be extracted into "MarshalTopic"
-	if err := binary.Write(w, conf.Endianness, i.topic.Token); err != nil {
-		return err
-	}
-	if err := binary.Write(w, conf.Endianness, i.topic.RangeIndex); err != nil {
-		return err
-	}
-	if err := binary.Write(w, conf.Endianness, i.topic.GenId); err != nil {
-		return err
-	}
-	if err := binary.Write(w, conf.Endianness, uint8(len(i.topic.Name))); err != nil {
-		return err
-	}
-	if _, err := w.Write([]byte(i.topic.Name)); err != nil {
-		return err
-	}
-	payload := i.chunk.DataBlock()
-	if err := binary.Write(w, conf.Endianness, int32(len(payload))); err != nil {
-		return err
-	}
-	if _, err := w.Write(payload); err != nil {
-		return err
-	}
-	return nil
-}
-
-type readerKey struct {
-	token      Token
-	rangeIndex RangeIndex
 }

@@ -88,6 +88,18 @@ func main() {
 		syscall.SIGQUIT)
 	<-sigChan
 
-	log.Info().Msg("Shutting down")
+	log.Info().Msg("Barco shutting down")
+
+	localDbClient.MarkAsShuttingDown()
+	producer.Close()
+	consumer.Close()
+
+	if config.ShutdownDelay() > 0 {
+		log.Info().Msgf("Waiting %s before shutting down gossip", config.ShutdownDelay())
+		time.Sleep(config.ShutdownDelay())
+	}
+
+	gossiper.Close()
 	localDbClient.Close()
+	log.Info().Msg("Barco shutdown completed")
 }

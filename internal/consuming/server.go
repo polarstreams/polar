@@ -31,6 +31,7 @@ var removeDebouncer = Debounce(removeDelay, 0.4) // Debounce events that occurre
 // Consumer represents a consumer server
 type Consumer interface {
 	Initializer
+	Closer
 
 	AcceptConnections() error
 }
@@ -45,6 +46,7 @@ func NewConsumer(
 		config:         config,
 		topologyGetter: topologyGetter,
 		gossiper:       gossiper,
+		localDb:        localDb,
 		state:          NewConsumerState(config, topologyGetter),
 		offsetState:    newDefaultOffsetState(localDb, topologyGetter, gossiper, config),
 		readQueues:     NewCopyOnWriteMap(),
@@ -56,10 +58,12 @@ type consumer struct {
 	config         conf.ConsumerConfig
 	topologyGetter discovery.TopologyGetter
 	gossiper       interbroker.Gossiper
+	localDb        localdb.Client
 	state          *ConsumerState
 	offsetState    OffsetState
 	readQueues     *CopyOnWriteMap
 	addDebouncer   Debouncer
+	listener       net.Listener
 }
 
 func (c *consumer) Init() error {
@@ -90,7 +94,9 @@ func (c *consumer) AcceptConnections() error {
 			// HTTP/2-only server (prior knowledge)
 			conn, err := listener.Accept()
 			if err != nil {
-				log.Err(err).Msgf("Failed to accept new connections")
+				if !c.localDb.IsShuttingDown() {
+					log.Err(err).Msgf("Failed to accept new connections")
+				}
 				break
 			}
 
@@ -107,7 +113,7 @@ func (c *consumer) AcceptConnections() error {
 			})
 
 			trackedConn := NewTrackedConnection(conn, func(trackedConn *TrackedConnection) {
-				log.Info().Msgf("Connection from consumer client %s closed", trackedConn.LocalAddr().String())
+				log.Info().Msgf("Connection from consumer client")
 				c.unRegister(trackedConn)
 			})
 
@@ -125,17 +131,29 @@ func (c *consumer) AcceptConnections() error {
 				server.ServeConn(conn, &http2.ServeConnOpts{
 					Handler: h2c.NewHandler(router, server),
 				})
-				log.Debug().Msgf(
-					"Connection from consumer client with id '%s' is not readable anymore", trackedConn.Id())
+				if !c.localDb.IsShuttingDown() {
+					log.Debug().Msgf(
+						"Connection from consumer client with id '%s' is not readable anymore", trackedConn.Id())
+				}
 				trackedConn.Close()
 			}()
 		}
 	}()
 
 	<-startChan
+	c.listener = listener
 
 	log.Info().Msgf("Start listening to consumers for http requests on port %d", port)
 	return nil
+}
+
+func (c *consumer) Close() {
+	err := c.listener.Close()
+	log.Err(err).Msgf("Consumer connection listener closed")
+	connections := c.state.GetConnections()
+	for _, conn := range connections {
+		conn.Close()
+	}
 }
 
 func (c *consumer) postRegister(
@@ -148,7 +166,7 @@ func (c *consumer) postRegister(
 	if err := json.NewDecoder(r.Body).Decode(&consumerInfo); err != nil {
 		return err
 	}
-	added := c.state.AddConnection(conn.Id(), consumerInfo)
+	added := c.state.AddConnection(conn, consumerInfo)
 
 	if !added {
 		return nil

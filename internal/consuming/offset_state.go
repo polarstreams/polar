@@ -152,9 +152,11 @@ func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
 		go func() {
 			err := s.gossiper.SendCommittedOffset(ordinal, kv)
 			if err != nil {
-				log.Err(err).Int("ordinal", ordinal).Msgf("Offset could not be sent to follower")
+				log.Err(err).Msgf("Offset could not be sent to follower B%d", ordinal)
 			} else {
-				log.Debug().Int("ordinal", ordinal).Msgf("Offset sent to follower")
+				log.Debug().Msgf(
+					"Offset sent to follower B%d for group %s topic '%s' %d/%d",
+					ordinal, kv.Key.Group, kv.Key.Topic, kv.Key.Token, kv.Key.RangeIndex)
 			}
 		}()
 	}

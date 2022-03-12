@@ -28,6 +28,7 @@ const (
 	envSegmentFlushIntervalMs  = "BARCO_SEGMENT_FLUSH_INTERVAL_MS"
 	envConsumerAddDelay        = "BARCO_CONSUMER_ADD_DELAY_MS"
 	envTopologyFilePollDelayMs = "BARCO_TOPOLOGY_FILE_POLL_DELAY_MS"
+	envShutdownDelaySecs       = "BARCO_SHUTDOWN_DELAY_SECS"
 )
 
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
@@ -48,6 +49,7 @@ type BasicConfig interface {
 	HomePath() string
 	ListenOnAllAddresses() bool
 	ConsumerRanges() int // The number of ranges to partition any token range.
+	ShutdownDelay() time.Duration
 }
 
 type LocalDbConfig interface {
@@ -195,6 +197,11 @@ func (c *config) IndexFilePeriodBytes() int {
 func (c *config) SegmentFlushInterval() time.Duration {
 	ms := envInt(envSegmentFlushIntervalMs, 5000)
 	return time.Duration(ms) * time.Millisecond
+}
+
+func (c *config) ShutdownDelay() time.Duration {
+	secs := envInt(envShutdownDelaySecs, 30)
+	return time.Duration(secs) * time.Second
 }
 
 func (c *config) MaxSegmentSize() int {

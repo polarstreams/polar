@@ -290,6 +290,10 @@ func (c *configFake) ListenOnAllAddresses() bool {
 	return true
 }
 
+func (c *configFake) ShutdownDelay() time.Duration {
+	return 0
+}
+
 func (c *configFake) FixedTopologyFilePollDelay() time.Duration {
 	return 10 * time.Second
 }

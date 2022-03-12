@@ -57,6 +57,7 @@ var _ = Describe("Gossiper", func() {
 			clients := make(clientMap)
 			clients[ordinal] = &clientInfo{
 				gossipClient: ts.Client(),
+				isConnected:  1,
 			}
 			g.connections.Store(clients)
 

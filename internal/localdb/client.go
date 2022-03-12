@@ -18,6 +18,8 @@ type Client interface {
 	// Determines whether the local db was not present and had to be created
 	DbWasNewlyCreated() bool
 
+	MarkAsShuttingDown()
+
 	CommitGeneration(gen1 *Generation, gen2 *Generation) error
 
 	// Stores the group offset for a topic and token+index
@@ -102,14 +104,18 @@ func (c *client) IsShuttingDown() bool {
 	return atomic.LoadInt32(&c.shuttingDown) == 1
 }
 
-func (c *client) Close() {
+func (c *client) MarkAsShuttingDown() {
 	atomic.StoreInt32(&c.shuttingDown, 1)
+}
+
+func (c *client) Close() {
 	_ = c.queries.selectGenerationsByToken.Close()
 	_ = c.queries.selectGenerationsAll.Close()
 	_ = c.queries.selectGenerationsByParent.Close()
 	_ = c.queries.selectGeneration.Close()
 	_ = c.queries.insertGeneration.Close()
 	_ = c.queries.insertTransaction.Close()
+	_ = c.queries.selectOffsets.Close()
 	_ = c.queries.insertOffset.Close()
 	log.Err(c.db.Close()).Msg("Local db closed")
 }
