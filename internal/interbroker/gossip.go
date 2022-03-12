@@ -62,6 +62,9 @@ type Gossiper interface {
 	// Sends a message to the broker with the committed offset of a consumer group
 	SendCommittedOffset(ordinal int, offsetKv *OffsetStoreKeyValue) error
 
+	// Sends a message to the next broker stating the current broker is shutting down
+	SendGoobye()
+
 	// Reads the producer offset of a certain past topic generatoin
 	ReadProducerOffset(ordinal int, topic *TopicDataId) (uint64, error)
 
@@ -106,7 +109,7 @@ type GenerationGossiper interface {
 	RegisterGenListener(listener GenListener)
 
 	// RegisterHostUpDownListener adds a handler to that will be invoked when peers switch from UP->DOWN or DOWN->UP
-	RegisterHostUpDownListener(listener HostUpDownListener)
+	RegisterHostUpDownListener(listener PeerStateListener)
 }
 
 func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer, localDb localdb.Client) Gossiper {
@@ -117,7 +120,7 @@ func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer, loca
 		connectionsMutex:    sync.Mutex{},
 		connections:         atomic.Value{},
 		replicaWriters:      utils.NewCopyOnWriteMap(),
-		hostUpDownListeners: make([]HostUpDownListener, 0),
+		hostUpDownListeners: make([]PeerStateListener, 0),
 	}
 }
 
@@ -130,7 +133,7 @@ type gossiper struct {
 	genListener          GenListener
 	consumerInfoListener ConsumerInfoListener
 	reroutingListener    ReroutingListener
-	hostUpDownListeners  []HostUpDownListener
+	hostUpDownListeners  []PeerStateListener
 	connectionsMutex     sync.Mutex
 	connections          atomic.Value          // Map of connections with copy-on-write semantics
 	replicaWriters       *utils.CopyOnWriteMap // Map of SegmentWriter to be use for replicating data as a replica
@@ -200,7 +203,7 @@ func (g *gossiper) RegisterGenListener(listener GenListener) {
 	g.genListener = listener
 }
 
-func (g *gossiper) RegisterHostUpDownListener(listener HostUpDownListener) {
+func (g *gossiper) RegisterHostUpDownListener(listener PeerStateListener) {
 	g.hostUpDownListeners = append(g.hostUpDownListeners, listener)
 }
 
@@ -478,6 +481,20 @@ func (g *gossiper) SendCommittedOffset(ordinal int, kv *OffsetStoreKeyValue) err
 	r, err := g.requestPost(ordinal, conf.GossipConsumerOffsetUrl, jsonBody)
 	defer bodyClose(r)
 	return err
+}
+
+func (g *gossiper) SendGoobye() {
+	// Notify the next broker
+	topology := g.discoverer.Topology()
+	peerOrdinal := topology.NextBroker().Ordinal
+	jsonBody, _ := json.Marshal(topology.MyOrdinal())
+	r, err := g.requestPost(peerOrdinal, conf.GossipGoodbyeUrl, jsonBody)
+	defer bodyClose(r)
+	if err != nil {
+		log.Warn().Msgf("Goodbye message to B%d could not be sent", peerOrdinal)
+	} else {
+		log.Info().Msgf("Goodbye message sent to B%d", peerOrdinal)
+	}
 }
 
 func (g *gossiper) RangeSplitStart(ordinal int) error {

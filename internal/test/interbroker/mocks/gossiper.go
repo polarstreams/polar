@@ -219,7 +219,7 @@ func (_m *Gossiper) RegisterGenListener(listener interbroker.GenListener) {
 }
 
 // RegisterHostUpDownListener provides a mock function with given fields: listener
-func (_m *Gossiper) RegisterHostUpDownListener(listener interbroker.HostUpDownListener) {
+func (_m *Gossiper) RegisterHostUpDownListener(listener interbroker.PeerStateListener) {
 	_m.Called(listener)
 }
 
@@ -254,6 +254,11 @@ func (_m *Gossiper) SendConsumerGroups(ordinal int, groups []types.ConsumerGroup
 	}
 
 	return r0
+}
+
+// SendGoobye provides a mock function with given fields:
+func (_m *Gossiper) SendGoobye() {
+	_m.Called()
 }
 
 // SendToFollowers provides a mock function with given fields: replicationInfo, topic, segmentId, chunk

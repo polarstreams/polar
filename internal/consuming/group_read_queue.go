@@ -78,7 +78,6 @@ func (q *groupReadQueue) process() {
 		}
 
 		group, tokens, topics := logsToServe(q.state, q.topologyGetter, item.connId)
-		log.Debug().Msgf("Group read queue %s handling item %s %v %v", q.group, group, tokens, topics)
 		if group != q.group {
 			// There was a change in topology, tell the client to poll again
 			utils.NoContentResponse(item.writer, 0)
@@ -208,13 +207,19 @@ func (q *groupReadQueue) maybeCloseReader(reader *SegmentReader, chunk SegmentCh
 }
 
 // Moves offset to next generation
-func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId) {
+func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId) bool {
+	log.Debug().Msgf("Looking for next generation of %d v%d", topicId.Token, topicId.GenId)
 	nextGens := q.topologyGetter.NextGeneration(topicId.Token, topicId.GenId)
+	if len(nextGens) == 0 {
+		return false
+	}
+
 	for _, gen := range nextGens {
 		offset := Offset{Offset: 0, Version: gen.Version}
 		q.offsetState.Set(
 			q.group, topicId.Name, gen.Start, topicId.RangeIndex, offset, OffsetCommitAll)
 	}
+	return true
 }
 
 func (q *groupReadQueue) closeReader(reader *SegmentReader) {
@@ -324,7 +329,11 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 							}
 
 							log.Info().Msgf("No data found for topic %s, moving offset", &topicId)
-							q.moveOffsetToNextGeneration(topicId)
+							if movedOffset := q.moveOffsetToNextGeneration(topicId); !movedOffset {
+								// Unexpected
+								log.Error().Msgf(
+									"Offset could not be moved for %s, as next generation could not be found", &topicId)
+							}
 							continue
 						}
 						maxProducedOffset = &value

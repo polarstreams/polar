@@ -66,6 +66,7 @@ func (g *gossiper) acceptHttpConnections() error {
 				fmt.Fprintf(w, "Peer listening on %d\n", port)
 			})
 			router.POST(conf.GossipBrokerIdentifyUrl, ToPostHandle(g.postBrokerIdentifyHandler))
+			router.POST(conf.GossipGoodbyeUrl, ToPostHandle(g.postGoodbyeHandler))
 			router.GET(fmt.Sprintf(conf.GossipGenerationUrl, ":token"), ToHandle(g.getGenHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationProposeUrl, ":token"), ToPostHandle(g.postGenProposeHandler))
 			router.POST(fmt.Sprintf(conf.GossipGenerationCommmitUrl, ":token"), ToPostHandle(g.postGenCommitHandler))
@@ -175,6 +176,25 @@ func (g *gossiper) postBrokerIdentifyHandler(w http.ResponseWriter, r *http.Requ
 		clientInfo.readyNewGossipConnection <- true
 		clientInfo.readyNewDataConnection <- true
 	}
+
+	return nil
+}
+
+func (g *gossiper) postGoodbyeHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
+	var ordinal int
+	if err := json.NewDecoder(r.Body).Decode(&ordinal); err != nil {
+		return err
+	}
+
+	// We've received a message from a peer that it's going away
+	topology := g.discoverer.Topology()
+	if ordinal >= len(topology.Brokers) {
+		log.Debug().Msgf("Received goodbye from B%d but it's currently not included in the topology", ordinal)
+		return nil
+	}
+
+	log.Debug().Msgf("Received goodbye from B%d", ordinal)
+	g.onHostShuttingDown(topology.BrokerByOrdinal(ordinal))
 
 	return nil
 }

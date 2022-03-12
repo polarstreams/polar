@@ -89,12 +89,16 @@ func (d *discoverer) GenerationInfo(token Token, version GenVersion) *Generation
 }
 
 func (d *discoverer) NextGeneration(token Token, version GenVersion) []Generation {
-	current := d.GenerationInfo(token, version)
-	if current == nil {
+	gen := d.GenerationInfo(token, version)
+	if gen == nil {
 		return nil
 	}
 
-	nextGens, err := d.localDb.GenerationsByParent(current)
+	if current := d.Generation(token); current != nil && current.Version == version {
+		return nil
+	}
+
+	nextGens, err := d.localDb.GenerationsByParent(gen)
 	utils.PanicIfErr(err, "Generations by parent failed to be retrieved")
 
 	// TODO: Handle the case where this token was joined with another one and v+1 does not exist

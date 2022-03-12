@@ -17,7 +17,7 @@ type BrokerInfo struct {
 }
 
 func (b *BrokerInfo) String() string {
-	return fmt.Sprintf("%s (B%d)", b.HostName, b.Ordinal)
+	return fmt.Sprintf("B%d (%s)", b.Ordinal, b.HostName)
 }
 
 // ConsumerGroup contains info about a single group of consumers.

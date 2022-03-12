@@ -11,47 +11,71 @@ import (
 
 func (o *generator) processLocalFailover(m *localFailoverGenMessage) creationError {
 	const reason = "failover"
-	topology := m.topology
-	index := m.brokerIndex
-	downBroker := m.broker
-	peerFollower := topology.NaturalFollowers(index)[1]
+	topology := o.discoverer.Topology()
+	downBroker := m.broker.Ordinal
 
-	log.Debug().Msgf("Processing local token failover B%d", downBroker.Ordinal)
-	isUp, err := o.gossiper.ReadBrokerIsUp(peerFollower, downBroker.Ordinal)
+	if downBroker >= len(topology.Brokers) {
+		return newNonRetryableError(
+			"Could not process failover for B%d as it's already not included in the topology",
+			downBroker)
+	}
+
+	index := topology.GetIndex(downBroker)
+	peerFollower := topology.NaturalFollowers(index)[1]
+	token := topology.GetToken(index)
+
+	previousGen := o.discoverer.Generation(token)
+	if previousGen == nil {
+		return newCreationError(
+			"Could not process token failover B%d because it does not own a generation", downBroker)
+	}
+
+	if previousGen.Leader == topology.MyOrdinal() {
+		log.Debug().Msgf("Failover not needed, we are already the leader of T%d", downBroker)
+		return nil
+	}
+
+	if downBroker != topology.PreviousBroker().Ordinal {
+		return newNonRetryableError(
+			"Could not process failover for B%d as it's not our previous broker (ring size: %d)",
+			downBroker, len(topology.Brokers))
+	}
+
+	log.Debug().Msgf("Processing token failover for T%d", downBroker)
+	isUp, err := o.gossiper.ReadBrokerIsUp(peerFollower, downBroker)
 	if err != nil {
 		return wrapCreationError(err)
 	}
 
 	if isUp {
-		return newCreationError("Broker B%d is still consider as UP by B%d", downBroker.Ordinal, peerFollower)
+		return newCreationError("Broker B%d is still consider as UP by B%d", downBroker, peerFollower)
 	}
-
-	token := topology.GetToken(index)
 
 	gen := Generation{
 		Start:     token,
 		End:       topology.GetToken(index + 1),
-		Version:   m.previousGen.Version + 1,
+		Version:   previousGen.Version + 1,
 		Timestamp: time.Now().UnixMicro(),
 		Leader:    topology.MyOrdinal(),
-		Followers: []int{peerFollower, downBroker.Ordinal},
+		Followers: []int{peerFollower, downBroker},
 		TxLeader:  topology.MyOrdinal(),
 		Tx:        uuid.New(),
 		Status:    StatusProposed,
 		Parents: []GenParent{{
 			Start:   token,
-			Version: m.previousGen.Version,
+			Version: previousGen.Version,
 		}},
 	}
 
 	log.Info().
 		Str("reason", reason).
-		Msgf("Proposing myself as leader of T%d (%d) in v%d", downBroker.Ordinal, token, gen.Version)
+		Msgf("Proposing myself as leader of T%d (%d) in v%d", downBroker, token, gen.Version)
 
 	committed, proposed := o.discoverer.GenerationProposed(token)
 
-	if !reflect.DeepEqual(m.previousGen, committed) {
-		log.Info().Msgf("New committed generation found, aborting creation")
+	if !reflect.DeepEqual(previousGen, committed) {
+		log.Error().Msgf(
+			"Unexpected new committed generation found for T%d (v%d)", downBroker, committed.Version)
 		return nil
 	}
 
@@ -71,7 +95,7 @@ func (o *generator) processLocalFailover(m *localFailoverGenMessage) creationErr
 
 	log.Info().
 		Str("reason", reason).
-		Msgf("Accepting myself as leader of T%d (%d) in v%d", downBroker.Ordinal, token, gen.Version)
+		Msgf("Accepting myself as leader of T%d (%d) in v%d", downBroker, token, gen.Version)
 	gen.Status = StatusAccepted
 
 	if err := o.gossiper.SetGenerationAsProposed(peerFollower, &gen, nil, &gen.Tx); err != nil {
@@ -86,7 +110,7 @@ func (o *generator) processLocalFailover(m *localFailoverGenMessage) creationErr
 	// Now we have a majority of replicas
 	log.Info().
 		Str("reason", reason).
-		Msgf("Setting transaction for T%d (%d) as committed (failover)", downBroker.Ordinal, token)
+		Msgf("Setting transaction for T%d (%d) as committed (failover)", downBroker, token)
 
 	// We can now start receiving producer traffic for this token
 	if err := o.discoverer.SetAsCommitted(gen.Start, nil, gen.Tx, topology.MyOrdinal()); err != nil {

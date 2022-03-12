@@ -23,11 +23,9 @@ func (m *localGenMessage) setResult(err creationError) {
 }
 
 type localFailoverGenMessage struct {
-	brokerIndex BrokerIndex // Index of the broker that went down
-	broker      BrokerInfo
-	previousGen *Generation
-	topology    *TopologyInfo // Point in time topology info
-	result      chan creationError
+	broker         BrokerInfo
+	isShuttingDown bool // Notes that the failover message is created due to a goodbye message from the peer
+	result         chan creationError
 }
 
 func (m *localFailoverGenMessage) setResult(err creationError) {

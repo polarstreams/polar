@@ -30,9 +30,12 @@ type ReroutingListener interface {
 	OnReroutedMessage(topic string, querystring url.Values, contentLength int64, body io.ReadCloser) error
 }
 
-type HostUpDownListener interface {
+type PeerStateListener interface {
 	OnHostUp(broker BrokerInfo)
 	OnHostDown(broker BrokerInfo)
+
+	// Invoked as a result of a peer sending goodbye message
+	OnHostShuttingDown(broker BrokerInfo)
 }
 
 type GenReadResult struct {

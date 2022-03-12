@@ -17,14 +17,16 @@ import (
 )
 
 const (
-	baseDelay           = 150 * time.Millisecond
-	maxDelay            = 300 * time.Millisecond
-	maxWaitForPrevious  = 10 * time.Second
-	waitForPreviousStep = 500 * time.Millisecond
-	maxWaitForSplit     = 5 * time.Minute
-	waitForSplitStep    = 5 * time.Second
-	waitForJoinBase     = 5 * time.Second
-	replicationFactor   = 3
+	baseDelay                   = 150 * time.Millisecond
+	maxDelay                    = 300 * time.Millisecond
+	maxWaitForPrevious          = 10 * time.Second
+	waitForPreviousStep         = 500 * time.Millisecond
+	maxWaitForSplit             = 5 * time.Minute
+	waitForSplitStep            = 5 * time.Second
+	waitForJoinBase             = 5 * time.Second
+	maxShutdownTakeOverAttempts = 5
+	shutdownTakeOverDelay       = 1 * time.Second
+	replicationFactor           = 3
 )
 
 var emptyGeneration = Generation{Start: math.MaxInt64, Version: 0, Status: StatusCancelled}
@@ -144,7 +146,14 @@ func (o *generator) OnHostDown(broker BrokerInfo) {
 
 	previousGen := o.discoverer.Generation(topology.GetToken(brokerIndex))
 	if previousGen == nil {
+		// TODO: Determine when this could happen and how to mitigate it
 		log.Warn().Msgf("Broker B%d detected down without owning a generation", broker.Ordinal)
+		return
+	}
+
+	if previousGen.Leader == topology.MyOrdinal() {
+		log.Debug().Msgf(
+			"Broker B%d detected as DOWN and we are already leaders of T%d ", broker.Ordinal, broker.Ordinal)
 		return
 	}
 
@@ -154,11 +163,8 @@ func (o *generator) OnHostDown(broker BrokerInfo) {
 		// If host comes back up, it's expected to try to retake its token
 		for !o.gossiper.IsHostUp(broker.Ordinal) && !o.localDb.IsShuttingDown() {
 			message := localFailoverGenMessage{
-				brokerIndex: brokerIndex,
-				broker:      broker,
-				topology:    topology,
-				previousGen: previousGen,
-				result:      make(chan creationError, 1),
+				broker: broker,
+				result: make(chan creationError, 1),
 			}
 
 			// Send to the processing queue
@@ -171,13 +177,50 @@ func (o *generator) OnHostDown(broker BrokerInfo) {
 				break
 			}
 
-			time.Sleep(baseDelay)
+			time.Sleep(getDelay())
 		}
 	}()
 }
 
 func (o *generator) OnHostUp(broker BrokerInfo) {
 	log.Debug().Msgf("Generator detected %s as UP", &broker)
+}
+
+func (o *generator) OnHostShuttingDown(broker BrokerInfo) {
+	topology := o.discoverer.Topology()
+	if broker.Ordinal >= len(topology.Brokers) {
+		log.Info().Msgf("B%d detected as shutting down but it is already not included in the topology", broker.Ordinal)
+		return
+	}
+
+	if broker.Ordinal != topology.PreviousBroker().Ordinal {
+		log.Info().Msgf("B%d detected as shutting down but it's not the previous broker", broker.Ordinal)
+		return
+	}
+
+	log.Info().Msgf("Attempting to take over T%d as the result of B%d shutting down", broker.Ordinal, broker.Ordinal)
+
+	go func() {
+		// Let's delay it for a bit for topology to changes catch up (if anything)
+		time.Sleep(shutdownTakeOverDelay)
+
+		// Retry a few times but not forever
+		// In any case, "shutting down" should be taken as a hint
+		// If this fails, normal failover mechanisms will kick in
+		for i := 0; i < maxShutdownTakeOverAttempts; i++ {
+			m := &localFailoverGenMessage{
+				broker:         broker,
+				isShuttingDown: true,
+				result:         make(chan creationError),
+			}
+
+			o.items <- m
+			if err := <-m.result; err == nil {
+				break
+			}
+			time.Sleep(getDelay())
+		}
+	}()
 }
 
 func (o *generator) startNew() {
@@ -312,7 +355,7 @@ func (o *generator) OnJoinRange(previousTopology *TopologyInfo, topology *Topolo
 			}
 
 			// Don't wait for long time as it can result in unavailability of the system
-			time.Sleep(baseDelay)
+			time.Sleep(getDelay())
 		}
 	}()
 }
@@ -392,7 +435,9 @@ func checkState(gens []Generation, accepted, proposed *Generation) (*Generation,
 	return accepted, proposed
 }
 
-// getDelay gets a value between base delay and max delay
+// Gets a value between base delay and max delay
 func getDelay() time.Duration {
-	return time.Duration(rand.Intn(int(baseDelay.Milliseconds())))*time.Millisecond + baseDelay
+	diffDelay := maxDelay - baseDelay
+	randomDelay := time.Duration(rand.Int63n(diffDelay.Milliseconds())) * time.Millisecond
+	return baseDelay + randomDelay
 }

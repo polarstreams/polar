@@ -169,6 +169,15 @@ func (g *gossiper) onHostUp(b *BrokerInfo) {
 	}
 }
 
+func (g *gossiper) onHostShuttingDown(b *BrokerInfo) {
+	if g.localDb.IsShuttingDown() {
+		return
+	}
+	for _, listener := range g.hostUpDownListeners {
+		listener.OnHostShuttingDown(*b)
+	}
+}
+
 func (g *gossiper) createClient(broker BrokerInfo) *clientInfo {
 	gossipConnection := &atomic.Value{}
 

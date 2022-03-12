@@ -79,7 +79,7 @@ func (b *TestBroker) Start() {
 		"BARCO_SEGMENT_FLUSH_INTERVAL_MS=1000",
 		"BARCO_CONSUMER_ADD_DELAY_MS=200",
 		"BARCO_TOPOLOGY_FILE_POLL_DELAY_MS=400",
-		"BARCO_SHUTDOWN_DELAY_SECS=1",
+		"BARCO_SHUTDOWN_DELAY_SECS=2",
 	)
 	stderr, err := cmd.StderrPipe()
 	Expect(err).NotTo(HaveOccurred())

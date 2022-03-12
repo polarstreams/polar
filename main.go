@@ -93,6 +93,7 @@ func main() {
 	localDbClient.MarkAsShuttingDown()
 	producer.Close()
 	consumer.Close()
+	gossiper.SendGoobye()
 
 	if config.ShutdownDelay() > 0 {
 		log.Info().Msgf("Waiting %s before shutting down gossip", config.ShutdownDelay())
