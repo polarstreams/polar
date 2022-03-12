@@ -343,7 +343,7 @@ func newTestTopology(length int, ordinal int) TopologyInfo {
 		}
 	}
 
-	return NewTopology(brokers)
+	return NewTopology(brokers, ordinal)
 }
 
 func createTestConsumers(length int) ([]string, map[consumerKey]ConsumerInfo) {

@@ -14,7 +14,7 @@ import (
 // The reason of the creation it can be that we are starting new
 // or this broker came back online and it's trying to recover
 func (o *generator) processLocalMyToken(message *localGenMessage) creationError {
-	topology := o.discoverer.Topology()
+	topology := message.topology
 	token := topology.MyToken()
 	timestamp := time.Now()
 

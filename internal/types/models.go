@@ -2,9 +2,11 @@ package types
 
 import (
 	"fmt"
+
+	"github.com/rs/zerolog/log"
 )
 
-const NotFoundIndex BrokerIndex = -1
+const notFoundIndex BrokerIndex = -1
 
 // BrokerInfo contains information about a broker
 type BrokerInfo struct {
@@ -39,10 +41,19 @@ type TopicInfo struct {
 }
 
 type ReplicationInfo struct {
-	Leader     *BrokerInfo
+	Leader     *BrokerInfo // Determines the leader of the replication plan, it can be nil when not determined
 	Followers  []BrokerInfo
 	Token      Token
 	RangeIndex RangeIndex
+}
+
+func NewReplicationInfo(topology *TopologyInfo, gen *Generation, rangeIndex RangeIndex) ReplicationInfo {
+	return ReplicationInfo{
+		Leader:     topology.BrokerByOrdinal(gen.Leader),
+		Followers:  topology.BrokerByOrdinalList(gen.Followers),
+		Token:      gen.Start,
+		RangeIndex: rangeIndex,
+	}
 }
 
 // SegmentChunk represents a group of compressed records.
@@ -56,17 +67,18 @@ type SegmentChunk interface {
 type TopologyInfo struct {
 	Brokers        []BrokerInfo        // Brokers ordered by index (e.g. 0,3,1,4,2,5)
 	LocalIndex     BrokerIndex         // Index of the current broker relative to this topology instance
+	ordinal        int                 // My ordinal
 	indexByOrdinal map[int]BrokerIndex // Map of key ordinals and value indexes
 }
 
 // NewTopology creates a Topology struct using brokers in ordinal order.
-func NewTopology(brokersByOrdinal []BrokerInfo) TopologyInfo {
+func NewTopology(brokersByOrdinal []BrokerInfo, myOrdinal int) TopologyInfo {
 	totalBrokers := len(brokersByOrdinal)
 	ordinalList := OrdinalsPlacementOrder(totalBrokers)
 	brokers := make([]BrokerInfo, 0, totalBrokers)
 	// It can be a slice but let's make it a map
 	indexByOrdinal := make(map[int]BrokerIndex, totalBrokers)
-	localIndex := 0
+	localIndex := int(notFoundIndex)
 	for index, ordinal := range ordinalList {
 		b := brokersByOrdinal[ordinal]
 		indexByOrdinal[int(ordinal)] = BrokerIndex(index)
@@ -75,9 +87,11 @@ func NewTopology(brokersByOrdinal []BrokerInfo) TopologyInfo {
 		}
 		brokers = append(brokers, b)
 	}
+
 	return TopologyInfo{
 		Brokers:        brokers,
 		LocalIndex:     BrokerIndex(localIndex),
+		ordinal:        myOrdinal,
 		indexByOrdinal: indexByOrdinal,
 	}
 }
@@ -89,12 +103,20 @@ func (t *TopologyInfo) GetToken(index BrokerIndex) Token {
 
 // MyToken gets the natural token based on the current broker index.
 func (t *TopologyInfo) MyToken() Token {
+	if !t.AmIIncluded() {
+		log.Panic().Msgf("My token is not available as my ordinal is not included in the Topology")
+	}
 	return GetTokenAtIndex(len(t.Brokers), int(t.LocalIndex))
 }
 
 // MyOrdinal gets the current broker's ordinal.
 func (t *TopologyInfo) MyOrdinal() int {
-	return t.Brokers[t.LocalIndex].Ordinal
+	return t.ordinal
+}
+
+// Returns true when my ordinal is included in the topology
+func (t *TopologyInfo) AmIIncluded() bool {
+	return t.LocalIndex != notFoundIndex
 }
 
 // GetIndex gets the position of the broker in the broker slice.
@@ -103,7 +125,7 @@ func (t *TopologyInfo) MyOrdinal() int {
 func (t *TopologyInfo) GetIndex(ordinal int) BrokerIndex {
 	v, found := t.indexByOrdinal[ordinal]
 	if !found {
-		return NotFoundIndex
+		return notFoundIndex
 	}
 	return v
 }
@@ -113,7 +135,7 @@ func (t *TopologyInfo) GetIndex(ordinal int) BrokerIndex {
 // It returns nil when not found.
 func (t *TopologyInfo) BrokerByOrdinal(ordinal int) *BrokerInfo {
 	index := t.GetIndex(ordinal)
-	if index == NotFoundIndex {
+	if index == notFoundIndex {
 		return nil
 	}
 	return &t.Brokers[int(index)]
@@ -129,7 +151,11 @@ func (t *TopologyInfo) BrokerByOrdinalList(ordinals []int) []BrokerInfo {
 }
 
 // PreviousBroker returns the broker in the position n-1
+// It panics when my ordinal is not included in the Topology
 func (t *TopologyInfo) PreviousBroker() *BrokerInfo {
+	if !t.AmIIncluded() {
+		log.Panic().Msgf("Can not get PreviousBroker() as my ordinal is not included in the Topology")
+	}
 	index := len(t.Brokers) - 1
 	if t.LocalIndex > 0 {
 		index = int(t.LocalIndex) - 1
@@ -145,6 +171,9 @@ func (t *TopologyInfo) NextBroker() *BrokerInfo {
 
 // NextBroker returns the broker in the position n+1
 func (t *TopologyInfo) NextIndex() BrokerIndex {
+	if !t.AmIIncluded() {
+		log.Panic().Msgf("Can not get NextIndex() as my ordinal is not included in the Topology")
+	}
 	return BrokerIndex((int(t.LocalIndex) + 1) % len(t.Brokers))
 }
 

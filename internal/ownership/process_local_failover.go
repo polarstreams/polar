@@ -11,7 +11,7 @@ import (
 
 func (o *generator) processLocalFailover(m *localFailoverGenMessage) creationError {
 	const reason = "failover"
-	topology := o.discoverer.Topology()
+	topology := m.topology
 	downBroker := m.broker.Ordinal
 
 	if downBroker >= len(topology.Brokers) {

@@ -99,6 +99,10 @@ func (o *generator) OnRemoteSetAsCommitted(token1 Token, token2 *Token, tx uuid.
 func (o *generator) OnRemoteRangeSplitStart(origin int) error {
 	topology := o.discoverer.Topology()
 
+	if !topology.AmIIncluded() {
+		return utils.CreateErrAndLog("Ignoring remote range split as I'm leaving the cluster")
+	}
+
 	if origin >= len(topology.Brokers) {
 		return utils.CreateErrAndLog(
 			"Received split range request from B%d but topology does not contain it (length: %d)",
@@ -123,7 +127,7 @@ func (o *generator) OnRemoteRangeSplitStart(origin int) error {
 }
 
 func (o *generator) StartGenerations() {
-	// Register UP/DOWN handler on the main thread
+	// Register UP/DOWN handler on the main thread, after all peers are up
 	o.gossiper.RegisterHostUpDownListener(o)
 
 	started := make(chan bool, 1)
@@ -137,6 +141,11 @@ func (o *generator) StartGenerations() {
 func (o *generator) OnHostDown(broker BrokerInfo) {
 	// Check position of the down broker
 	topology := o.discoverer.Topology()
+	if !topology.AmIIncluded() {
+		log.Debug().Msgf("Broker B%d detected but I'm leaving the cluster", broker.Ordinal)
+		return
+	}
+
 	brokerIndex := topology.GetIndex(broker.Ordinal)
 	followers := topology.NaturalFollowers(brokerIndex)
 	if followers[0] != topology.MyOrdinal() {
@@ -162,9 +171,16 @@ func (o *generator) OnHostDown(broker BrokerInfo) {
 	go func() {
 		// If host comes back up, it's expected to try to retake its token
 		for !o.gossiper.IsHostUp(broker.Ordinal) && !o.localDb.IsShuttingDown() {
+			topology := o.discoverer.Topology()
+			if !topology.AmIIncluded() {
+				log.Info().Msgf("Not attempting broker down failover as I'm leaving the cluster")
+				break
+			}
+
 			message := localFailoverGenMessage{
-				broker: broker,
-				result: make(chan creationError, 1),
+				broker:   broker,
+				topology: topology,
+				result:   make(chan creationError, 1),
 			}
 
 			// Send to the processing queue
@@ -188,6 +204,11 @@ func (o *generator) OnHostUp(broker BrokerInfo) {
 
 func (o *generator) OnHostShuttingDown(broker BrokerInfo) {
 	topology := o.discoverer.Topology()
+	if !topology.AmIIncluded() {
+		log.Debug().Msgf("B%d detected as shutting down but I'm leaving the cluster", broker.Ordinal)
+		return
+	}
+
 	if broker.Ordinal >= len(topology.Brokers) {
 		log.Info().Msgf("B%d detected as shutting down but it is already not included in the topology", broker.Ordinal)
 		return
@@ -208,8 +229,15 @@ func (o *generator) OnHostShuttingDown(broker BrokerInfo) {
 		// In any case, "shutting down" should be taken as a hint
 		// If this fails, normal failover mechanisms will kick in
 		for i := 0; i < maxShutdownTakeOverAttempts; i++ {
+			topology := o.discoverer.Topology()
+			if !topology.AmIIncluded() {
+				log.Info().Msgf("Not attempting shutdown failover as I'm leaving the cluster")
+				break
+			}
+
 			m := &localFailoverGenMessage{
 				broker:         broker,
+				topology:       topology,
 				isShuttingDown: true,
 				result:         make(chan creationError),
 			}
@@ -247,23 +275,27 @@ func (o *generator) startNew() {
 
 	// Restarting or starting fresh
 	for {
-		message := localGenMessage{
-			isNew:  reason == newCluster,
-			result: make(chan creationError),
-		}
+		topology := o.discoverer.Topology()
+		if topology.AmIIncluded() {
+			message := localGenMessage{
+				isNew:    reason == newCluster,
+				topology: topology,
+				result:   make(chan creationError),
+			}
 
-		// Send to the processing queue
-		o.items <- &message
-		err := <-message.result
+			// Send to the processing queue
+			o.items <- &message
+			err := <-message.result
 
-		if err == nil {
-			break
-		}
+			if err == nil {
+				break
+			}
 
-		log.Err(err).Msg("Could not create generation when starting")
+			log.Err(err).Msg("Could not create generation when starting")
 
-		if !err.canBeRetried() {
-			log.Panic().Err(err).Msg("Non retryable error found when starting")
+			if !err.canBeRetried() {
+				log.Panic().Err(err).Msg("Non retryable error found when starting")
+			}
 		}
 		time.Sleep(getDelay())
 	}
@@ -328,6 +360,10 @@ func (o *generator) requestRangeSplit(topology *TopologyInfo) {
 }
 
 func (o *generator) OnJoinRange(previousTopology *TopologyInfo, topology *TopologyInfo) {
+	if !topology.AmIIncluded() {
+		log.Error().Msgf("Ignoring join range call as I'm leaving the cluster")
+	}
+
 	go func() {
 		// Avoid unnecessary noise
 		if topology.LocalIndex > 0 {
@@ -336,6 +372,7 @@ func (o *generator) OnJoinRange(previousTopology *TopologyInfo, topology *Topolo
 			time.Sleep(delay)
 		}
 
+		// As long as the topology doesn't change
 		for len(topology.Brokers) == len(o.discoverer.Topology().Brokers) && !o.localDb.IsShuttingDown() {
 			message := localJoinRangeGenMessage{
 				topology:         topology,

@@ -82,6 +82,6 @@ func newTestTopology(length int, ordinal int) *TopologyInfo {
 		}
 	}
 
-	t := NewTopology(brokers)
+	t := NewTopology(brokers, ordinal)
 	return &t
 }

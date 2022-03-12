@@ -138,7 +138,9 @@ func (p *producer) handleMessage(topic string, querystring url.Values, contentLe
 	leader := replication.Leader
 
 	if leader == nil {
-		return fmt.Errorf("Leader was not found")
+		return types.NewHttpError(
+			http.StatusMisdirectedRequest,
+			fmt.Sprintf("Leader for token %d could not be found", replication.Token))
 	}
 
 	p.config.FlowController().Allocate(int(contentLength))

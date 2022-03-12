@@ -186,7 +186,7 @@ func (g *gossiper) postGoodbyeHandler(w http.ResponseWriter, r *http.Request, _ 
 		return err
 	}
 
-	// We've received a message from a peer that it's going away
+	// We've received a message from a peer that it's shutting down
 	topology := g.discoverer.Topology()
 	if ordinal >= len(topology.Brokers) {
 		log.Debug().Msgf("Received goodbye from B%d but it's currently not included in the topology", ordinal)

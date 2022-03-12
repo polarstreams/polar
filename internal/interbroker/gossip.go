@@ -149,8 +149,8 @@ func (g *gossiper) OnTopologyChange(previousTopology *TopologyInfo, topology *To
 		log.Info().Msgf("Scaling up detected, opening connections to new brokers")
 		g.createNewClients(topology)
 	} else {
-		if len(topology.Brokers) <= previousTopology.MyOrdinal() {
-			log.Info().Msgf("Scaling down detected but I'm going away, ignoring")
+		if !topology.AmIIncluded() {
+			log.Info().Msgf("Scaling down detected but I'm leaving the cluster, ignoring")
 			return
 		}
 		log.Info().Msgf("Scaling down detected")
@@ -486,6 +486,10 @@ func (g *gossiper) SendCommittedOffset(ordinal int, kv *OffsetStoreKeyValue) err
 func (g *gossiper) SendGoobye() {
 	// Notify the next broker
 	topology := g.discoverer.Topology()
+	if !topology.AmIIncluded() {
+		// I'm leaving the cluster, no point in saying goodbye
+		return
+	}
 	peerOrdinal := topology.NextBroker().Ordinal
 	jsonBody, _ := json.Marshal(topology.MyOrdinal())
 	r, err := g.requestPost(peerOrdinal, conf.GossipGoodbyeUrl, jsonBody)

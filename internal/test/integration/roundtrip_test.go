@@ -53,7 +53,7 @@ var _ = Describe("A 3 node cluster", func() {
 		})
 
 		AfterEach(func ()  {
-			log.Debug().Msgf("Cleaning up cluster")
+			log.Debug().Msgf("Shutting down test cluster")
 			b0.Shutdown()
 			b1.Shutdown()
 			b2.Shutdown()
@@ -170,6 +170,7 @@ var _ = Describe("A 3 node cluster", func() {
 
 			// Try to find the record for T1 v2
 			resp := client.ConsumerPoll(2)
+			defer resp.Body.Close()
 			messages := readConsumerResponse(resp)
 			topicId, r := findRecord(messages, `{"hello": "world1_1"}`)
 			Expect(r).NotTo(BeNil())
@@ -178,6 +179,7 @@ var _ = Describe("A 3 node cluster", func() {
 
 			// Try to find the record for T1 v2
 			resp = client.ConsumerPoll(2)
+			defer resp.Body.Close()
 			messages = readConsumerResponse(resp)
 			topicId, r = findRecord(messages, `{"hello": "world1_2"}`)
 			Expect(r).NotTo(BeNil())
@@ -242,7 +244,7 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 	})
 
 	AfterEach(func ()  {
-		log.Debug().Msgf("Cleaning up cluster")
+		log.Debug().Msgf("Shutting down test cluster")
 		brokers := []*TestBroker{b0, b1, b2, b3, b4, b5}
 		for _, b := range brokers {
 			if b != nil {
@@ -266,6 +268,8 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 		b4.WaitForStart().WaitForVersion1()
 		b5.WaitForStart().WaitForVersion1()
 
+		client := NewTestClient(nil)
+
 		time.Sleep(1 * time.Second)
 		fmt.Println("------------------Updating the topology")
 
@@ -276,6 +280,17 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 		b4.UpdateTopologyFile(3)
 		b5.UpdateTopologyFile(3)
 
+		// Check b3-b5 can still get traffic
+		for i := 0; i < 500; i++ {
+			for ordinal := 3; ordinal < 6; ordinal++ {
+				message := fmt.Sprintf(`{"hello": "world%d_%d"}`, i, ordinal)
+				expectOkOrMessage(
+					client.ProduceJson(ordinal, "abc", message, ""),
+					"Leader for token [\\-\\d]+ could not be found",
+					"Producing on B%d", ordinal)
+			}
+		}
+
 		const commitJoinMessage = "Committing \\[-9223372036854775808, -3074457345618259968\\] v2 with B0 as leader for joined ranges"
 		b0.WaitOutput(commitJoinMessage)
 		b1.WaitOutput(commitJoinMessage)
@@ -284,6 +299,19 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 		b0.LookForErrors(30)
 		b1.LookForErrors(30)
 		b2.LookForErrors(30)
+
+		// Check b3-b5 can still route traffic
+		for i := 0; i < 500; i++ {
+			for ordinal := 3; ordinal < 6; ordinal++ {
+				message := fmt.Sprintf(`{"hello": "world%d_%d"}`, i, ordinal)
+				expectOkOrMessage(
+					client.ProduceJson(ordinal, "abc", message, ""),
+					"Leader for token [\\-\\d]+ could not be found",
+					"Producing on B%d", ordinal)
+			}
+		}
+
+		fmt.Println("--Shutting down instances")
 
 		b3.Shutdown()
 		b3 = nil
@@ -301,10 +329,20 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 	})
 })
 
-func expectOk(resp *http.Response) {
+func expectOk(resp *http.Response, description... interface{}) {
 	defer resp.Body.Close()
+	Expect(resp.StatusCode).To(Equal(200), description...)
 	Expect(ReadBody(resp)).To(Equal("OK"))
-	Expect(resp.StatusCode).To(Equal(200))
+}
+
+func expectOkOrMessage(resp *http.Response, message string, description... interface{}) {
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusMisdirectedRequest {
+		Expect(ReadBody(resp)).To(MatchRegexp(message))
+		return
+	}
+	Expect(resp.StatusCode).To(Equal(200), description...)
+	Expect(ReadBody(resp)).To(Equal("OK"))
 }
 
 type consumerResponseItem struct {

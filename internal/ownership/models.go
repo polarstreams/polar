@@ -14,8 +14,9 @@ type genMessage interface {
 }
 
 type localGenMessage struct {
-	isNew  bool // When is new, it's expected to be generation 1 of a token
-	result chan creationError
+	isNew    bool          // When is new, it's expected to be generation 1 of a token
+	topology *TopologyInfo // Point in time topology info
+	result   chan creationError
 }
 
 func (m *localGenMessage) setResult(err creationError) {
@@ -24,7 +25,8 @@ func (m *localGenMessage) setResult(err creationError) {
 
 type localFailoverGenMessage struct {
 	broker         BrokerInfo
-	isShuttingDown bool // Notes that the failover message is created due to a goodbye message from the peer
+	topology       *TopologyInfo // Point in time topology info
+	isShuttingDown bool          // Notes that the failover message is created due to a goodbye message from the peer
 	result         chan creationError
 }
 

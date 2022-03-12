@@ -23,6 +23,7 @@ const (
 )
 
 var roundRobinRangeIndex uint32 = 0
+var roundRobinBrokerIndex uint32 = 0
 
 // Discoverer provides the cluster topology information.
 //
@@ -86,7 +87,7 @@ type discoverer struct {
 	localDb          localdb.Client
 	listeners        []TopologyChangeListener
 	topology         atomic.Value // Gets the current brokers, index and ring
-	previousTopology atomic.Value // Stores the previous topology to try to access the peers that are going away, if possible
+	previousTopology atomic.Value // Stores the previous topology to try to access the peers that are leaving the cluster, if possible
 	k8sClient        k8sClient
 	genMutex         sync.Mutex
 	genProposed      genMap
@@ -187,7 +188,7 @@ func createTopology(totalBrokers int, config conf.DiscovererConfig) *TopologyInf
 		})
 	}
 
-	result := NewTopology(brokers)
+	result := NewTopology(brokers, localOrdinal)
 	return &result
 }
 
@@ -265,7 +266,7 @@ func createFixedTopology(ordinal int, names string) (*TopologyInfo, error) {
 		}
 	}
 
-	result := NewTopology(brokers)
+	result := NewTopology(brokers, ordinal)
 	return &result, nil
 }
 
@@ -280,20 +281,15 @@ func (d *discoverer) LocalInfo() *BrokerInfo {
 
 func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 	topology := d.Topology()
-	token := topology.MyToken()
-	brokerIndex := topology.LocalIndex
-	rangeIndex := RangeIndex(0)
 
-	if partitionKey != "" {
-		// Calculate the token based on the partition key
-		token, brokerIndex, rangeIndex = topology.PrimaryToken(HashToken(partitionKey), d.config.ConsumerRanges())
-	} else {
-		// Use round robin to avoid overloading a range
-		rangeIndex = RangeIndex(atomic.AddUint32(&roundRobinRangeIndex, 1) % uint32(d.config.ConsumerRanges()))
+	if partitionKey == "" {
+		return d.primaryTokenDefault(topology)
 	}
 
-	gen := d.Generation(token)
+	// Calculate the token based on the partition key
+	token, brokerIndex, rangeIndex := topology.PrimaryToken(HashToken(partitionKey), d.config.ConsumerRanges())
 
+	gen := d.Generation(token)
 	if gen == nil {
 		// We don't have information about it and it's OK
 		// Send it to the natural owner or the natural owner followers
@@ -311,6 +307,50 @@ func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 		Token:      token,
 		RangeIndex: rangeIndex,
 	}
+}
+
+// Gets the primary token and broker information when there's no partition key
+// In most cases, it will point to my token
+func (d *discoverer) primaryTokenDefault(topology *TopologyInfo) ReplicationInfo {
+	// Use round robin to avoid overloading a range
+	rangeIndex := RangeIndex(atomic.AddUint32(&roundRobinRangeIndex, 1) % uint32(d.config.ConsumerRanges()))
+
+	if !topology.AmIIncluded() {
+		// Try to route it using the previous topology
+		if p := d.previousTopology.Load(); p != nil {
+			previousTopology := p.(*TopologyInfo)
+			if previousTopology.AmIIncluded() {
+				token := previousTopology.MyToken()
+				if gen := d.Generation(token); gen != nil {
+					// My previous generation is still alive
+					// Continue using it
+					return NewReplicationInfo(previousTopology, gen, rangeIndex)
+				}
+			}
+		}
+
+		// Route to any valid broker in the current topology
+		brokerIndex := BrokerIndex(atomic.AddUint32(&roundRobinBrokerIndex, 1) % uint32(len(topology.Brokers)))
+
+		return ReplicationInfo{
+			Leader:     &topology.Brokers[brokerIndex],
+			Followers:  topology.NextBrokers(brokerIndex, 2),
+			Token:      topology.GetToken(brokerIndex),
+			RangeIndex: rangeIndex,
+		}
+	}
+
+	// Use my token as default
+	gen := d.Generation(topology.MyToken())
+	if gen == nil {
+		return ReplicationInfo{
+			Leader:     nil, // To hint that it could not be found
+			Followers:  []BrokerInfo{},
+			Token:      topology.MyToken(),
+			RangeIndex: rangeIndex,
+		}
+	}
+	return NewReplicationInfo(topology, gen, rangeIndex)
 }
 
 func (d *discoverer) RegisterListener(l TopologyChangeListener) {

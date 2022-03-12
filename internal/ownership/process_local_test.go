@@ -99,7 +99,7 @@ var _ = Describe("generator", func() {
 				gossiper:   gossiperMock,
 			}
 
-			err := o.processLocalMyToken(&localGenMessage{})
+			err := o.processLocalMyToken(&localGenMessage{topology: &topology})
 			Expect(err).NotTo(HaveOccurred())
 
 			gossiperMock.AssertExpectations(GinkgoT())
@@ -117,5 +117,5 @@ func newTestTopology(length int, ordinal int) TopologyInfo {
 		}
 	}
 
-	return NewTopology(brokers)
+	return NewTopology(brokers, ordinal)
 }
