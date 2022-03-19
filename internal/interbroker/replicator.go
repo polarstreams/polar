@@ -35,7 +35,7 @@ func (g *gossiper) SendToFollowers(
 		meta: dataRequestMeta{
 			SegmentId:    segmentId,
 			Token:        topic.Token,
-			GenId:        topic.GenId,
+			GenVersion:   topic.Version,
 			RangeIndex:   topic.RangeIndex,
 			StartOffset:  chunk.StartOffset(),
 			RecordLength: chunk.RecordLength(),

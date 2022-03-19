@@ -44,7 +44,7 @@ type dataRequestMeta struct {
 	SegmentId    uint64
 	Token        types.Token
 	RangeIndex   types.RangeIndex
-	GenId        types.GenVersion
+	GenVersion   types.GenVersion
 	StartOffset  uint64
 	RecordLength uint32
 	TopicLength  uint8 // The size in bytes of the topic name
@@ -96,7 +96,7 @@ func (r *dataRequest) topicId() types.TopicDataId {
 	return types.TopicDataId{
 		Name:       r.topic,
 		Token:      r.meta.Token,
-		GenId:      r.meta.GenId,
+		Version:    r.meta.GenVersion,
 		RangeIndex: r.meta.RangeIndex,
 	}
 }

@@ -13,7 +13,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestCompression(t *testing.T) {
+func TestDbClient(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "LocalDB Suite")
 }
@@ -45,7 +45,7 @@ var _ = Describe("Client", func() {
 					Status:    StatusAccepted,
 					Leader:    2,
 					Followers: []int{0, 1},
-					Parents:   []GenParent{{Start: start, Version: GenVersion(i - 1)}},
+					Parents:   []GenId{{Start: start, Version: GenVersion(i - 1)}},
 				})
 			}
 
@@ -92,7 +92,7 @@ var _ = Describe("Client", func() {
 					Status:    StatusCommitted,
 					Leader:    2,
 					Followers: []int{0, 1},
-					Parents:   []GenParent{{Start: start, Version: GenVersion(i - 1)}},
+					Parents:   []GenId{{Start: start, Version: GenVersion(i - 1)}},
 				}
 				insertGeneration(client, item)
 				inserted = append(inserted, item)
@@ -119,7 +119,7 @@ var _ = Describe("Client", func() {
 				Status:    StatusCommitted,
 				Leader:    2,
 				Followers: []int{0, 1},
-				Parents:   []GenParent{{Start: 1, Version: 2}},
+				Parents:   []GenId{{Start: 1, Version: 2}},
 			}
 			gen1_v4 := Generation{
 				Start:     1,
@@ -130,7 +130,7 @@ var _ = Describe("Client", func() {
 				Status:    StatusCommitted,
 				Leader:    2,
 				Followers: []int{0, 1},
-				Parents:   []GenParent{{Start: 1, Version: 3}},
+				Parents:   []GenId{{Start: 1, Version: 3}},
 			}
 			gen2_v1 := Generation{
 				Start:     2,
@@ -141,7 +141,7 @@ var _ = Describe("Client", func() {
 				Status:    StatusCommitted,
 				Leader:    2,
 				Followers: []int{0, 1},
-				Parents:   []GenParent{{Start: 1, Version: 3}},
+				Parents:   []GenId{{Start: 1, Version: 3}},
 			}
 			insertGeneration(client, gen1_v3)
 			insertGeneration(client, gen1_v4)
@@ -169,7 +169,7 @@ var _ = Describe("Client", func() {
 				Status:    StatusCommitted,
 				Leader:    2,
 				Followers: []int{0, 1},
-				Parents:   []GenParent{{Start: 1, Version: 2}},
+				Parents:   []GenId{{Start: 1, Version: 2}},
 			}
 			gen1_v4 := Generation{
 				Start:     1,
@@ -180,18 +180,18 @@ var _ = Describe("Client", func() {
 				Status:    StatusCommitted,
 				Leader:    2,
 				Followers: []int{0, 1},
-				Parents:   []GenParent{{Start: 1, Version: 3}},
+				Parents:   []GenId{gen1_v3.Id()},
 			}
 			gen2_v1 := Generation{
 				Start:     2,
-				End:       3,
+				End:       3, // Not included
 				Version:   1,
 				Timestamp: utils.ToUnixMillis(time.Now()),
 				Tx:        uuid.New(),
 				Status:    StatusCommitted,
 				Leader:    2,
 				Followers: []int{0, 1},
-				Parents:   []GenParent{{Start: 1, Version: 3}},
+				Parents:   []GenId{{Start: 1, Version: 3}},
 			}
 			insertGeneration(client, gen1_v3)
 			insertGeneration(client, gen1_v4)
@@ -204,6 +204,54 @@ var _ = Describe("Client", func() {
 			result, err = client.GenerationsByParent(&gen2_v1)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(HaveLen(0))
+		})
+
+		It("Should return the next generations for joined ranges", func() {
+			client := newTestClient()
+			defer client.Close()
+
+			gen1_v4 := Generation{
+				Start:     0,
+				End:       50,
+				Version:   4,
+				Timestamp: utils.ToUnixMillis(time.Now()),
+				Tx:        uuid.New(),
+				Status:    StatusCommitted,
+				Leader:    2,
+				Followers: []int{0, 1},
+				Parents:   []GenId{},
+			}
+			gen2_v1 := Generation{
+				Start:     50,
+				End:       100,
+				Version:   1,
+				Timestamp: utils.ToUnixMillis(time.Now()),
+				Tx:        uuid.New(),
+				Status:    StatusCommitted,
+				Leader:    2,
+				Followers: []int{0, 1},
+				Parents:   []GenId{},
+			}
+
+			// Joined range
+			gen1_v5 := Generation{
+				Start:     0,
+				End:       100, // Included in range
+				Version:   5,
+				Timestamp: utils.ToUnixMillis(time.Now()),
+				Tx:        uuid.New(),
+				Status:    StatusCommitted,
+				Leader:    2,
+				Followers: []int{0, 1},
+				Parents:   []GenId{gen1_v4.Id(), gen2_v1.Id()},
+			}
+			insertGeneration(client, gen1_v4)
+			insertGeneration(client, gen2_v1)
+			insertGeneration(client, gen1_v5)
+
+			result, err := client.GenerationsByParent(&gen1_v4)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal([]Generation{gen1_v5}))
 		})
 	})
 
@@ -221,7 +269,7 @@ var _ = Describe("Client", func() {
 				TxLeader:  3,
 				Tx:        uuid.New(),
 				Status:    StatusCommitted,
-				Parents:   []GenParent{{Start: 2001, Version: GenVersion(122)}},
+				Parents:   []GenId{{Start: 2001, Version: GenVersion(122)}},
 			}
 
 			err := client.CommitGeneration(&gen, nil)
@@ -244,7 +292,7 @@ var _ = Describe("Client", func() {
 				TxLeader:  0,
 				Tx:        tx,
 				Status:    StatusCommitted,
-				Parents:   []GenParent{{Start: 2001, Version: GenVersion(122)}},
+				Parents:   []GenId{{Start: 2001, Version: GenVersion(122)}},
 			}
 
 			gen2 := Generation{
@@ -257,7 +305,7 @@ var _ = Describe("Client", func() {
 				TxLeader:  0,
 				Tx:        tx,
 				Status:    StatusCommitted,
-				Parents:   []GenParent{{Start: 2001, Version: GenVersion(122)}},
+				Parents:   []GenId{{Start: 2001, Version: GenVersion(122)}},
 			}
 
 			err := client.CommitGeneration(&gen1, &gen2)

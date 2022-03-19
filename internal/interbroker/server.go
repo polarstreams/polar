@@ -277,7 +277,7 @@ func (g *gossiper) getProducerOffset(w http.ResponseWriter, r *http.Request, ps 
 		Name:       topic,
 		Token:      Token(token),
 		RangeIndex: RangeIndex(rangeIndex),
-		GenId:      GenVersion(version),
+		Version:    GenVersion(version),
 	}
 
 	value, err := data.ReadProducerOffset(&topicId, g.config)

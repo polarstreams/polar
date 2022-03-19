@@ -61,7 +61,7 @@ func (o *generator) processLocalFailover(m *localFailoverGenMessage) creationErr
 		TxLeader:  topology.MyOrdinal(),
 		Tx:        uuid.New(),
 		Status:    StatusProposed,
-		Parents: []GenParent{{
+		Parents: []GenId{{
 			Start:   token,
 			Version: previousGen.Version,
 		}},

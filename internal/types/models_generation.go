@@ -8,29 +8,38 @@ import (
 )
 
 type Generation struct {
-	Start     Token       `json:"start"`
-	End       Token       `json:"end"`
-	Version   GenVersion  `json:"version"`
-	Timestamp int64       `json:"timestamp"` // In unix micros
-	Leader    int         `json:"leader"`    // The ordinal of the leader
-	Followers []int       `json:"followers"` // Follower ordinals
-	TxLeader  int         `json:"txLeader"`  // The originator of the transaction
-	Tx        uuid.UUID   `json:"tx"`
-	Status    GenStatus   `json:"status"`
-	ToDelete  bool        `json:"toDelete"`
-	Parents   []GenParent `json:"parents"`
+	Start     Token      `json:"start"`
+	End       Token      `json:"end"`
+	Version   GenVersion `json:"version"`
+	Timestamp int64      `json:"timestamp"` // In unix micros
+	Leader    int        `json:"leader"`    // The ordinal of the leader
+	Followers []int      `json:"followers"` // Follower ordinals
+	TxLeader  int        `json:"txLeader"`  // The originator of the transaction
+	Tx        uuid.UUID  `json:"tx"`
+	Status    GenStatus  `json:"status"`
+	ToDelete  bool       `json:"toDelete"`
+	Parents   []GenId    `json:"parents"`
 }
 
-type GenParent struct {
+// Represents a unique reference to a generation
+type GenId struct {
 	Start   Token      `json:"start"`
 	Version GenVersion `json:"version"`
 }
 
 // Time() returns the timestamp expressed as a time.Time
-func (o *Generation) Time() time.Time {
+func (g *Generation) Time() time.Time {
 	// Timestamp is expressed in micros
-	nanos := o.Timestamp * 1000
+	nanos := g.Timestamp * 1000
 	return time.Unix(0, nanos)
+}
+
+// Gets the identifier of the generation
+func (g *Generation) Id() GenId {
+	return GenId{
+		Start:   g.Start,
+		Version: g.Version,
+	}
 }
 
 type GenVersion uint32

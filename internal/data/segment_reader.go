@@ -171,18 +171,26 @@ func (s *SegmentReader) read() {
 }
 
 func (s *SegmentReader) storeOffset(lastCommit time.Time) {
-	commit := false
+	commitType := OffsetCommitLocal
 	if time.Since(lastCommit) >= s.config.AutoCommitInterval() {
 		lastCommit = time.Now()
-		commit = true
+		commitType = OffsetCommitAll
+	} else if s.MaxProducedOffset != nil && s.messageOffset >= *s.MaxProducedOffset {
+		log.Debug().Str("group", s.group).Msgf("Consumed all messages of a previous generation %s", &s.Topic)
+		commitType = OffsetCommitAll
 	}
+
 	value := Offset{
 		Offset:  s.messageOffset,
-		Version: s.Topic.GenId,
+		Version: s.Topic.Version,
 		Source:  s.SourceVersion,
 	}
-	log.Debug().Bool("commit", commit).Str("group", s.group).Msgf("Setting offset for %s", &s.Topic)
-	s.offsetState.Set(s.group, s.Topic.Name, s.Topic.Token, s.Topic.RangeIndex, value, OffsetCommitAll)
+
+	if commitType == OffsetCommitAll {
+		log.Debug().Str("group", s.group).Msgf("Setting offset for %s on all replicas", &s.Topic)
+	}
+
+	s.offsetState.Set(s.group, s.Topic.Name, s.Topic.Token, s.Topic.RangeIndex, value, commitType)
 }
 
 // Tries open the initial file and seek the correct position, returning an error when there's an

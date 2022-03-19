@@ -208,14 +208,18 @@ func (q *groupReadQueue) maybeCloseReader(reader *SegmentReader, chunk SegmentCh
 
 // Moves offset to next generation
 func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId) bool {
-	log.Debug().Msgf("Looking for next generation of %d v%d", topicId.Token, topicId.GenId)
-	nextGens := q.topologyGetter.NextGeneration(topicId.Token, topicId.GenId)
+	log.Debug().Msgf("Looking for next generation of %d v%d", topicId.Token, topicId.Version)
+	nextGens := q.topologyGetter.NextGeneration(topicId.Token, topicId.Version)
 	if len(nextGens) == 0 {
 		return false
 	}
 
 	for _, gen := range nextGens {
-		offset := Offset{Offset: 0, Version: gen.Version}
+		offset := Offset{
+			Offset:  0,
+			Version: gen.Version,
+			Source:  0,
+		}
 		q.offsetState.Set(
 			q.group, topicId.Name, gen.Start, topicId.RangeIndex, offset, OffsetCommitAll)
 	}
@@ -254,7 +258,7 @@ func (q *groupReadQueue) useFailedResponseItems(
 			failedResponseItems = append(failedResponseItems[:i], failedResponseItems[i+1:]...)
 
 			offset := q.offsetState.Get(q.group, r.topic.Name, r.topic.Token, r.topic.RangeIndex)
-			if offset != nil && offset.Version != r.topic.GenId {
+			if offset != nil && offset.Version != r.topic.Version {
 				// Since it failed, there were topology changes and the offset state for the group changed
 				// It can be safely ignored
 				continue
@@ -272,7 +276,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 	for _, t := range tokenRanges {
 		currentGen := q.topologyGetter.Generation(t.Token)
 		if currentGen == nil {
-			// TODO: Maybe the token/broker no longer exists
+			// Maybe the token/broker no longer exists
 			log.Warn().Msgf("Information about the generation of token %d could not be found", t.Token)
 			continue
 		}
@@ -301,7 +305,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 						}
 					}
 
-					if !q.offsetState.CanConsumeToken(q.group, topic, *currentGen) {
+					if !q.offsetState.CanConsumeToken(q.group, topic, currentGen) {
 						// TODO: Verify that a previous token from a broker that does not exist any more was consumed
 						log.Debug().Msgf(
 							"Group %s can't consume topic %s for token %d v%d yet",
@@ -314,7 +318,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 						Name:       topic,
 						Token:      t.Token,
 						RangeIndex: index,
-						GenId:      readerVersion,
+						Version:    readerVersion,
 					}
 
 					var maxProducedOffset *uint64 = nil
@@ -364,9 +368,9 @@ func (q *groupReadQueue) hasData(topicId *TopicDataId) bool {
 }
 
 func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (uint64, error) {
-	gen := q.topologyGetter.GenerationInfo(topicId.Token, topicId.GenId)
+	gen := q.topologyGetter.GenerationInfo(topicId.Token, topicId.Version)
 	if gen == nil {
-		log.Warn().Msgf("Past generation could not be retrieved %d v%d", topicId.Token, topicId.GenId)
+		log.Warn().Msgf("Past generation could not be retrieved %d v%d", topicId.Token, topicId.Version)
 		// Attempt to get the info from local storage
 		return q.offsetState.ProducerOffsetLocal(topicId)
 	}

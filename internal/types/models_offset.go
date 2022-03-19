@@ -44,7 +44,7 @@ type OffsetState interface {
 	// It navigates through the generation tree, looking for parents.
 	//
 	// Only called one per consumer group reader.
-	CanConsumeToken(group string, topic string, gen Generation) bool
+	CanConsumeToken(group string, topic string, gen *Generation) bool
 
 	// Reads the local max producer offset from disk
 	ProducerOffsetLocal(topic *TopicDataId) (uint64, error)

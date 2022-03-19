@@ -111,7 +111,7 @@ var _ = Describe("A 3 node cluster", func() {
 				Name:       "abc",
 				Token:      -9223372036854775808,
 				RangeIndex: 1,
-				GenId:      1,
+				Version: 1,
 			}))
 
 			Expect(item.records).To(HaveLen(1))
@@ -409,7 +409,7 @@ func unmarshalTopicId(r io.Reader) *TopicDataId {
 	Expect(err).NotTo(HaveOccurred())
 	err = binary.Read(r, conf.Endianness, &topic.RangeIndex)
 	Expect(err).NotTo(HaveOccurred())
-	err = binary.Read(r, conf.Endianness, &topic.GenId)
+	err = binary.Read(r, conf.Endianness, &topic.Version)
 	Expect(err).NotTo(HaveOccurred())
 	err = binary.Read(r, conf.Endianness, &topicLength)
 	Expect(err).NotTo(HaveOccurred())

@@ -41,7 +41,7 @@ var _ = Describe("Gossiper", func() {
 				Name:       "abc",
 				Token:      1,
 				RangeIndex: 2,
-				GenId:      3,
+				Version:    3,
 			}
 			discoverer := new(dMocks.Discoverer)
 			discoverer.On("CurrentOrPastBroker", mock.Anything).Return(&BrokerInfo{HostName: "127.0.0.1"})

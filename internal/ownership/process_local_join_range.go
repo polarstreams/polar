@@ -66,7 +66,7 @@ func (o *generator) processLocalJoinRange(m *localJoinRangeGenMessage) creationE
 		TxLeader:  topology.MyOrdinal(),
 		Tx:        tx,
 		Status:    StatusProposed,
-		Parents:   []GenParent{{Start: myToken, Version: parentVersion1}, {Start: nextToken, Version: parentVersion2}},
+		Parents:   []GenId{{Start: myToken, Version: parentVersion1}, {Start: nextToken, Version: parentVersion2}},
 	}
 
 	toDeleteGen := &Generation{
@@ -78,7 +78,7 @@ func (o *generator) processLocalJoinRange(m *localJoinRangeGenMessage) creationE
 		TxLeader:  topology.MyOrdinal(),
 		Tx:        tx,
 		Status:    StatusProposed,
-		Parents:   []GenParent{{Start: nextToken, Version: parentVersion2}},
+		Parents:   []GenId{{Start: nextToken, Version: parentVersion2}},
 		ToDelete:  true, // Mark it that is not going to be active any more
 	}
 

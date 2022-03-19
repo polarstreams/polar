@@ -28,7 +28,7 @@ func (o *generator) processLocalMyToken(message *localGenMessage) creationError 
 		Tx:        uuid.New(),
 		TxLeader:  topology.MyOrdinal(),
 		Status:    StatusProposed,
-		Parents:   make([]GenParent, 0),
+		Parents:   make([]GenId, 0),
 	}
 
 	log.Info().Msgf(
@@ -67,7 +67,7 @@ func (o *generator) processLocalMyToken(message *localGenMessage) creationError 
 			readResults[0].Committed,
 			readResults[1].Committed)
 		gen.Version = parentVersion + 1
-		gen.Parents = append(gen.Parents, GenParent{
+		gen.Parents = append(gen.Parents, GenId{
 			Start:   token,
 			Version: parentVersion,
 		})

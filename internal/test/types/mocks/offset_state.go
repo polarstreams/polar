@@ -13,11 +13,11 @@ type OffsetState struct {
 }
 
 // CanConsumeToken provides a mock function with given fields: group, topic, gen
-func (_m *OffsetState) CanConsumeToken(group string, topic string, gen types.Generation) bool {
+func (_m *OffsetState) CanConsumeToken(group string, topic string, gen *types.Generation) bool {
 	ret := _m.Called(group, topic, gen)
 
 	var r0 bool
-	if rf, ok := ret.Get(0).(func(string, string, types.Generation) bool); ok {
+	if rf, ok := ret.Get(0).(func(string, string, *types.Generation) bool); ok {
 		r0 = rf(group, topic, gen)
 	} else {
 		r0 = ret.Get(0).(bool)

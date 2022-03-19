@@ -32,7 +32,7 @@ func (c *client) prepareQueries() {
 
 	c.queries.selectGenerationsByParent = c.prepare(fmt.Sprintf(`
 		SELECT %s FROM generations
-		WHERE start_token >= ? AND end_token <= ? AND parents = ?`, generationColumns))
+		WHERE (start_token = ? OR end_token = ?) AND parents LIKE ?`, generationColumns))
 
 	c.queries.selectGenerationsAll = c.prepare(fmt.Sprintf(`
 		SELECT %s
@@ -115,8 +115,8 @@ func (c *client) GetGenerationsByToken(token Token) ([]Generation, error) {
 }
 
 func (c *client) GenerationsByParent(gen *Generation) ([]Generation, error) {
-	// Look for the children of the current generation
-	parent := parentsToString([]GenParent{{Start: gen.Start, Version: gen.Version}})
+	// Look for the children of the provided generation
+	parent := "%" + genIdToString(GenId{Start: gen.Start, Version: gen.Version}) + "%"
 
 	rows, err := c.queries.selectGenerationsByParent.Query(gen.Start, gen.End, parent)
 	if err != nil {
@@ -258,17 +258,23 @@ func (c *client) Offsets() ([]OffsetStoreKeyValue, error) {
 	return result, nil
 }
 
-func parentsFromString(stringValue string) []GenParent {
-	var result []GenParent
+func parentsFromString(stringValue string) []GenId {
+	var result []GenId
 	utils.PanicIfErr(json.Unmarshal([]byte(stringValue), &result), "Unexpected error when deserializing parents")
 	return result
 }
 
-func parentsToString(parents []GenParent) string {
+func parentsToString(parents []GenId) string {
 	if len(parents) == 0 {
 		return "[]"
 	}
 	bytes, err := json.Marshal(parents)
 	utils.PanicIfErr(err, "Unexpected error when serializing parents")
+	return string(bytes)
+}
+
+func genIdToString(id GenId) string {
+	bytes, err := json.Marshal(id)
+	utils.PanicIfErr(err, "Unexpected error when serializing GenId")
 	return string(bytes)
 }

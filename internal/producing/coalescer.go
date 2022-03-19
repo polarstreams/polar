@@ -129,7 +129,7 @@ func (c *coalescer) process() {
 				Name:       c.topicName,
 				Token:      c.token,
 				RangeIndex: c.rangeIndex,
-				GenId:      types.GenVersion(gen.Version),
+				Version:    types.GenVersion(gen.Version),
 			}
 			if c.writer, err = data.NewSegmentWriter(topic, c.replicator, c.config, nil); err != nil {
 				log.Err(err).Msg("There was an error while creating the segment writer")
@@ -139,7 +139,7 @@ func (c *coalescer) process() {
 			}
 		}
 
-		if c.writer.Topic.GenId != types.GenVersion(gen.Version) {
+		if c.writer.Topic.Version != types.GenVersion(gen.Version) {
 			// There was a generational change since the last write
 			// Close existing writer and open a new one
 			close(c.writer.Items)

@@ -53,7 +53,7 @@ func (i *consumerResponseItem) Marshal(w io.Writer) error {
 	if err := binary.Write(w, conf.Endianness, i.topic.RangeIndex); err != nil {
 		return err
 	}
-	if err := binary.Write(w, conf.Endianness, i.topic.GenId); err != nil {
+	if err := binary.Write(w, conf.Endianness, i.topic.Version); err != nil {
 		return err
 	}
 	if err := binary.Write(w, conf.Endianness, uint8(len(i.topic.Name))); err != nil {

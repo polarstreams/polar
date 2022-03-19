@@ -235,8 +235,8 @@ func (c *config) LocalDbPath() string {
 }
 
 func (c *config) DatalogPath(t *TopicDataId) string {
-	// Pattern: /var/lib/barco/data/datalog/{topic}/{token}/{rangeIndex}/{genId}
-	return filepath.Join(c.dataPath(), "datalog", t.Name, t.Token.String(), t.RangeIndex.String(), t.GenId.String())
+	// Pattern: /var/lib/barco/data/datalog/{topic}/{token}/{rangeIndex}/{genVersion}
+	return filepath.Join(c.dataPath(), "datalog", t.Name, t.Token.String(), t.RangeIndex.String(), t.Version.String())
 }
 
 func (c *config) CreateAllDirs() error {

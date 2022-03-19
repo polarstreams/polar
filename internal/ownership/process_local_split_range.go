@@ -54,7 +54,7 @@ func (o *generator) processLocalSplitRange(m *localSplitRangeGenMessage) creatio
 		TxLeader:  topology.MyOrdinal(),
 		Tx:        tx,
 		Status:    StatusProposed,
-		Parents: []GenParent{{
+		Parents: []GenId{{
 			Start:   myCurrentGen.Start,
 			Version: myCurrentGen.Version,
 		}},

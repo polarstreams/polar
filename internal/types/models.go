@@ -224,11 +224,11 @@ type TopicDataId struct {
 	Name       string     `json:"topic"`
 	Token      Token      `json:"token"`
 	RangeIndex RangeIndex `json:"rangeIndex"`
-	GenId      GenVersion `json:"version"`
+	Version    GenVersion `json:"version"`
 }
 
 func (t *TopicDataId) String() string {
-	return fmt.Sprintf("'%s' %d/%d v%d", t.Name, t.Token, t.RangeIndex, t.GenId)
+	return fmt.Sprintf("'%s' %d/%d v%d", t.Name, t.Token, t.RangeIndex, t.Version)
 }
 
 // Replicator contains logic to send data to replicas
