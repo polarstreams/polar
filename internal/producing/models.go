@@ -15,7 +15,7 @@ type record struct {
 	length      uint32 // Body length
 	timestamp   int64  // Timestamp in micros
 	body        io.ReadCloser
-	offset      uint64 // Record offset
+	offset      int64 // Record offset
 	response    chan error
 }
 

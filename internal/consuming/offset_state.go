@@ -19,25 +19,25 @@ func newDefaultOffsetState(
 	config conf.ConsumerConfig,
 ) OffsetState {
 	state := &defaultOffsetState{
-		offsetMap:      make(map[OffsetStoreKey]*Offset),
-		commitChan:     make(chan *OffsetStoreKeyValue, 64),
-		localDb:        localDb,
-		gossiper:       gossiper,
-		discoverer:     discoverer,
-		config:         config,
+		offsetMap:  make(map[OffsetStoreKey]*Offset),
+		commitChan: make(chan *OffsetStoreKeyValue, 64),
+		localDb:    localDb,
+		gossiper:   gossiper,
+		discoverer: discoverer,
+		config:     config,
 	}
 	go state.processCommit()
 	return state
 }
 
 type defaultOffsetState struct {
-	offsetMap      map[OffsetStoreKey]*Offset
-	mu             sync.RWMutex              // We need synchronization for doing CAS operation per key/value
-	commitChan     chan *OffsetStoreKeyValue // We need to commit offset in order
-	localDb        localdb.Client
-	gossiper       interbroker.Gossiper
-	discoverer     discovery.TopologyGetter
-	config         conf.ConsumerConfig
+	offsetMap  map[OffsetStoreKey]*Offset
+	mu         sync.RWMutex              // We need synchronization for doing CAS operation per key/value
+	commitChan chan *OffsetStoreKeyValue // We need to commit offset in order
+	localDb    localdb.Client
+	gossiper   interbroker.Gossiper
+	discoverer discovery.TopologyGetter
+	config     conf.ConsumerConfig
 }
 
 func (s *defaultOffsetState) Init() error {
@@ -140,7 +140,7 @@ func (s *defaultOffsetState) isOldValue(existing *Offset, newValue *Offset) bool
 }
 
 func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
-	id := GenId{ Start: kv.Key.Token, Version: kv.Value.Version }
+	id := GenId{Start: kv.Key.Token, Version: kv.Value.Version}
 	gen := s.discoverer.GenerationInfo(id)
 	if gen == nil {
 		log.Error().
@@ -174,7 +174,6 @@ func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
 
 func (s *defaultOffsetState) CanConsume(group string, topicId TopicDataId) bool {
 	// log.Debug().Msgf("--Can consume token for %d/%d and v%d", token, index, offsetVersion)
-
 
 	// gen := s.discoverer.GenerationInfo(token, offsetVersion)
 
@@ -210,6 +209,6 @@ func (s *defaultOffsetState) CanConsume(group string, topicId TopicDataId) bool 
 	return true
 }
 
-func (s *defaultOffsetState) ProducerOffsetLocal(topic *TopicDataId) (uint64, error) {
+func (s *defaultOffsetState) ProducerOffsetLocal(topic *TopicDataId) (int64, error) {
 	return data.ReadProducerOffset(topic, s.config)
 }

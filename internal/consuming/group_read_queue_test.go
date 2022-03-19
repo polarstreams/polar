@@ -17,13 +17,13 @@ var _ = Describe("groupReadQueue()", func() {
 		It("should get the max produced offset from local", func() {
 			gen := Generation{Followers: []int{2, 0}}
 			topicId := TopicDataId{}
-			expected := uint64(123)
+			expected := int64(123)
 			topology := newTestTopology(3, 1)
 
 			offsetState := new(tMocks.OffsetState)
 			offsetState.On("ProducerOffsetLocal", &topicId).Return(expected, nil)
 			gossiper := new(iMocks.Gossiper)
-			gossiper.On("ReadProducerOffset", mock.Anything, mock.Anything).Return(uint64(0), fmt.Errorf("Fake error"))
+			gossiper.On("ReadProducerOffset", mock.Anything, mock.Anything).Return(int64(0), fmt.Errorf("Fake error"))
 			topologyGetter := new(dMocks.Discoverer)
 			topologyGetter.On("GenerationInfo", mock.Anything, mock.Anything).Return(&gen, nil)
 			topologyGetter.On("Topology").Return(&topology)

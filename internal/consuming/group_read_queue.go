@@ -19,12 +19,12 @@ import (
 )
 
 const (
-	fetchMaxWait = 1 * time.Second
+	fetchMaxWait  = 1 * time.Second
 	refreshPeriod = 2 * time.Second
-	requeueDelay = 200 * time.Millisecond
+	requeueDelay  = 200 * time.Millisecond
 )
 
-const completedOffset = math.MaxUint64
+const completedOffset = math.MaxInt64
 
 // Receives read requests per group on a single thread.
 //
@@ -220,8 +220,8 @@ func (q *groupReadQueue) refreshPeriodically() {
 	for {
 		time.Sleep(refreshPeriod)
 		done := make(chan bool, 1)
-		q.items <- readQueueItem{ refresh: true, done: done }
-		<- done
+		q.items <- readQueueItem{refresh: true, done: done}
+		<-done
 	}
 }
 
@@ -375,7 +375,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 
 	for _, t := range tokenRanges {
 		currentGen := q.topologyGetter.Generation(t.Token)
-		if currentGen == nil{
+		if currentGen == nil {
 			// Maybe the token/broker no longer exists
 			log.Warn().Msgf("Information about the generation of token %d could not be found", t.Token)
 			continue
@@ -462,7 +462,7 @@ func (q *groupReadQueue) createReader(
 		return nil
 	}
 
-	var maxProducedOffset *uint64 = nil
+	var maxProducedOffset *int64 = nil
 	if topicId.GenId() != source.Id() {
 		// We are reading from an old generation
 		// We need to set the max offset produced
@@ -511,7 +511,7 @@ func (q *groupReadQueue) hasData(topicId *TopicDataId) bool {
 	return false
 }
 
-func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (uint64, error) {
+func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (int64, error) {
 	gen := q.topologyGetter.GenerationInfo(topicId.GenId())
 	if gen == nil {
 		log.Warn().Msgf("Past generation could not be retrieved %s", topicId.GenId())
@@ -528,8 +528,8 @@ func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (uint64, err
 		}
 	}
 
-	c := make(chan *uint64)
-	notFoundFlag := new(uint64)
+	c := make(chan *int64)
+	notFoundFlag := new(int64)
 
 	// Get the values from the peers and local storage
 	go func() {
@@ -576,7 +576,7 @@ func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (uint64, err
 		}()
 	}
 
-	var result *uint64 = nil
+	var result *int64 = nil
 	notFoundCount := 0
 
 	for i := 0; i < len(peers)+1; i++ {

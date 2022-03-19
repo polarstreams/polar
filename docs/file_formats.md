@@ -11,7 +11,7 @@ The log segment is composed of compressed chunks.
 ```
 +---------+----------+---------------+---------------+----------+
 | flags   | length   |  start offset | record length | head crc |
-| (uint8) | (uint32) |    (uint64)   |    (uint32)   | (int32)  |
+| (uint8) | (uint32) |     (int64)   |    (uint32)   | (int32)  |
 +---------+----------+---------------+---------------+----------+
 | compressed payload (zstd crc)                                 |
 | +-------------------------------------------------+           |
@@ -46,7 +46,7 @@ The index file is composed by a series of message offset, file offset and checks
 | +---------------------------------------------------------------+ |
 | | item                                                          | |
 | | +-----------------+---------------------+-------------------+ | |
-| | | offset (uint64) | file offset (int64) | checksum (uint32) | | |
+| | | offset (int64)  | file offset (int64) | checksum (uint32) | | |
 | | +-----------------+---------------------+-------------------+ | |
 | +---------------------------------------------------------------+ |
 |                                                                   |

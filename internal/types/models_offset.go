@@ -10,7 +10,7 @@ const (
 
 // Represents a topic offset for a given token.
 type Offset struct {
-	Offset  uint64     `json:"offsetValue"`
+	Offset  int64      `json:"offsetValue"`
 	Version GenVersion `json:"version"`
 	Source  GenId      `json:"source"` // The point-in-time when the offset was recorded.
 }
@@ -47,5 +47,5 @@ type OffsetState interface {
 	CanConsume(group string, topicId TopicDataId) bool
 
 	// Reads the local max producer offset from disk
-	ProducerOffsetLocal(topic *TopicDataId) (uint64, error)
+	ProducerOffsetLocal(topic *TopicDataId) (int64, error)
 }

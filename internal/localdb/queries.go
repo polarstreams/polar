@@ -232,10 +232,9 @@ func (c *client) SaveOffset(kv *OffsetStoreKeyValue) error {
 	key := kv.Key
 	value := kv.Value
 	// sqlite does not support uint64 values with high bit set
-	offset := int64(value.Offset)
 	_, err := c.queries.
 		insertOffset.
-		Exec(key.Group, key.Topic, key.Token, key.RangeIndex, value.Version, offset, genIdToString(value.Source))
+		Exec(key.Group, key.Topic, key.Token, key.RangeIndex, value.Version, value.Offset, genIdToString(value.Source))
 	return err
 }
 
@@ -249,19 +248,16 @@ func (c *client) Offsets() ([]OffsetStoreKeyValue, error) {
 	defer rows.Close()
 
 	var sourceString string
-	// sqlite does not support uint64 values with high bit set
-	var offset int64
 
 	for rows.Next() {
 		kv := OffsetStoreKeyValue{}
 		err = rows.Scan(
-			&kv.Key.Group, &kv.Key.Topic, &kv.Key.Token, &kv.Key.RangeIndex, &kv.Value.Version, &offset,
+			&kv.Key.Group, &kv.Key.Topic, &kv.Key.Token, &kv.Key.RangeIndex, &kv.Value.Version, &kv.Value.Offset,
 			&sourceString)
 		if err != nil {
 			return result, err
 		}
 		kv.Value.Source = genIdFromString(sourceString)
-		kv.Value.Offset = uint64(offset)
 		result = append(result, kv)
 	}
 	return result, nil

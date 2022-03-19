@@ -14,7 +14,8 @@ import (
 )
 
 type indexOffset struct {
-	Offset     uint64
+	// Strict ordering, serialized fields
+	Offset     int64
 	FileOffset int64
 	Checksum   uint32
 }
@@ -22,7 +23,7 @@ type indexOffset struct {
 var indexItemSize = utils.BinarySize(indexOffset{})
 
 // Reads the file offset from the index file
-func tryReadIndexFile(basePath string, filePrefix string, messageOffset uint64) int64 {
+func tryReadIndexFile(basePath string, filePrefix string, messageOffset int64) int64 {
 	// Use the OS page cache for reading index file
 	// as it will simplify the logic needed. The page cache usage should be neglegible for this
 	// sporadic small files

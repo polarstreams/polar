@@ -94,7 +94,7 @@ func (c *fakeChunk) DataBlock() []byte {
 	return c.body
 }
 
-func (c *fakeChunk) StartOffset() uint64 {
+func (c *fakeChunk) StartOffset() int64 {
 	return 0
 }
 

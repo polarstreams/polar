@@ -33,7 +33,7 @@ func (w *offsetFileWriter) create(basePath string) {
 	w.writer = bytes.NewBuffer(w.buf)
 }
 
-func (w *offsetFileWriter) write(value uint64) {
+func (w *offsetFileWriter) write(value int64) {
 	w.writer.Reset()
 	binary.Write(w.writer, conf.Endianness, value)
 	binary.Write(w.writer, conf.Endianness, crc32.ChecksumIEEE(w.writer.Bytes()))

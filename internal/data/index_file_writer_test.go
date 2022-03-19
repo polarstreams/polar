@@ -34,7 +34,7 @@ var _ = Describe("indexFileWriter", func() {
 
 		go w.writeLoop()
 
-		segmentId := uint64(123)
+		segmentId := int64(123)
 		w.append(segmentId, 0, 100, 0)
 		assertStored(dir, segmentId, []indexOffset{}) // Nothing stored
 		w.append(segmentId, 150, 200, 0)
@@ -69,7 +69,7 @@ var _ = Describe("indexFileWriter", func() {
 
 		go w.writeLoop()
 
-		segmentId := uint64(123)
+		segmentId := int64(123)
 		w.append(segmentId, 0, 100, 0)
 		assertStored(dir, segmentId, []indexOffset{}) // Nothing stored
 		w.closeFile(segmentId, 0)
@@ -103,7 +103,7 @@ var _ = Describe("indexFileWriter", func() {
 
 		go w.writeLoop()
 
-		segmentId := uint64(123)
+		segmentId := int64(123)
 		w.append(segmentId, 0, 100, 50)
 		assertProducerOffsetStored(dir, 50)
 		w.append(segmentId, 150, 200, 180)
@@ -115,7 +115,7 @@ var _ = Describe("indexFileWriter", func() {
 	})
 })
 
-func assertStored(basePath string, segmentId uint64, values []indexOffset) {
+func assertStored(basePath string, segmentId int64, values []indexOffset) {
 	expectedFileLength := utils.BinarySize(indexOffset{}) * len(values) // 8 + 8 + 4
 	var blob []byte
 	maxWaits := 2500 // ~ 5 seconds

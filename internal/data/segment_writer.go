@@ -30,11 +30,11 @@ var alignmentBuffer = createAlignmentBuffer()
 type SegmentWriter struct {
 	Items          chan SegmentChunk
 	Topic          TopicDataId
-	segmentId      uint64
+	segmentId      int64
 	buffer         *bytes.Buffer
 	lastFlush      time.Time
-	bufferedOffset uint64 // Stores the offset of the first message buffered since it was buffered
-	tailOffset     uint64 // Value of the last written message
+	bufferedOffset int64 // Stores the offset of the first message buffered since it was buffered
+	tailOffset     int64 // Value of the last written message
 	config         conf.DatalogConfig
 	segmentFile    *os.File
 	indexFile      *indexFileWriter
@@ -47,7 +47,7 @@ func NewSegmentWriter(
 	topic TopicDataId,
 	gossiper Replicator,
 	config conf.DatalogConfig,
-	segmentId *uint64,
+	segmentId *int64,
 ) (*SegmentWriter, error) {
 	basePath := config.DatalogPath(&topic)
 
@@ -185,7 +185,7 @@ func (s *SegmentWriter) maybeFlush() bool {
 	return true
 }
 
-func (s *SegmentWriter) createFile(segmentId uint64) {
+func (s *SegmentWriter) createFile(segmentId int64) {
 	s.segmentId = segmentId
 	name := fmt.Sprintf("%020d.%s", s.segmentId, conf.SegmentFileExtension)
 	log.Debug().Msgf("Creating segment file %s on %s", name, s.basePath)
@@ -248,7 +248,7 @@ func (s *SegmentWriter) closeFile() {
 	s.indexFile.closeFile(previousSegmentId, s.tailOffset)
 
 	s.segmentFile = nil
-	s.segmentId = math.MaxUint64
+	s.segmentId = math.MaxInt64
 	s.segmentLength = 0
 }
 
@@ -264,7 +264,7 @@ func (s *SegmentWriter) writeToBuffer(item SegmentChunk) {
 
 	recordLength := item.RecordLength()
 	if recordLength > 0 {
-		s.tailOffset = item.StartOffset() + uint64(recordLength) - 1
+		s.tailOffset = item.StartOffset() + int64(recordLength) - 1
 	}
 
 	// Write head
@@ -307,7 +307,7 @@ func (s *SegmentWriter) alignBuffer() {
 
 func (s *SegmentWriter) send(
 	item LocalWriteItem,
-	segmentId uint64,
+	segmentId int64,
 	response chan error,
 ) {
 	err := s.replicator.SendToFollowers(

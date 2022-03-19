@@ -361,7 +361,7 @@ var _ = Describe("Client", func() {
 			Expect(offsets).To(ContainElement(kv))
 		})
 
-		It("should store max uint64", func() {
+		It("should store max int64", func() {
 			client := newTestClient()
 			key := OffsetStoreKey{
 				Group:      "group1",
@@ -370,7 +370,7 @@ var _ = Describe("Client", func() {
 				RangeIndex: 2,
 			}
 			value := Offset{
-				Offset:  math.MaxUint64, // This used to fail in sqlite
+				Offset:  math.MaxInt64,
 				Version: 2,
 				Source:  GenId{Start: math.MinInt64, Version: 4},
 			}
@@ -387,13 +387,12 @@ var _ = Describe("Client", func() {
 				WHERE group_name = ? AND topic = ? AND token = ? AND range_index = ?`
 			obtained := Offset{}
 			var sourceString string
-			var offset int64
+
 			err = client.db.
 				QueryRow(query, key.Group, key.Topic, key.Token, key.RangeIndex).
-				Scan(&obtained.Version, &offset, &sourceString)
+				Scan(&obtained.Version, &obtained.Offset, &sourceString)
 			Expect(err).NotTo(HaveOccurred())
 			obtained.Source = genIdFromString(sourceString)
-			obtained.Offset = uint64(offset)
 			Expect(obtained).To(Equal(value))
 			Expect(client.Offsets()).To(ContainElement(kv))
 		})

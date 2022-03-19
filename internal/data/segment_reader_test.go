@@ -199,7 +199,7 @@ func createTestChunk(bodyLength, start, recordLength int) []byte {
 	header := chunkHeader{
 		Flags:        0,
 		BodyLength:   uint32(bodyLength),
-		Start:        uint64(start),
+		Start:        int64(start),
 		RecordLength: uint32(recordLength),
 		Crc:          123,
 	}

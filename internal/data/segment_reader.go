@@ -26,8 +26,8 @@ type SegmentReader struct {
 	Topic             TopicDataId
 	SourceVersion     GenId // The version in which this reader was created, a consumer might be on Gen=v3 but the current is v4. In this case, source would be v4 and topic.Version = v3
 	offsetState       OffsetState
-	MaxProducedOffset *uint64 // When set, it determines the last offset produced for this topicId for an old generation
-	messageOffset     uint64
+	MaxProducedOffset *int64 // When set, it determines the last offset produced for this topicId for an old generation
+	messageOffset     int64
 	fileName          string
 	nextFileName      string
 	pollDelay         time.Duration
@@ -51,7 +51,7 @@ func NewSegmentReader(
 	topic TopicDataId,
 	sourceVersion GenId,
 	offsetState OffsetState,
-	maxProducedOffset *uint64,
+	maxProducedOffset *int64,
 	config conf.DatalogConfig,
 ) (*SegmentReader, error) {
 	// From the same base folder, the SegmentReader will continue reading through the files in order
@@ -159,7 +159,7 @@ func (s *SegmentReader) read() {
 
 		if chunk != nil {
 			item.SetResult(nil, chunk)
-			s.messageOffset += chunk.StartOffset() + uint64(chunk.RecordLength())
+			s.messageOffset += chunk.StartOffset() + int64(chunk.RecordLength())
 		} else {
 			item.SetResult(nil, NewEmptyChunk(s.messageOffset))
 		}
@@ -247,7 +247,7 @@ func (s *SegmentReader) fullSeek() (string, int64, error) {
 	dlogFilePrefix := ""
 	for _, entry := range entries {
 		filePrefix := strings.Split(filepath.Base(entry), ".")[0]
-		startOffset, err := strconv.ParseUint(filePrefix, 10, 64)
+		startOffset, err := strconv.ParseInt(filePrefix, 10, 64)
 		if err != nil {
 			continue
 		}

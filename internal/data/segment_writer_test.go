@@ -117,7 +117,7 @@ func (d *testWriteItem) Replication() ReplicationInfo {
 	}
 }
 
-func (d *testWriteItem) StartOffset() uint64 {
+func (d *testWriteItem) StartOffset() int64 {
 	return 123
 }
 

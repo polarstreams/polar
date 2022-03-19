@@ -12,7 +12,7 @@ import (
 	. "github.com/barcostreams/barco/internal/types"
 )
 
-func ReadProducerOffset(topicId *TopicDataId, config conf.DatalogConfig) (uint64, error) {
+func ReadProducerOffset(topicId *TopicDataId, config conf.DatalogConfig) (int64, error) {
 	basePath := config.DatalogPath(topicId)
 	file, err := os.OpenFile(filepath.Join(basePath, conf.ProducerOffsetFileName), conf.ProducerOffsetFileReadFlags, 0)
 	if err != nil {
@@ -25,7 +25,7 @@ func ReadProducerOffset(topicId *TopicDataId, config conf.DatalogConfig) (uint64
 	}
 	buffer := bytes.NewBuffer(buf)
 
-	var storedOffset uint64
+	var storedOffset int64
 	var storedChecksum uint32
 
 	// Calculate the expected checksum

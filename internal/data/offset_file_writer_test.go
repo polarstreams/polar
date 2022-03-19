@@ -24,11 +24,11 @@ var _ = Describe("offsetFileWriter and reader", func() {
 
 		obtained, err := ReadProducerOffset(&TopicDataId{}, config)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(obtained).To(Equal(uint64(123)))
+		Expect(obtained).To(Equal(int64(123)))
 
 		writer.write(456)
 		obtained, err = ReadProducerOffset(&TopicDataId{}, config)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(obtained).To(Equal(uint64(456)))
+		Expect(obtained).To(Equal(int64(456)))
 	})
 })

@@ -41,11 +41,11 @@ const headerSize = 1 + // version
 
 type dataRequestMeta struct {
 	// Strict ordering, exported fields
-	SegmentId    uint64
+	SegmentId    int64
 	Token        types.Token
 	RangeIndex   types.RangeIndex
 	GenVersion   types.GenVersion
-	StartOffset  uint64
+	StartOffset  int64
 	RecordLength uint32
 	TopicLength  uint8 // The size in bytes of the topic name
 }
@@ -69,11 +69,11 @@ func (r *dataRequest) DataBlock() []byte {
 	return r.data
 }
 
-func (r *dataRequest) SegmentId() uint64 {
+func (r *dataRequest) SegmentId() int64 {
 	return r.meta.SegmentId
 }
 
-func (r *dataRequest) StartOffset() uint64 {
+func (r *dataRequest) StartOffset() int64 {
 	return r.meta.StartOffset
 }
 

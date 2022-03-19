@@ -57,14 +57,14 @@ func (_m *OffsetState) Init() error {
 }
 
 // ProducerOffsetLocal provides a mock function with given fields: topic
-func (_m *OffsetState) ProducerOffsetLocal(topic *types.TopicDataId) (uint64, error) {
+func (_m *OffsetState) ProducerOffsetLocal(topic *types.TopicDataId) (int64, error) {
 	ret := _m.Called(topic)
 
-	var r0 uint64
-	if rf, ok := ret.Get(0).(func(*types.TopicDataId) uint64); ok {
+	var r0 int64
+	if rf, ok := ret.Get(0).(func(*types.TopicDataId) int64); ok {
 		r0 = rf(topic)
 	} else {
-		r0 = ret.Get(0).(uint64)
+		r0 = ret.Get(0).(int64)
 	}
 
 	var r1 error

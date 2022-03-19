@@ -14,7 +14,7 @@ const replicationTimeout = 1 * time.Second
 func (g *gossiper) SendToFollowers(
 	replicationInfo types.ReplicationInfo,
 	topic types.TopicDataId,
-	segmentId uint64,
+	segmentId int64,
 	chunk types.SegmentChunk,
 ) error {
 	peers, ok := g.connections.Load().(clientMap)

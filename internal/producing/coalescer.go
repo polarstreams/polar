@@ -35,7 +35,7 @@ type coalescer struct {
 	generationState discovery.TopologyGetter
 	replicator      types.Replicator
 	config          conf.ProducerConfig
-	offset          uint64
+	offset          int64
 	buffers         buffers
 	writer          *data.SegmentWriter
 }
@@ -250,7 +250,7 @@ func (d *localDataItem) Replication() types.ReplicationInfo {
 	return d.group[0].replication
 }
 
-func (d *localDataItem) StartOffset() uint64 {
+func (d *localDataItem) StartOffset() int64 {
 	return d.group[0].offset
 }
 

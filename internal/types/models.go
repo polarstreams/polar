@@ -59,7 +59,7 @@ func NewReplicationInfo(topology *TopologyInfo, token Token, leader int, followe
 // SegmentChunk represents a group of compressed records.
 type SegmentChunk interface {
 	DataBlock() []byte
-	StartOffset() uint64
+	StartOffset() int64
 	RecordLength() uint32
 }
 
@@ -249,6 +249,6 @@ type Replicator interface {
 	SendToFollowers(
 		replicationInfo ReplicationInfo,
 		topic TopicDataId,
-		segmentId uint64,
+		segmentId int64,
 		chunk SegmentChunk) error
 }

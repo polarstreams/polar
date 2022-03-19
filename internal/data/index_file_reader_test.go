@@ -47,7 +47,7 @@ func writeIndexFile(basePath string, steps int) {
 	go w.writeLoop()
 
 	for i := 0; i < steps; i++ {
-		w.append(0, uint64(i*10), int64(i*100), 0)
+		w.append(0, int64(i*10), int64(i*100), 0)
 	}
 
 	close(w.items)

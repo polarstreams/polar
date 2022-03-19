@@ -35,7 +35,7 @@ func newIndexFileWriter(basePath string, config conf.DatalogConfig) *indexFileWr
 
 // writeLoop writes the index files
 func (w *indexFileWriter) writeLoop() {
-	var segmentId *uint64
+	var segmentId *int64
 	var file *os.File
 	lastStoredFileOffset := int64(0)
 	buffer := utils.NewBufferCap(16)
@@ -94,7 +94,7 @@ func (w *indexFileWriter) writeLoop() {
 
 // When conditions apply, it adds a line to the index file mapping file offset with message offset
 // in the background.
-func (w *indexFileWriter) append(segmentId uint64, offset uint64, fileOffset int64, tailOffset uint64) {
+func (w *indexFileWriter) append(segmentId int64, offset int64, fileOffset int64, tailOffset int64) {
 	w.items <- indexFileItem{
 		segmentId:  segmentId,
 		offset:     offset,
@@ -104,7 +104,7 @@ func (w *indexFileWriter) append(segmentId uint64, offset uint64, fileOffset int
 }
 
 // Closes the current file in the background
-func (w *indexFileWriter) closeFile(segmentId uint64, tailOffset uint64) {
+func (w *indexFileWriter) closeFile(segmentId int64, tailOffset int64) {
 	w.items <- indexFileItem{
 		segmentId:  segmentId,
 		tailOffset: tailOffset,

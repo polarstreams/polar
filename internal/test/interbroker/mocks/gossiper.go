@@ -165,14 +165,14 @@ func (_m *Gossiper) ReadBrokerIsUp(ordinal int, brokerUpOrdinal int) (bool, erro
 }
 
 // ReadProducerOffset provides a mock function with given fields: ordinal, topic
-func (_m *Gossiper) ReadProducerOffset(ordinal int, topic *types.TopicDataId) (uint64, error) {
+func (_m *Gossiper) ReadProducerOffset(ordinal int, topic *types.TopicDataId) (int64, error) {
 	ret := _m.Called(ordinal, topic)
 
-	var r0 uint64
-	if rf, ok := ret.Get(0).(func(int, *types.TopicDataId) uint64); ok {
+	var r0 int64
+	if rf, ok := ret.Get(0).(func(int, *types.TopicDataId) int64); ok {
 		r0 = rf(ordinal, topic)
 	} else {
-		r0 = ret.Get(0).(uint64)
+		r0 = ret.Get(0).(int64)
 	}
 
 	var r1 error
@@ -262,11 +262,11 @@ func (_m *Gossiper) SendGoobye() {
 }
 
 // SendToFollowers provides a mock function with given fields: replicationInfo, topic, segmentId, chunk
-func (_m *Gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId uint64, chunk types.SegmentChunk) error {
+func (_m *Gossiper) SendToFollowers(replicationInfo types.ReplicationInfo, topic types.TopicDataId, segmentId int64, chunk types.SegmentChunk) error {
 	ret := _m.Called(replicationInfo, topic, segmentId, chunk)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(types.ReplicationInfo, types.TopicDataId, uint64, types.SegmentChunk) error); ok {
+	if rf, ok := ret.Get(0).(func(types.ReplicationInfo, types.TopicDataId, int64, types.SegmentChunk) error); ok {
 		r0 = rf(replicationInfo, topic, segmentId, chunk)
 	} else {
 		r0 = ret.Error(0)

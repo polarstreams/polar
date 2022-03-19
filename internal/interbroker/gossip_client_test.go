@@ -63,7 +63,7 @@ var _ = Describe("Gossiper", func() {
 
 			value, err := g.ReadProducerOffset(ordinal, &topicId)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(value).To(Equal(uint64(123)))
+			Expect(value).To(Equal(int64(123)))
 			mu.Lock()
 			Expect(requestUrl).NotTo(BeNil())
 			Expect(requestUrl.Path).To(Equal("/v1/producer/offset/abc/1/2/3"))

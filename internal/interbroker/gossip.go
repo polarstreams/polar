@@ -66,7 +66,7 @@ type Gossiper interface {
 	SendGoobye()
 
 	// Reads the producer offset of a certain past topic generatoin
-	ReadProducerOffset(ordinal int, topic *TopicDataId) (uint64, error)
+	ReadProducerOffset(ordinal int, topic *TopicDataId) (int64, error)
 
 	// Adds a listener for consumer information
 	RegisterConsumerInfoListener(listener ConsumerInfoListener)
@@ -390,7 +390,7 @@ func (g *gossiper) ReadBrokerIsUp(ordinal int, brokerUpOrdinal int) (bool, error
 	return value, err
 }
 
-func (g *gossiper) ReadProducerOffset(ordinal int, topic *TopicDataId) (uint64, error) {
+func (g *gossiper) ReadProducerOffset(ordinal int, topic *TopicDataId) (int64, error) {
 	url := fmt.Sprintf(
 		conf.GossipReadProducerOffsetUrl,
 		topic.Name,
@@ -406,7 +406,7 @@ func (g *gossiper) ReadProducerOffset(ordinal int, topic *TopicDataId) (uint64, 
 	if r.StatusCode == http.StatusNoContent {
 		return 0, GossipGetNotFound
 	}
-	var value uint64
+	var value int64
 	if err = json.NewDecoder(r.Body).Decode(&value); err != nil {
 		return 0, err
 	}
