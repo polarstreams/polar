@@ -24,7 +24,8 @@ const (
 	requeueDelay  = 200 * time.Millisecond
 )
 
-const completedOffset = math.MaxInt64
+const offsetCompleted = math.MaxInt64
+const offsetNoData = -1 // We should use types and flags in the future
 
 // Receives read requests per group on a single thread.
 //
@@ -204,11 +205,11 @@ func (q *groupReadQueue) refreshReaders() {
 			if setMaxOffset {
 				maxOffset, err := q.getMaxProducedOffset(topicId)
 				if err != nil {
-					if q.hasData(topicId) {
-						// This will resolve itself in the future, once the produced offset is recorded
-						log.Warn().Err(err).Msgf("No data found for %s", topicId)
-						continue
-					}
+					log.Warn().Err(err).Msgf("Max offset could not be retrieved for %s", topicId)
+					continue
+				}
+				if maxOffset == offsetNoData {
+					log.Error().Msgf("Unexpected no data found for open reader in previous generation")
 				}
 				reader.MaxProducedOffset = &maxOffset
 			}
@@ -277,7 +278,7 @@ func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source 
 		// Scale down from 2 tokens to 1
 		log.Debug().Msgf("Setting offset for previous generation that was scaled down for %s", &topicId)
 		offset := Offset{
-			Offset:  completedOffset,
+			Offset:  offsetCompleted,
 			Version: topicId.Version,
 			Source:  source,
 		}
@@ -296,7 +297,7 @@ func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source 
 
 		if otherParentOffset != nil {
 			log.Debug().Msgf("Other parent: %v; offset: %v", otherParent, *otherParentOffset)
-			if otherParentOffset.Version == otherParent.Version && otherParentOffset.Offset == completedOffset {
+			if otherParentOffset.Version == otherParent.Version && otherParentOffset.Offset == offsetCompleted {
 				log.Info().Msgf("Moving offset of joined generation for %s", &topicId)
 				token := nextGens[0].Start
 				version := nextGens[0].Version
@@ -446,6 +447,11 @@ func (q *groupReadQueue) createReader(
 		}
 	}
 
+	if offset.Offset == offsetCompleted {
+		// Probably waiting for the reader generation to be moved
+		return nil
+	}
+
 	readerVersion := offset.Version
 	topicId := TopicDataId{
 		Name:       topic,
@@ -471,7 +477,7 @@ func (q *groupReadQueue) createReader(
 			// Hopefully in the future it will resolve itself
 			return nil
 		}
-		if value == 0 {
+		if value == offsetNoData {
 			// No data was produced for this token+index
 			log.Info().Msgf("No data was produced for %s, moving offset", &topicId)
 			if movedOffset := q.moveOffsetToNextGeneration(topicId, source.Id()); !movedOffset {
@@ -506,11 +512,6 @@ func appendJoined(tokens []Token, gen *Generation) []Token {
 	return tokens
 }
 
-func (q *groupReadQueue) hasData(topicId *TopicDataId) bool {
-	// TODO: Implement hasData() by checking folder
-	return false
-}
-
 func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (int64, error) {
 	gen := q.topologyGetter.GenerationInfo(topicId.GenId())
 	if gen == nil {
@@ -529,14 +530,15 @@ func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (int64, erro
 	}
 
 	c := make(chan *int64)
-	notFoundFlag := new(int64)
+	notFound := new(int64)
+	*notFound = offsetNoData
 
 	// Get the values from the peers and local storage
 	go func() {
 		localValue, err := q.offsetState.ProducerOffsetLocal(topicId)
 		if err != nil {
 			if os.IsNotExist(err) {
-				c <- notFoundFlag
+				c <- notFound
 			} else {
 				log.Warn().Err(err).Msgf("Max producer offset could not be retrieved from local storage for %s", topicId)
 				c <- nil
@@ -559,13 +561,13 @@ func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (int64, erro
 						return
 					}
 				}
-				c <- notFoundFlag
+				c <- notFound
 				return
 			}
 			value, err := q.gossiper.ReadProducerOffset(ordinal, topicId)
 			if err != nil {
 				if err == GossipGetNotFound {
-					c <- notFoundFlag
+					c <- notFound
 				} else {
 					log.Warn().Err(err).Msgf("Producer offset could not be retrieved from peer B%d for %s", ordinal, topicId)
 					c <- nil
@@ -581,7 +583,7 @@ func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (int64, erro
 
 	for i := 0; i < len(peers)+1; i++ {
 		value := <-c
-		if value == notFoundFlag {
+		if value == notFound {
 			notFoundCount++
 			continue
 		}
@@ -595,7 +597,7 @@ func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (int64, erro
 	if result == nil {
 		if notFoundCount == len(peers)+1 {
 			// We can safely assume that no data was produced for this token+range
-			return 0, nil
+			return offsetNoData, nil
 		}
 
 		message := fmt.Sprintf("Max producer offset could not be retrieved from peers or local for %s", topicId)

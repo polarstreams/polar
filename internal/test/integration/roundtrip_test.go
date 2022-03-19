@@ -36,8 +36,7 @@ func TestData(t *testing.T) {
 	RunSpecs(t, "Integration test suite")
 }
 
-// TODO: Uncomment
-var _ = XDescribe("A 3 node cluster", func() {
+var _ = Describe("A 3 node cluster", func() {
 	// Note that on macos you need to manually create the alias for the loopback addresses, for example
 	// for i in {0..12}; do sudo ifconfig lo0 alias 127.0.0.$i up; done
 
@@ -272,9 +271,7 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 
 		// Produced a message in gen v1
 		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_before_0_0"}`, ""))
-		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_before_0_1"}`, ""))
 		expectOk(client.ProduceJson(3, "abc", `{"hello": "world_before_3_0"}`, ""))
-		expectOk(client.ProduceJson(3, "abc", `{"hello": "world_before_3_1"}`, ""))
 
 		time.Sleep(1 * time.Second)
 		fmt.Println("------------------Updating the topology")
@@ -337,8 +334,10 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_after_0_0"}`, ""))
 
 		fmt.Println("--Start consuming")
+
+		allMessages := make([]consumerResponseItem, 0)
 		// Start polling B0 to obtain data from T0 and T3
-		for i := 0; i < 5; i++ {
+		for i := 0; i < 4; i++ {
 			resp := client.ConsumerPoll(0)
 			if resp.StatusCode == http.StatusNoContent {
 				fmt.Println("--Messages", i, "<empty>")
@@ -347,7 +346,11 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 			}
 			messages := readConsumerResponse(resp)
 			fmt.Println("--Messages", i, messages)
+			allMessages = append(allMessages, messages...)
 		}
+
+		expectFindRecord(allMessages, `{"hello": "world_before_0_0"}`)
+		expectFindRecord(allMessages, `{"hello": "world_after_0_0"}`)
 	})
 })
 
@@ -422,6 +425,11 @@ func findRecord(items []consumerResponseItem, value string) (*TopicDataId, *reco
 		}
 	}
 	return nil, nil
+}
+
+func expectFindRecord(items []consumerResponseItem, value string) {
+	_, r := findRecord(items, value)
+	Expect(r).NotTo(BeNil())
 }
 
 func unmarshalTopicId(r io.Reader) *TopicDataId {
