@@ -290,6 +290,10 @@ func (c *configFake) ListenOnAllAddresses() bool {
 	return true
 }
 
+func (c *configFake) DevMode() bool {
+	return false
+}
+
 func (c *configFake) ShutdownDelay() time.Duration {
 	return 0
 }

@@ -33,6 +33,7 @@ type TestBroker struct {
 
 type TestBrokerOptions struct {
 	InitialClusterSize int
+	DevMode bool
 }
 
 // Creates and starts a broker
@@ -71,17 +72,25 @@ func (b *TestBroker) Start() {
 		names = append(names, fmt.Sprintf("127.0.0.%d", i))
 	}
 
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("BARCO_ORDINAL=%d", b.ordinal),
+	// Basic test env variables
+	envs := append(os.Environ(),
 		fmt.Sprintf("BARCO_HOME=home%d", b.ordinal),
-		fmt.Sprintf("BARCO_BROKER_NAMES=%s", strings.Join(names, ",")),
-		"BARCO_LISTEN_ON_ALL=false",
 		"BARCO_SEGMENT_FLUSH_INTERVAL_MS=1000",
 		"BARCO_CONSUMER_ADD_DELAY_MS=200",
 		"BARCO_CONSUMER_RANGES=4",
 		"BARCO_TOPOLOGY_FILE_POLL_DELAY_MS=400",
-		"BARCO_SHUTDOWN_DELAY_SECS=2",
-	)
+		"BARCO_SHUTDOWN_DELAY_SECS=2")
+
+	if !b.options.DevMode {
+		envs = append(envs,
+			fmt.Sprintf("BARCO_ORDINAL=%d", b.ordinal),
+			fmt.Sprintf("BARCO_BROKER_NAMES=%s", strings.Join(names, ",")),
+			"BARCO_LISTEN_ON_ALL=false")
+	} else {
+		envs = append(envs, "BARCO_DEV_MODE=true")
+	}
+
+	cmd.Env = envs
 	stderr, err := cmd.StderrPipe()
 	Expect(err).NotTo(HaveOccurred())
 

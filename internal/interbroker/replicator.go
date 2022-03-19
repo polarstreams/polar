@@ -22,6 +22,10 @@ func (g *gossiper) SendToFollowers(
 		log.Error().Msg("Peer clients are not loaded")
 		return fmt.Errorf("Peer clients are not loaded")
 	}
+	if g.config.DevMode() {
+		return nil
+	}
+
 	sent := 0
 	response := make(chan dataResponse, 1)
 

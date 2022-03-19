@@ -488,6 +488,10 @@ func (g *gossiper) SendCommittedOffset(ordinal int, kv *OffsetStoreKeyValue) err
 }
 
 func (g *gossiper) SendGoobye() {
+	if g.config.DevMode() {
+		return
+	}
+
 	// Notify the next broker
 	topology := g.discoverer.Topology()
 	if !topology.AmIIncluded() {

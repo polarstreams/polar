@@ -95,6 +95,10 @@ type discoverer struct {
 }
 
 func (d *discoverer) Init() error {
+	if d.config.DevMode() {
+		return d.loadFixedTopology(0)
+	}
+
 	if fixedOrdinal, err := strconv.Atoi(os.Getenv(envOrdinal)); err != nil {
 		// Use normal discovery
 		if err := d.k8sClient.init(); err != nil {
@@ -106,7 +110,9 @@ func (d *discoverer) Init() error {
 		}
 	} else {
 		// Use env var and file system discovery
-		d.loadFixedTopology(fixedOrdinal)
+		if err := d.loadFixedTopology(fixedOrdinal); err != nil {
+			return err
+		}
 	}
 
 	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.Topology().Brokers))
@@ -214,7 +220,7 @@ func createTopology(totalBrokers int, config conf.DiscovererConfig) *TopologyInf
 // Gets the number of topology from env vars and updates it based on file system changes
 func (d *discoverer) loadFixedTopology(ordinal int) error {
 	names := os.Getenv(envBrokerNames)
-	t, err := createFixedTopology(ordinal, names)
+	t, err := d.createFixedTopology(ordinal, names)
 	if err != nil {
 		return err
 	}
@@ -237,7 +243,7 @@ func (d *discoverer) loadFixedTopology(ordinal int) error {
 				continue
 			}
 
-			topology, err := createFixedTopology(ordinal, names)
+			topology, err := d.createFixedTopology(ordinal, names)
 			if err != nil {
 				log.Warn().Err(err).Msgf("There was an error reading file-based topology from file contents")
 				continue
@@ -262,15 +268,20 @@ func (d *discoverer) swapTopology(topology *TopologyInfo) {
 	d.previousTopology.Store(previousTopology)
 }
 
-func createFixedTopology(ordinal int, names string) (*TopologyInfo, error) {
-	// We expect the names or addresses to be sorted by ordinal
-	// e.g. barco-0, barco-1, barco-2, barco-3, barco-4, barco-5
+func (d *discoverer) createFixedTopology(ordinal int, names string) (*TopologyInfo, error) {
+	if d.config.DevMode() {
+		return NewDevTopology(), nil
+	}
+
 	if names == "" {
 		return nil, fmt.Errorf(
 			"When fixed topology is used, you need to define both %s and %s env variables", envOrdinal, envBrokerNames)
 	}
+
+	// We expect the names or addresses to be sorted by ordinal
+	// e.g. barco-0, barco-1, barco-2, barco-3, barco-4, barco-5
 	parts := strings.Split(names, ",")
-	if len(parts) < 3 {
+	if len(parts) < 3 && !d.config.DevMode() {
 		return nil, fmt.Errorf("Topology information can't contain less than 3 broker names, obtained %v", parts)
 	}
 

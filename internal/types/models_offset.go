@@ -40,12 +40,6 @@ type OffsetState interface {
 	// Sets the known offset value in memory, optionally commiting it to the data store
 	Set(group string, topic string, token Token, rangeIndex RangeIndex, value Offset, commit OffsetCommitType)
 
-	// Determines whether the consumer group can be served with data of the particular token/index/genVersion combo.
-	// It navigates through the generation tree, looking for parents.
-	//
-	// Only called one per consumer group reader.
-	CanConsume(group string, topicId TopicDataId) bool
-
 	// Reads the local max producer offset from disk
 	ProducerOffsetLocal(topic *TopicDataId) (int64, error)
 }

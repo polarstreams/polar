@@ -30,6 +30,7 @@ const (
 	envConsumerRanges          = "BARCO_CONSUMER_RANGES"
 	envTopologyFilePollDelayMs = "BARCO_TOPOLOGY_FILE_POLL_DELAY_MS"
 	envShutdownDelaySecs       = "BARCO_SHUTDOWN_DELAY_SECS"
+	envDevMode                 = "BARCO_DEV_MODE"
 )
 
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
@@ -49,6 +50,7 @@ type Config interface {
 type BasicConfig interface {
 	HomePath() string
 	ListenOnAllAddresses() bool
+	DevMode() bool       // Determines whether we are running a single instance in dev mode
 	ConsumerRanges() int // The number of ranges to partition any token range.
 	ShutdownDelay() time.Duration
 }
@@ -102,12 +104,13 @@ type GossipConfig interface {
 	MaxDataBodyLength() int
 }
 
-func NewConfig() Config {
+func NewConfig(devMode bool) Config {
 	hostName, _ := os.Hostname()
 	baseHostName, ordinal := parseHostName(hostName)
 	return &config{
 		flowControl:  newFlowControl(allocationPoolSize),
 		baseHostName: baseHostName,
+		devModeFlag:  devMode,
 		ordinal:      ordinal,
 	}
 }
@@ -116,6 +119,7 @@ type config struct {
 	flowControl  *flowControl
 	baseHostName string
 	ordinal      int
+	devModeFlag  bool
 }
 
 func parseHostName(hostName string) (baseHostName string, ordinal int) {
@@ -162,6 +166,10 @@ func (c *config) ListenOnAllAddresses() bool {
 	return os.Getenv(envListenOnAllAddresses) != "false"
 }
 
+func (c *config) DevMode() bool {
+	return c.devModeFlag || os.Getenv(envDevMode) == "true"
+}
+
 func (c *config) ConsumerRanges() int {
 	return envInt(envConsumerRanges, 8)
 }
@@ -201,6 +209,9 @@ func (c *config) SegmentFlushInterval() time.Duration {
 }
 
 func (c *config) ShutdownDelay() time.Duration {
+	if c.DevMode() {
+		return 0
+	}
 	secs := envInt(envShutdownDelaySecs, 30)
 	return time.Duration(secs) * time.Second
 }

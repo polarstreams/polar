@@ -172,43 +172,6 @@ func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
 	}
 }
 
-func (s *defaultOffsetState) CanConsume(group string, topicId TopicDataId) bool {
-	// log.Debug().Msgf("--Can consume token for %d/%d and v%d", token, index, offsetVersion)
-
-	// gen := s.discoverer.GenerationInfo(token, offsetVersion)
-
-	// if gen == nil {
-	// 	log.Warn().Msgf("Generation %d v%d not found to determine whether it can be consumed", token, offsetVersion)
-	// }
-
-	// parents := gen.Parents
-	// if len(parents) ==
-
-	/*
-		topologyGetter
-
-
-		gen := d.GenerationInfo(token, version)
-		if gen == nil {
-			return nil
-		}
-
-		if current := d.Generation(token); current != nil && current.Version == version {
-			return nil
-		}
-
-		nextGens, err := d.localDb.GenerationsByParent(gen)
-		utils.PanicIfErr(err, "Generations by parent failed to be retrieved")
-
-		// TODO: Handle the case where this token was joined with another one and v+1 does not exist
-
-		return nextGens
-	*/
-
-	//TODO: Implement CanConsumeToken
-	return true
-}
-
 func (s *defaultOffsetState) ProducerOffsetLocal(topic *TopicDataId) (int64, error) {
 	return data.ReadProducerOffset(topic, s.config)
 }

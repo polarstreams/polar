@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	confMock "github.com/barcostreams/barco/internal/test/conf/mocks"
 	"github.com/barcostreams/barco/internal/test/discovery/mocks"
 	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/onsi/ginkgo"
@@ -11,7 +12,11 @@ import (
 )
 
 var _ = Describe("SendToFollowers()", func() {
+	config := new(confMock.Config)
+	config.On("DevMode").Return(false)
+
 	g := &gossiper{
+		config:      config,
 		discoverer:  new(mocks.Discoverer),
 		connections: atomic.Value{},
 	}

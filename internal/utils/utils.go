@@ -190,7 +190,10 @@ func ReadBodyClose(resp *http.Response) (string, error) {
 // For a given number, it returns the last ring length that can contain it.
 // For example: given 3 it returns 3; for 4 -> 3; for 5 -> 3; for 7 -> 6
 func ValidRingLength(length int) int {
-	if length < 3 {
+	if length == 1 {
+		return 1
+	}
+	if length == 2 {
 		return 3
 	}
 	// Rings are 3 * 2^n

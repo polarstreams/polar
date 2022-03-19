@@ -28,7 +28,7 @@ var _ = Describe("utils", func() {
 	Describe("ValidRingLength()", func() {
 		It("should return the last ring that can contain it", func() {
 			values := [][]int{
-				{1, 3},
+				{1, 1},
 				{2, 3},
 				{4, 3},
 				{6, 6},

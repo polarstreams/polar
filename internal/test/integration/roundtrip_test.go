@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
@@ -30,11 +29,6 @@ const (
 	partitionKeyT1Range = "567"
 	partitionKeyT2Range = "234"
 )
-
-func TestData(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Integration test suite")
-}
 
 var _ = Describe("A 3 node cluster", func() {
 	// Note that on macos you need to manually create the alias for the loopback addresses, for example

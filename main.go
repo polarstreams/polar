@@ -25,16 +25,23 @@ import (
 
 func main() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	log.Info().Msg("Starting Barco")
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	debug := flag.Bool("debug", false, "sets log level to debug")
+	devMode := flag.Bool("dev", false, "starts a single instance in dev mode")
 	flag.Parse()
 	if *debug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
 
-	config := conf.NewConfig()
+	config := conf.NewConfig(*devMode)
+
+	if !config.DevMode() {
+		log.Info().Msg("Starting Barco")
+	} else {
+		log.Info().Msg("Starting Barco in dev mode")
+	}
+
 	log.Info().Msgf("Using home dir as %s", config.HomePath())
 	config.CreateAllDirs()
 
@@ -43,7 +50,7 @@ func main() {
 	discoverer := discovery.NewDiscoverer(config, localDbClient)
 	datalog := data.NewDatalog(config)
 	gossiper := interbroker.NewGossiper(config, discoverer, localDbClient)
-	generator := ownership.NewGenerator(discoverer, gossiper, localDbClient)
+	generator := ownership.NewGenerator(config, discoverer, gossiper, localDbClient)
 	producer := producing.NewProducer(config, topicHandler, discoverer, datalog, gossiper)
 	consumer := consuming.NewConsumer(config, localDbClient, discoverer, gossiper)
 

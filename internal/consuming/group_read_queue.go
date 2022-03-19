@@ -460,14 +460,6 @@ func (q *groupReadQueue) createReader(
 		Version:    readerVersion,
 	}
 
-	// When scaling up, we have to make sure the parent token/gen is consumed before serving new data
-	if !q.offsetState.CanConsume(q.group, topicId) {
-		log.Debug().Msgf(
-			"Group %s can't consume topic %s for token %d v%d yet",
-			q.group, topic, token, source.Version)
-		return nil
-	}
-
 	var maxProducedOffset *int64 = nil
 	if topicId.GenId() != source.Id() {
 		// We are reading from an old generation

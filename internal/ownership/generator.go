@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/discovery"
 	"github.com/barcostreams/barco/internal/interbroker"
 	"github.com/barcostreams/barco/internal/localdb"
@@ -39,14 +40,21 @@ type Generator interface {
 type generator struct {
 	// items can be a local or remote
 	items      chan genMessage
+	config     conf.BasicConfig
 	discoverer discovery.TopologyGetter
 	gossiper   interbroker.Gossiper
 	localDb    localdb.Client
 	nextUuid   func() uuid.UUID // allow injecting it from tests
 }
 
-func NewGenerator(discoverer discovery.TopologyGetter, gossiper interbroker.Gossiper, localDb localdb.Client) Generator {
+func NewGenerator(
+	config conf.BasicConfig,
+	discoverer discovery.TopologyGetter,
+	gossiper interbroker.Gossiper,
+	localDb localdb.Client,
+) Generator {
 	o := &generator{
+		config:     config,
 		discoverer: discoverer,
 		gossiper:   gossiper,
 		localDb:    localDb,
@@ -254,6 +262,11 @@ func (o *generator) OnHostShuttingDown(broker BrokerInfo) {
 func (o *generator) startNew() {
 	topology := o.discoverer.Topology()
 
+	if o.config.DevMode() {
+		o.createDevGeneration()
+		return
+	}
+
 	if topology.MyOrdinal() != 0 {
 		o.waitForPreviousRange(topology)
 	}
@@ -455,6 +468,22 @@ func (o *generator) processGeneration(message genMessage) creationError {
 
 	log.Panic().Msg("Unhandled generation internal message type")
 	return nil
+}
+
+func (o *generator) createDevGeneration() {
+	gen := &Generation{
+		Start:     StartToken,
+		End:       StartToken,
+		Version:   1,
+		Timestamp: time.Now().UnixMicro(),
+		Leader:    0,
+		Followers: []int{},
+		TxLeader:  0,
+		Tx:        uuid.New(),
+		Status:    StatusCommitted,
+		Parents:   []GenId{},
+	}
+	o.discoverer.RepairCommitted(gen)
 }
 
 func checkState(gens []Generation, accepted, proposed *Generation) (*Generation, *Generation) {

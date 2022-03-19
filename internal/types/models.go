@@ -96,6 +96,15 @@ func NewTopology(brokersByOrdinal []BrokerInfo, myOrdinal int) TopologyInfo {
 	}
 }
 
+func NewDevTopology() *TopologyInfo {
+	return &TopologyInfo{
+		Brokers:        []BrokerInfo{{IsSelf: true, Ordinal: 0, HostName: "localhost"}},
+		LocalIndex:     BrokerIndex(0),
+		ordinal:        0,
+		indexByOrdinal: map[int]BrokerIndex{0: BrokerIndex(0)},
+	}
+}
+
 // GetToken gets the token by the broker index.
 func (t *TopologyInfo) GetToken(index BrokerIndex) Token {
 	return GetTokenAtIndex(len(t.Brokers), int(index))

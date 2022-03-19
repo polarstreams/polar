@@ -142,6 +142,20 @@ func (_m *Config) DatalogPath(topicDataId *types.TopicDataId) string {
 	return r0
 }
 
+// DevMode provides a mock function with given fields:
+func (_m *Config) DevMode() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	return r0
+}
+
 // FixedTopologyFilePollDelay provides a mock function with given fields:
 func (_m *Config) FixedTopologyFilePollDelay() time.Duration {
 	ret := _m.Called()
