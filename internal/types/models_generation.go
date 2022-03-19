@@ -23,8 +23,12 @@ type Generation struct {
 
 // Represents a unique reference to a generation
 type GenId struct {
-	Start   Token      `json:"start"`
+	Start   Token      `json:"start"` // Start token of the generation
 	Version GenVersion `json:"version"`
+}
+
+func (id GenId) String() string {
+	return fmt.Sprintf("%d v%d", id.Start, id.Version)
 }
 
 // Time() returns the timestamp expressed as a time.Time

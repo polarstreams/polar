@@ -14,7 +14,7 @@ import (
 
 func newDefaultOffsetState(
 	localDb localdb.Client,
-	topologyGetter discovery.TopologyGetter,
+	discoverer discovery.TopologyGetter,
 	gossiper interbroker.Gossiper,
 	config conf.ConsumerConfig,
 ) OffsetState {
@@ -23,7 +23,7 @@ func newDefaultOffsetState(
 		commitChan:     make(chan *OffsetStoreKeyValue, 64),
 		localDb:        localDb,
 		gossiper:       gossiper,
-		topologyGetter: topologyGetter,
+		discoverer:     discoverer,
 		config:         config,
 	}
 	go state.processCommit()
@@ -36,7 +36,7 @@ type defaultOffsetState struct {
 	commitChan     chan *OffsetStoreKeyValue // We need to commit offset in order
 	localDb        localdb.Client
 	gossiper       interbroker.Gossiper
-	topologyGetter discovery.TopologyGetter
+	discoverer     discovery.TopologyGetter
 	config         conf.ConsumerConfig
 }
 
@@ -78,7 +78,7 @@ func (s *defaultOffsetState) Set(
 	defer s.mu.Unlock()
 	existingValue := s.offsetMap[key]
 
-	if isOldValue(existingValue, &value) {
+	if s.isOldValue(existingValue, &value) {
 		// We have a newer value in our map, don't override
 		return
 	}
@@ -101,7 +101,7 @@ func (s *defaultOffsetState) Set(
 func (s *defaultOffsetState) processCommit() {
 	for kv := range s.commitChan {
 		if err := s.localDb.SaveOffset(kv); err != nil {
-			log.Err(err).Msgf("Offset could not be stored in the local db")
+			log.Err(err).Interface("offset", *kv).Msgf("Offset could not be stored in the local db")
 		} else {
 			log.Debug().Msgf(
 				"Offset stored in the local db for group %s topic '%s' %d/%d",
@@ -110,30 +110,37 @@ func (s *defaultOffsetState) processCommit() {
 	}
 }
 
-func isOldValue(existing *Offset, newValue *Offset) bool {
+func (s *defaultOffsetState) isOldValue(existing *Offset, newValue *Offset) bool {
 	if existing == nil {
 		// There's no previous value
 		return false
 	}
-	if existing.Source < newValue.Source {
-		// The source of the previous value is old
-		return false
+
+	if existing.Source.Start == newValue.Source.Start {
+		// Same tokens (most common case)
+		if existing.Source.Version < newValue.Source.Version {
+			// The source of the previous value is old
+			return false
+		}
+
+		if existing.Source.Version > newValue.Source.Version {
+			// The new value's source is old
+			return true
+		}
 	}
 
-	if existing.Source == newValue.Source {
-		if existing.Version < newValue.Version {
-			return false
-		}
-		if existing.Version == newValue.Version && existing.Offset <= newValue.Offset {
-			return false
-		}
+	if existing.Version < newValue.Version {
+		return false
+	}
+	if existing.Version == newValue.Version && existing.Offset <= newValue.Offset {
+		return false
 	}
 
 	return true
 }
 
 func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
-	gen := s.topologyGetter.Generation(kv.Key.Token)
+	gen := s.discoverer.Generation(kv.Key.Token)
 	if gen == nil {
 		log.Error().
 			Stringer("token", kv.Key.Token).
@@ -141,7 +148,7 @@ func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
 		return
 	}
 
-	topology := s.topologyGetter.Topology()
+	topology := s.discoverer.Topology()
 
 	for _, follower := range gen.Followers {
 		if follower == topology.MyOrdinal() {
@@ -162,8 +169,18 @@ func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
 	}
 }
 
-func (s *defaultOffsetState) CanConsumeToken(group string, topic string, gen *Generation) bool {
+func (s *defaultOffsetState) CanConsume(group string, topicId TopicDataId) bool {
+	// log.Debug().Msgf("--Can consume token for %d/%d and v%d", token, index, offsetVersion)
+
+
+	// gen := s.discoverer.GenerationInfo(token, offsetVersion)
+
+	// if gen == nil {
+	// 	log.Warn().Msgf("Generation %d v%d not found to determine whether it can be consumed", token, offsetVersion)
+	// }
+
 	// parents := gen.Parents
+	// if len(parents) ==
 
 	/*
 		topologyGetter

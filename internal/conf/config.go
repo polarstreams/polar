@@ -27,6 +27,7 @@ const (
 	envGossipDataPort          = "BARCO_GOSSIP_DATA_PORT"
 	envSegmentFlushIntervalMs  = "BARCO_SEGMENT_FLUSH_INTERVAL_MS"
 	envConsumerAddDelay        = "BARCO_CONSUMER_ADD_DELAY_MS"
+	envConsumerRanges          = "BARCO_CONSUMER_RANGES"
 	envTopologyFilePollDelayMs = "BARCO_TOPOLOGY_FILE_POLL_DELAY_MS"
 	envShutdownDelaySecs       = "BARCO_SHUTDOWN_DELAY_SECS"
 )
@@ -162,7 +163,7 @@ func (c *config) ListenOnAllAddresses() bool {
 }
 
 func (c *config) ConsumerRanges() int {
-	return 8
+	return envInt(envConsumerRanges, 8)
 }
 
 func (c *config) MaxMessageSize() int {

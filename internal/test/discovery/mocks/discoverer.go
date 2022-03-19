@@ -64,13 +64,13 @@ func (_m *Discoverer) Generation(token types.Token) *types.Generation {
 	return r0
 }
 
-// GenerationInfo provides a mock function with given fields: token, version
-func (_m *Discoverer) GenerationInfo(token types.Token, version types.GenVersion) *types.Generation {
-	ret := _m.Called(token, version)
+// GenerationInfo provides a mock function with given fields: id
+func (_m *Discoverer) GenerationInfo(id types.GenId) *types.Generation {
+	ret := _m.Called(id)
 
 	var r0 *types.Generation
-	if rf, ok := ret.Get(0).(func(types.Token, types.GenVersion) *types.Generation); ok {
-		r0 = rf(token, version)
+	if rf, ok := ret.Get(0).(func(types.GenId) *types.Generation); ok {
+		r0 = rf(id)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*types.Generation)
@@ -207,13 +207,13 @@ func (_m *Discoverer) LocalInfo() *types.BrokerInfo {
 	return r0
 }
 
-// NextGeneration provides a mock function with given fields: token, version
-func (_m *Discoverer) NextGeneration(token types.Token, version types.GenVersion) []types.Generation {
-	ret := _m.Called(token, version)
+// NextGeneration provides a mock function with given fields: id
+func (_m *Discoverer) NextGeneration(id types.GenId) []types.Generation {
+	ret := _m.Called(id)
 
 	var r0 []types.Generation
-	if rf, ok := ret.Get(0).(func(types.Token, types.GenVersion) []types.Generation); ok {
-		r0 = rf(token, version)
+	if rf, ok := ret.Get(0).(func(types.GenId) []types.Generation); ok {
+		r0 = rf(id)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]types.Generation)

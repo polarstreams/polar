@@ -36,7 +36,8 @@ func TestData(t *testing.T) {
 	RunSpecs(t, "Integration test suite")
 }
 
-var _ = Describe("A 3 node cluster", func() {
+// TODO: Uncomment
+var _ = XDescribe("A 3 node cluster", func() {
 	// Note that on macos you need to manually create the alias for the loopback addresses, for example
 	// for i in {0..12}; do sudo ifconfig lo0 alias 127.0.0.$i up; done
 
@@ -170,7 +171,6 @@ var _ = Describe("A 3 node cluster", func() {
 
 			// Try to find the record for T1 v2
 			resp := client.ConsumerPoll(2)
-			defer resp.Body.Close()
 			messages := readConsumerResponse(resp)
 			topicId, r := findRecord(messages, `{"hello": "world1_1"}`)
 			Expect(r).NotTo(BeNil())
@@ -179,7 +179,6 @@ var _ = Describe("A 3 node cluster", func() {
 
 			// Try to find the record for T1 v2
 			resp = client.ConsumerPoll(2)
-			defer resp.Body.Close()
 			messages = readConsumerResponse(resp)
 			topicId, r = findRecord(messages, `{"hello": "world1_2"}`)
 			Expect(r).NotTo(BeNil())
@@ -269,6 +268,10 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 		b5.WaitForStart().WaitForVersion1()
 
 		client := NewTestClient(nil)
+		client.RegisterAsConsumer(6, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
+
+		// Produced a message in gen v1
+		expectOk(client.ProduceJson(0, "abc", `{"hello": "world0_0"}`, ""))
 
 		time.Sleep(1 * time.Second)
 		fmt.Println("------------------Updating the topology")
@@ -326,6 +329,22 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 		b0.WaitOutput("Gossip now contains 2 clients for 2 peers")
 		b1.WaitOutput("Gossip now contains 2 clients for 2 peers")
 		b2.WaitOutput("Gossip now contains 2 clients for 2 peers")
+
+		// Produce a new message in the new generation
+		expectOk(client.ProduceJson(0, "abc", `{"hello": "world0_1"}`, ""))
+
+		fmt.Println("--Start consuming")
+		// Start polling B0 to obtain data from T0 and T3
+		for i := 0; i < 5; i++ {
+			resp := client.ConsumerPoll(0)
+			if resp.StatusCode == http.StatusNoContent {
+				fmt.Println("--No content", i)
+				resp.Body.Close()
+				continue
+			}
+			messages := readConsumerResponse(resp)
+			fmt.Println("--Messages", i, messages)
+		}
 	})
 })
 

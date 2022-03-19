@@ -115,6 +115,25 @@ func (d *discoverer) Init() error {
 		return err
 	}
 
+	go func() {
+		for {
+			time.Sleep(2 * time.Second)
+			existingMap := d.generations.Load().(genMap)
+			if len(existingMap) == 0 {
+				log.Debug().Msgf("No generations")
+				continue
+			}
+			message := ""
+			for _, gen := range existingMap {
+				if len(message) > 0 {
+					message += ", "
+				}
+				message += fmt.Sprintf("%s (B%d)", gen.Id(), gen.Leader)
+			}
+			log.Debug().Msgf("Generations: [%s]", message)
+		}
+	}()
+
 	return nil
 }
 
@@ -301,12 +320,7 @@ func (d *discoverer) Leader(partitionKey string) ReplicationInfo {
 		}
 	}
 
-	return ReplicationInfo{
-		Leader:     topology.BrokerByOrdinal(gen.Leader),
-		Followers:  topology.BrokerByOrdinalList(gen.Followers),
-		Token:      token,
-		RangeIndex: rangeIndex,
-	}
+	return newReplication(topology, gen, rangeIndex)
 }
 
 // Gets the primary token and broker information when there's no partition key
@@ -324,7 +338,7 @@ func (d *discoverer) primaryTokenDefault(topology *TopologyInfo) ReplicationInfo
 				if gen := d.Generation(token); gen != nil {
 					// My previous generation is still alive
 					// Continue using it
-					return NewReplicationInfo(previousTopology, gen, rangeIndex)
+					return newReplication(previousTopology, gen, rangeIndex)
 				}
 			}
 		}
@@ -350,7 +364,32 @@ func (d *discoverer) primaryTokenDefault(topology *TopologyInfo) ReplicationInfo
 			RangeIndex: rangeIndex,
 		}
 	}
-	return NewReplicationInfo(topology, gen, rangeIndex)
+
+	return newReplication(topology, gen, rangeIndex)
+}
+
+// Uses the leader and follower from the generation, validating that the topology already contains it.
+func newReplication(topology *TopologyInfo, gen *Generation, rangeIndex RangeIndex) ReplicationInfo {
+	brokersLength := len(topology.Brokers)
+
+	if gen.Leader >= brokersLength {
+		return ReplicationInfo{
+			Leader:     nil, // Hints that it could not be found
+			Followers:  []BrokerInfo{},
+			Token:      gen.Start,
+			RangeIndex: rangeIndex,
+		}
+	}
+
+	followers := make([]int, 0, 2)
+	for _, ordinal := range gen.Followers {
+		if ordinal >= brokersLength {
+			continue
+		}
+		followers = append(followers, ordinal)
+	}
+
+	return NewReplicationInfo(topology, gen.Start, gen.Leader, followers, rangeIndex)
 }
 
 func (d *discoverer) RegisterListener(l TopologyChangeListener) {

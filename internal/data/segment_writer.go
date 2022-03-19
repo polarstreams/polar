@@ -282,6 +282,11 @@ func (s *SegmentWriter) writeToBuffer(item SegmentChunk) {
 }
 
 func (c *SegmentWriter) flushTimer() {
+	defer func() {
+		// Channel might be closed in the future, move on
+		recover()
+	}()
+
 	for {
 		time.Sleep(flushResolution)
 		// Send a nil data item as an indication of a flush message

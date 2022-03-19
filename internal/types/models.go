@@ -47,12 +47,12 @@ type ReplicationInfo struct {
 	RangeIndex RangeIndex
 }
 
-func NewReplicationInfo(topology *TopologyInfo, gen *Generation, rangeIndex RangeIndex) ReplicationInfo {
+func NewReplicationInfo(topology *TopologyInfo, token Token, leader int, followers []int, index RangeIndex) ReplicationInfo {
 	return ReplicationInfo{
-		Leader:     topology.BrokerByOrdinal(gen.Leader),
-		Followers:  topology.BrokerByOrdinalList(gen.Followers),
-		Token:      gen.Start,
-		RangeIndex: rangeIndex,
+		Leader:     topology.BrokerByOrdinal(leader),
+		Followers:  topology.BrokerByOrdinalList(followers),
+		Token:      token,
+		RangeIndex: index,
 	}
 }
 
@@ -229,6 +229,13 @@ type TopicDataId struct {
 
 func (t *TopicDataId) String() string {
 	return fmt.Sprintf("'%s' %d/%d v%d", t.Name, t.Token, t.RangeIndex, t.Version)
+}
+
+func (t *TopicDataId) GenId() GenId {
+	return GenId{
+		Start:   t.Token,
+		Version: t.Version,
+	}
 }
 
 // Replicator contains logic to send data to replicas

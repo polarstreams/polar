@@ -17,11 +17,11 @@ type GenerationState interface {
 
 	// GenerationInfo gets the information of a past committed generation.
 	// Returns nil when not found.
-	GenerationInfo(token Token, version GenVersion) *Generation
+	GenerationInfo(id GenId) *Generation
 
 	// For an old generation, get's the following generation (or two in the case of split).
 	// Returns nil when not found.
-	NextGeneration(token Token, version GenVersion) []Generation
+	NextGeneration(id GenId) []Generation
 
 	// GenerationProposed reads a snapshot of the current committed and proposed generations
 	GenerationProposed(token Token) (committed *Generation, proposed *Generation)
@@ -82,19 +82,19 @@ func (d *discoverer) Generation(token Token) *Generation {
 	return nil
 }
 
-func (d *discoverer) GenerationInfo(token Token, version GenVersion) *Generation {
-	gen, err := d.localDb.GenerationInfo(token, version)
+func (d *discoverer) GenerationInfo(id GenId) *Generation {
+	gen, err := d.localDb.GenerationInfo(id.Start, id.Version)
 	utils.PanicIfErr(err, "Generation info failed to be retrieved")
 	return gen
 }
 
-func (d *discoverer) NextGeneration(token Token, version GenVersion) []Generation {
-	gen := d.GenerationInfo(token, version)
+func (d *discoverer) NextGeneration(id GenId) []Generation {
+	gen := d.GenerationInfo(id)
 	if gen == nil {
 		return nil
 	}
 
-	if current := d.Generation(token); current != nil && current.Version == version {
+	if current := d.Generation(id.Start); current != nil && current.Version == id.Version {
 		return nil
 	}
 
@@ -315,16 +315,19 @@ func copyAndStore(generations *atomic.Value, gen Generation, gen2 *Generation) {
 		newMap[k] = v
 	}
 
-	if !gen.ToDelete {
+	if gen.ToDelete {
+		delete(newMap, gen.Start)
+	} else {
 		newMap[gen.Start] = gen
-		if gen2 != nil {
+	}
+
+	if gen2 != nil {
+		if gen2.ToDelete {
+			delete(newMap, gen2.Start)
+		} else {
 			newMap[gen2.Start] = *gen2
 		}
-	} else {
-		delete(newMap, gen.Start)
-		if gen2 != nil {
-			delete(newMap, gen2.Start)
-		}
 	}
+
 	generations.Store(newMap)
 }

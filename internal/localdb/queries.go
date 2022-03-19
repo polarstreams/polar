@@ -231,9 +231,11 @@ func execInsertGeneration(stmt *sql.Stmt, gen *Generation) error {
 func (c *client) SaveOffset(kv *OffsetStoreKeyValue) error {
 	key := kv.Key
 	value := kv.Value
+	// sqlite does not support uint64 values with high bit set
+	offset := int64(value.Offset)
 	_, err := c.queries.
 		insertOffset.
-		Exec(key.Group, key.Topic, key.Token, key.RangeIndex, value.Version, value.Offset, value.Source)
+		Exec(key.Group, key.Topic, key.Token, key.RangeIndex, value.Version, offset, genIdToString(value.Source))
 	return err
 }
 
@@ -245,14 +247,21 @@ func (c *client) Offsets() ([]OffsetStoreKeyValue, error) {
 
 	result := make([]OffsetStoreKeyValue, 0)
 	defer rows.Close()
+
+	var sourceString string
+	// sqlite does not support uint64 values with high bit set
+	var offset int64
+
 	for rows.Next() {
 		kv := OffsetStoreKeyValue{}
 		err = rows.Scan(
-			&kv.Key.Group, &kv.Key.Topic, &kv.Key.Token, &kv.Key.RangeIndex, &kv.Value.Version, &kv.Value.Offset,
-			&kv.Value.Source)
+			&kv.Key.Group, &kv.Key.Topic, &kv.Key.Token, &kv.Key.RangeIndex, &kv.Value.Version, &offset,
+			&sourceString)
 		if err != nil {
 			return result, err
 		}
+		kv.Value.Source = genIdFromString(sourceString)
+		kv.Value.Offset = uint64(offset)
 		result = append(result, kv)
 	}
 	return result, nil
@@ -271,6 +280,12 @@ func parentsToString(parents []GenId) string {
 	bytes, err := json.Marshal(parents)
 	utils.PanicIfErr(err, "Unexpected error when serializing parents")
 	return string(bytes)
+}
+
+func genIdFromString(stringValue string) GenId {
+	var result GenId
+	utils.PanicIfErr(json.Unmarshal([]byte(stringValue), &result), "Unexpected error when deserializing GenId")
+	return result
 }
 
 func genIdToString(id GenId) string {

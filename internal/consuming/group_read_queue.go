@@ -3,6 +3,7 @@ package consuming
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"net/http"
 	"time"
 
@@ -18,8 +19,11 @@ import (
 
 const (
 	fetchMaxWait = 1 * time.Second
+	refreshPeriod = 2 * time.Second
 	requeueDelay = 200 * time.Millisecond
 )
+
+const completedOffset = math.MaxUint64
 
 // Receives read requests per group on a single thread.
 //
@@ -57,6 +61,7 @@ func newGroupReadQueue(
 		config:         config,
 	}
 	go queue.process()
+	go queue.refreshPeriodically()
 	return queue
 }
 
@@ -72,8 +77,8 @@ func (q *groupReadQueue) process() {
 	failedResponseItems := make([]consumerResponseItem, 0)
 	for item := range q.items {
 		if item.refresh {
-			// TODO: Implement close readers
-			// Check which readers can be closed
+			q.refreshReaders()
+			item.done <- true
 			continue
 		}
 
@@ -166,6 +171,59 @@ func (q *groupReadQueue) process() {
 	}
 }
 
+func (q *groupReadQueue) refreshReaders() {
+	// TODO: Validate readers for which I'm not longer the leader and close them
+	for _, readersByTopic := range q.readers {
+		for _, reader := range readersByTopic {
+			topicId := &reader.Topic
+			setMaxOffset := false
+
+			// Check whether there was a generation change
+			if reader.MaxProducedOffset == nil {
+				gen := q.topologyGetter.Generation(topicId.Token)
+				if gen == nil {
+					// It's possible that there is no generation for token due to scale down
+					prevGen := q.topologyGetter.GenerationInfo(topicId.GenId())
+					if prevGen == nil {
+						// Should resolve itself in the future
+						log.Warn().Msgf("Generation %s could not be found", topicId.GenId())
+						continue
+					}
+					if len(q.topologyGetter.NextGeneration(topicId.GenId())) > 0 {
+						setMaxOffset = true
+					}
+				}
+				if gen.Version > topicId.Version {
+					// There's a new version, we should set the maximum offset for the logic to identify when we
+					// finished consuming
+					setMaxOffset = true
+				}
+			}
+
+			if setMaxOffset {
+				maxOffset, err := q.getMaxProducedOffset(topicId)
+				if err != nil {
+					if q.hasData(topicId) {
+						// This will resolve itself in the future, once the produced offset is recorded
+						log.Warn().Err(err).Msgf("No data found for %s", topicId)
+						continue
+					}
+				}
+				reader.MaxProducedOffset = &maxOffset
+			}
+		}
+	}
+}
+
+func (q *groupReadQueue) refreshPeriodically() {
+	for {
+		time.Sleep(refreshPeriod)
+		done := make(chan bool, 1)
+		q.items <- readQueueItem{ refresh: true, done: done }
+		<- done
+	}
+}
+
 func marshalResponse(w http.ResponseWriter, responseItems []consumerResponseItem) error {
 	w.Header().Add("Content-Type", contentType)
 	if err := binary.Write(w, conf.Endianness, uint16(len(responseItems))); err != nil {
@@ -202,26 +260,64 @@ func (q *groupReadQueue) maybeCloseReader(reader *SegmentReader, chunk SegmentCh
 		// There will be no more data, we should dispose the reader
 		q.closeReader(reader)
 
-		q.moveOffsetToNextGeneration(reader.Topic)
+		q.moveOffsetToNextGeneration(reader.Topic, reader.SourceVersion)
 	}
 }
 
 // Moves offset to next generation
-func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId) bool {
-	log.Debug().Msgf("Looking for next generation of %d v%d", topicId.Token, topicId.Version)
-	nextGens := q.topologyGetter.NextGeneration(topicId.Token, topicId.Version)
+func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source GenId) bool {
+	log.Debug().Msgf("Looking for next generation of %s", topicId.GenId())
+	nextGens := q.topologyGetter.NextGeneration(topicId.GenId())
 	if len(nextGens) == 0 {
 		return false
+	}
+
+	if len(nextGens) == 1 && len(nextGens[0].Parents) == 2 {
+		// Scale down from 2 tokens to 1
+		log.Debug().Msgf("Setting offset for previous generation that was scaled down for %s", &topicId)
+		offset := Offset{
+			Offset:  completedOffset,
+			Version: topicId.Version,
+			Source:  source,
+		}
+		q.offsetState.Set(
+			q.group, topicId.Name, topicId.Token, topicId.RangeIndex, offset, OffsetCommitAll)
+
+		var otherParent GenId
+		for _, id := range nextGens[0].Parents {
+			if id.Start != topicId.Token {
+				otherParent = id
+			}
+		}
+
+		otherParentOffset := q.offsetState.Get(
+			q.group, topicId.Name, otherParent.Start, topicId.RangeIndex)
+
+		if otherParentOffset != nil {
+			if otherParentOffset.Version == otherParent.Version && otherParentOffset.Offset == completedOffset {
+				log.Info().Msgf("Moving offset of joined generation for %s", &topicId)
+
+				offset := Offset{
+					Offset:  0,
+					Version: nextGens[0].Version,
+					Source:  source,
+				}
+				q.offsetState.Set(
+					q.group, topicId.Name, topicId.Token, topicId.RangeIndex, offset, OffsetCommitAll)
+			}
+		}
+
+		return true
 	}
 
 	for _, gen := range nextGens {
 		offset := Offset{
 			Offset:  0,
 			Version: gen.Version,
-			Source:  0,
+			Source:  source,
 		}
 		q.offsetState.Set(
-			q.group, topicId.Name, gen.Start, topicId.RangeIndex, offset, OffsetCommitAll)
+			q.group, topicId.Name, topicId.Token, topicId.RangeIndex, offset, OffsetCommitAll)
 	}
 	return true
 }
@@ -275,84 +371,39 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 
 	for _, t := range tokenRanges {
 		currentGen := q.topologyGetter.Generation(t.Token)
-		if currentGen == nil {
+		if currentGen == nil{
 			// Maybe the token/broker no longer exists
 			log.Warn().Msgf("Information about the generation of token %d could not be found", t.Token)
 			continue
 		}
-		for _, index := range t.Indices {
-			key := readerKey{t.Token, index}
-			readersByTopic, found := q.readers[key]
-			if !found {
-				readersByTopic = make(map[string]*SegmentReader)
-				q.readers[key] = readersByTopic
-			}
+		if currentGen.Leader != q.topologyGetter.Topology().MyOrdinal() {
+			continue
+		}
 
-			for _, topic := range topics {
-				reader, found := readersByTopic[topic]
+		// In the case of scaling down, an owned token range might be the result of two previous tokens
+		tokens := []Token{t.Token}
+		tokens = appendJoined(tokens, currentGen)
+
+		for _, token := range tokens {
+			for _, index := range t.Indices {
+				key := readerKey{token, index}
+				readersByTopic, found := q.readers[key]
 				if !found {
-					log.Info().Msgf("Creating reader for token %d/%d and topic '%s'", t.Token, index, topic)
-					offset := q.offsetState.Get(q.group, topic, t.Token, index)
-					if offset == nil {
-						// We have no information of this group
-						//TODO: Verify that we have loaded from other brokers
+					readersByTopic = make(map[string]*SegmentReader)
+					q.readers[key] = readersByTopic
+				}
 
-						// TODO: Start at tail or last segment not archived
-						offset = &Offset{
-							Offset:  0,
-							Version: 1,
-							Source:  currentGen.Version,
-						}
-					}
-
-					if !q.offsetState.CanConsumeToken(q.group, topic, currentGen) {
-						// TODO: Verify that a previous token from a broker that does not exist any more was consumed
-						log.Debug().Msgf(
-							"Group %s can't consume topic %s for token %d v%d yet",
-							q.group, topic, key.token, currentGen.Version)
-						continue
-					}
-
-					readerVersion := offset.Version
-					topicId := TopicDataId{
-						Name:       topic,
-						Token:      t.Token,
-						RangeIndex: index,
-						Version:    readerVersion,
-					}
-
-					var maxProducedOffset *uint64 = nil
-					if readerVersion != currentGen.Version {
-						// We are reading from an old generation
-						// We need to set the max offset produced
-						value, err := q.getMaxProducedOffset(&topicId)
-						if err != nil {
-							if q.hasData(&topicId) {
-								// Hopefully in the future it will resolve itself
-								continue
-							}
-
-							log.Info().Msgf("No data found for topic %s, moving offset", &topicId)
-							if movedOffset := q.moveOffsetToNextGeneration(topicId); !movedOffset {
-								// Unexpected
-								log.Error().Msgf(
-									"Offset could not be moved for %s, as next generation could not be found", &topicId)
-							}
+				for _, topic := range topics {
+					reader, found := readersByTopic[topic]
+					if !found {
+						reader = q.createReader(topic, token, index, currentGen)
+						if reader == nil {
 							continue
 						}
-						maxProducedOffset = &value
+
+						readersByTopic[topic] = reader
 					}
 
-					reader, err := NewSegmentReader(
-						q.group, topicId, currentGen.Version, q.offsetState, maxProducedOffset, q.config)
-					if err != nil {
-						// reader could not be initialized, skip for now
-						continue
-					}
-
-					readersByTopic[topic] = reader
-					result = append(result, reader)
-				} else {
 					result = append(result, reader)
 				}
 			}
@@ -362,15 +413,105 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 	return result
 }
 
+func (q *groupReadQueue) createReader(
+	topic string,
+	token Token,
+	index RangeIndex,
+	source *Generation,
+) *SegmentReader {
+
+	if token != source.Start {
+		sourceTokenOffset := q.offsetState.Get(q.group, topic, source.Start, index)
+		if sourceTokenOffset != nil && sourceTokenOffset.Version == source.Version {
+			// Once the offset for the source token is on the last generation, we can ignore this previous token
+			return nil
+		}
+	}
+
+	log.Debug().Msgf("Considering creating reader for token %d/%d and topic '%s'", token, index, topic)
+	offset := q.offsetState.Get(q.group, topic, token, index)
+
+	if offset == nil {
+		// We have no information of this group
+		//TODO: Verify that we have loaded from other brokers
+
+		offset = &Offset{
+			Offset:  0,
+			Version: 1,
+			Source:  source.Id(),
+		}
+	}
+
+	readerVersion := offset.Version
+	topicId := TopicDataId{
+		Name:       topic,
+		Token:      token,
+		RangeIndex: index,
+		Version:    readerVersion,
+	}
+
+	// When scaling up, we have to make sure the parent token/gen is consumed before serving new data
+	if !q.offsetState.CanConsume(q.group, topicId) {
+		log.Debug().Msgf(
+			"Group %s can't consume topic %s for token %d v%d yet",
+			q.group, topic, token, source.Version)
+		return nil
+	}
+
+	var maxProducedOffset *uint64 = nil
+	if readerVersion != source.Version {
+		// We are reading from an old generation
+		// We need to set the max offset produced
+		value, err := q.getMaxProducedOffset(&topicId)
+		if err != nil {
+			if q.hasData(&topicId) {
+				// Hopefully in the future it will resolve itself
+				return nil
+			}
+
+			log.Info().Msgf("No data found for topic %s, moving offset", &topicId)
+			if movedOffset := q.moveOffsetToNextGeneration(topicId, source.Id()); !movedOffset {
+				// Unexpected
+				log.Error().Msgf(
+					"Offset could not be moved for %s, as next generation could not be found", &topicId)
+			}
+			return nil
+		}
+		maxProducedOffset = &value
+	}
+
+	log.Info().Msgf("Creating reader for token %d/%d and topic '%s'", token, index, topic)
+	reader, err := NewSegmentReader(q.group, topicId, source.Id(), q.offsetState, maxProducedOffset, q.config)
+	if err != nil {
+		// reader could not be initialized, skip for now
+		return nil
+	}
+
+	return reader
+}
+
+func appendJoined(tokens []Token, gen *Generation) []Token {
+	if len(gen.Parents) != 2 {
+		return tokens
+	}
+
+	for _, id := range gen.Parents {
+		if id.Start != tokens[0] {
+			tokens = append(tokens, id.Start)
+		}
+	}
+	return tokens
+}
+
 func (q *groupReadQueue) hasData(topicId *TopicDataId) bool {
 	// TODO: Implement hasData() by checking folder
 	return false
 }
 
 func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (uint64, error) {
-	gen := q.topologyGetter.GenerationInfo(topicId.Token, topicId.Version)
+	gen := q.topologyGetter.GenerationInfo(topicId.GenId())
 	if gen == nil {
-		log.Warn().Msgf("Past generation could not be retrieved %d v%d", topicId.Token, topicId.Version)
+		log.Warn().Msgf("Past generation could not be retrieved %s", topicId.GenId())
 		// Attempt to get the info from local storage
 		return q.offsetState.ProducerOffsetLocal(topicId)
 	}

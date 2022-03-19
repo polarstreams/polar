@@ -24,7 +24,7 @@ type SegmentReader struct {
 	config            conf.DatalogConfig
 	group             string
 	Topic             TopicDataId
-	SourceVersion     GenVersion // The version in which this reader was created, a consumer might be on Gen=v3 but the current is v4. In this case, source would be v4 and topic.Version = v3
+	SourceVersion     GenId // The version in which this reader was created, a consumer might be on Gen=v3 but the current is v4. In this case, source would be v4 and topic.Version = v3
 	offsetState       OffsetState
 	MaxProducedOffset *uint64 // When set, it determines the last offset produced for this topicId for an old generation
 	messageOffset     uint64
@@ -49,7 +49,7 @@ const minSeekIntervals = 2 * time.Second
 func NewSegmentReader(
 	group string,
 	topic TopicDataId,
-	sourceVersion GenVersion,
+	sourceVersion GenId,
 	offsetState OffsetState,
 	maxProducedOffset *uint64,
 	config conf.DatalogConfig,

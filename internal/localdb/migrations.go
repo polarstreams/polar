@@ -18,7 +18,7 @@ const ddl01 = `
 		status INT NOT NULL,
 		leader INT NOT NULL,
 		followers TEXT NOT NULL, -- comma separated values
-		parents TEXT NOT NULL, -- json of []GenParent, defaulting to empty array
+		parents TEXT NOT NULL, -- json of []GenId, defaulting to empty array
 		PRIMARY KEY (start_token, version)
 	);
 
@@ -39,7 +39,7 @@ const ddl01 = `
 		range_index INT NOT NULL,
 		version INT NOT NULL,
 		offset INT NOT NULL,
-		source INT NOT NULL,
+		source TEXT NOT NULL, -- json of GenId
 		PRIMARY KEY (group_name, topic, token, range_index)
 	);
 `

@@ -12,7 +12,7 @@ const (
 type Offset struct {
 	Offset  uint64     `json:"offsetValue"`
 	Version GenVersion `json:"version"`
-	Source  GenVersion `json:"source"` // The point-in-time when the offset was recorded.
+	Source  GenId      `json:"source"` // The point-in-time when the offset was recorded.
 }
 
 // Represents an identifier of an offset to be persisted
@@ -40,11 +40,11 @@ type OffsetState interface {
 	// Sets the known offset value in memory, optionally commiting it to the data store
 	Set(group string, topic string, token Token, rangeIndex RangeIndex, value Offset, commit OffsetCommitType)
 
-	// Determines whether the consumer group can be served with token data.
+	// Determines whether the consumer group can be served with data of the particular token/index/genVersion combo.
 	// It navigates through the generation tree, looking for parents.
 	//
 	// Only called one per consumer group reader.
-	CanConsumeToken(group string, topic string, gen *Generation) bool
+	CanConsume(group string, topicId TopicDataId) bool
 
 	// Reads the local max producer offset from disk
 	ProducerOffsetLocal(topic *TopicDataId) (uint64, error)
