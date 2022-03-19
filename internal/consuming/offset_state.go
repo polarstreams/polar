@@ -104,8 +104,8 @@ func (s *defaultOffsetState) processCommit() {
 			log.Err(err).Interface("offset", *kv).Msgf("Offset could not be stored in the local db")
 		} else {
 			log.Debug().Msgf(
-				"Offset stored in the local db for group %s topic '%s' %d/%d",
-				kv.Key.Group, kv.Key.Topic, kv.Key.Token, kv.Key.RangeIndex)
+				"Offset stored in the local db for group %s topic '%s' %d/%d: v%d %d",
+				kv.Key.Group, kv.Key.Topic, kv.Key.Token, kv.Key.RangeIndex, kv.Value.Version, kv.Value.Offset)
 		}
 	}
 }
@@ -140,10 +140,11 @@ func (s *defaultOffsetState) isOldValue(existing *Offset, newValue *Offset) bool
 }
 
 func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
-	gen := s.discoverer.Generation(kv.Key.Token)
+	id := GenId{ Start: kv.Key.Token, Version: kv.Value.Version }
+	gen := s.discoverer.GenerationInfo(id)
 	if gen == nil {
 		log.Error().
-			Stringer("token", kv.Key.Token).
+			Interface("id", id).
 			Msgf("Generation could not be retrieved when saving offset")
 		return
 	}
@@ -159,7 +160,9 @@ func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
 		go func() {
 			err := s.gossiper.SendCommittedOffset(ordinal, kv)
 			if err != nil {
-				log.Err(err).Msgf("Offset could not be sent to follower B%d", ordinal)
+				if topology.HasBroker(ordinal) {
+					log.Err(err).Msgf("Offset could not be sent to follower B%d", ordinal)
+				}
 			} else {
 				log.Debug().Msgf(
 					"Offset sent to follower B%d for group %s topic '%s' %d/%d",

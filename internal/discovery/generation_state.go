@@ -39,6 +39,12 @@ type GenerationState interface {
 	// Returns an error when transaction does not match
 	SetAsCommitted(token1 Token, token2 *Token, tx UUID, origin int) error
 
+	// Sets the transaction as committed, storing the history, without checking proposed values.
+	// This can only be called when no other concurrent changes can be made to the generations.
+	//
+	// Returns an error when the data could not be persisted
+	RepairCommitted(gen *Generation) error
+
 	// Determines whether there's active range containing (but not starting) the token
 	IsTokenInRange(token Token) bool
 
@@ -303,6 +309,31 @@ func (d *discoverer) SetAsCommitted(token1 Token, token2 *Token, tx UUID, origin
 	if token2 != nil {
 		delete(d.genProposed, *token2)
 	}
+	return nil
+}
+
+func (d *discoverer) RepairCommitted(gen *Generation) error {
+	if gen.ToDelete {
+		log.Panic().Msgf("Repair generations to delete is not supported")
+	}
+
+	defer d.genMutex.Unlock()
+	d.genMutex.Lock()
+
+	// Set the transaction and the generation value as committed
+	gen.Status = StatusCommitted
+
+	log.Info().Msgf(
+		"Committing [%d, %d] v%d with B%d as leader as part of repair", gen.Start, gen.End, gen.Version, gen.Leader)
+
+	if err := d.localDb.CommitGeneration(gen, nil); err != nil {
+		return err
+	}
+
+	copyAndStore(&d.generations, *gen, nil)
+
+	// Remove from proposed
+	delete(d.genProposed, gen.Start)
 	return nil
 }
 

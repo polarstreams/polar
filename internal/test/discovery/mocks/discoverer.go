@@ -228,6 +228,20 @@ func (_m *Discoverer) RegisterListener(l discovery.TopologyChangeListener) {
 	_m.Called(l)
 }
 
+// RepairCommitted provides a mock function with given fields: gen
+func (_m *Discoverer) RepairCommitted(gen *types.Generation) error {
+	ret := _m.Called(gen)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*types.Generation) error); ok {
+		r0 = rf(gen)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SetAsCommitted provides a mock function with given fields: token1, token2, tx, origin
 func (_m *Discoverer) SetAsCommitted(token1 types.Token, token2 *types.Token, tx uuid.UUID, origin int) error {
 	ret := _m.Called(token1, token2, tx, origin)

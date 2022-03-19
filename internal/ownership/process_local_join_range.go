@@ -32,6 +32,10 @@ func (o *generator) processLocalJoinRange(m *localJoinRangeGenMessage) creationE
 		return newCreationError("All reads errored for T%d generation", nextBroker.Ordinal)
 	}
 
+	if err := o.readRepairFromPeers(nextToken, nextTokenReadResults); err != nil {
+		return newNonRetryableError("There was an error repairing: %s", err.Error())
+	}
+
 	// Read state of my current token generation
 	localCommitted1, localProposed1 := o.discoverer.GenerationProposed(myToken)
 	if localCommitted1 == nil {
@@ -48,12 +52,9 @@ func (o *generator) processLocalJoinRange(m *localJoinRangeGenMessage) creationE
 		myGenReadResults[2].Committed,
 		myGenReadResults[3].Committed)
 
-	// Anti-entropy mechanisms could have provided us with the info
 	localCommitted2, localProposed2 := o.discoverer.GenerationProposed(nextToken)
-	parentVersion2 := utils.MaxVersion(
-		localCommitted2,
-		nextTokenReadResults[0].Committed,
-		nextTokenReadResults[1].Committed)
+	// Read repair should have provided us with the info
+	parentVersion2 := localCommitted2.Version
 
 	tx := uuid.New()
 	gen := &Generation{
@@ -143,6 +144,34 @@ func (o *generator) proposeInPeers(gen *Generation, peers []int, readResults []i
 		}
 		return o.gossiper.SetGenerationAsProposed(ordinal, gen, nil, getTx(read.Proposed))
 	})
+}
+
+// Amends the local information of a generation based on read results
+func (o *generator) readRepairFromPeers(token Token, readResults []interbroker.GenReadResult) error {
+	gen := o.discoverer.Generation(token)
+	version := GenVersion(0)
+
+	if gen != nil {
+		version = gen.Version
+	}
+
+	var newerGeneration *Generation
+
+	for _, read := range readResults {
+		peerGeneration := read.Committed
+		if peerGeneration == nil {
+			continue
+		}
+		if peerGeneration.Version > version {
+			version = peerGeneration.Version
+			newerGeneration = peerGeneration
+		}
+	}
+
+	if newerGeneration == nil {
+		return nil
+	}
+	return o.discoverer.RepairCommitted(newerGeneration)
 }
 
 func toErrors(channels []chan error) []error {

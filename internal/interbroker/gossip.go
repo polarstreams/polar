@@ -316,7 +316,7 @@ func (g *gossiper) requestGet(ordinal int, baseUrl string) (*http.Response, erro
 
 	resp, err := c.gossipClient.Get(g.getPeerUrl(broker, baseUrl))
 
-	if err == nil && resp.StatusCode != http.StatusOK {
+	if err == nil && resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		return nil, errors.New(resp.Status)
 	}
 
@@ -402,6 +402,10 @@ func (g *gossiper) ReadProducerOffset(ordinal int, topic *TopicDataId) (uint64, 
 		return 0, err
 	}
 	defer r.Body.Close()
+
+	if r.StatusCode == http.StatusNoContent {
+		return 0, GossipGetNotFound
+	}
 	var value uint64
 	if err = json.NewDecoder(r.Body).Decode(&value); err != nil {
 		return 0, err

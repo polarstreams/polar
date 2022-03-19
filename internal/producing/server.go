@@ -172,7 +172,7 @@ func (p *producer) getCoalescer(topicName string, token types.Token, rangeIndex 
 	})
 
 	if !loaded {
-		log.Debug().Msgf("Created coalescer for topic '%s' (%d-%d)", topicName, token, rangeIndex)
+		log.Debug().Msgf("Created coalescer for topic '%s' (%d/%d)", topicName, token, rangeIndex)
 	}
 
 	return c.(*coalescer)

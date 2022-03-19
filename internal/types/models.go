@@ -119,6 +119,11 @@ func (t *TopologyInfo) AmIIncluded() bool {
 	return t.LocalIndex != notFoundIndex
 }
 
+// Returns true when my ordinal is included in the topology
+func (t *TopologyInfo) HasBroker(ordinal int) bool {
+	return ordinal < len(t.Brokers)
+}
+
 // GetIndex gets the position of the broker in the broker slice.
 //
 // It returns NotFoundIndex when not found.

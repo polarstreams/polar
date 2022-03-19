@@ -86,7 +86,6 @@ func (w *indexFileWriter) writeLoop() {
 			}
 			lastStoredFileOffset = item.fileOffset
 		}
-
 	}
 
 	w.offsetWriter.close()

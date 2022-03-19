@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -282,6 +283,10 @@ func (g *gossiper) getProducerOffset(w http.ResponseWriter, r *http.Request, ps 
 
 	value, err := data.ReadProducerOffset(&topicId, g.config)
 	if err != nil {
+		if os.IsNotExist(err) {
+			w.WriteHeader(http.StatusNoContent)
+			return nil
+		}
 		return err
 	}
 	w.Header().Set("Content-Type", contentType)

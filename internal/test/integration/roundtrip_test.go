@@ -271,7 +271,10 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 		client.RegisterAsConsumer(6, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
 
 		// Produced a message in gen v1
-		expectOk(client.ProduceJson(0, "abc", `{"hello": "world0_0"}`, ""))
+		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_before_0_0"}`, ""))
+		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_before_0_1"}`, ""))
+		expectOk(client.ProduceJson(3, "abc", `{"hello": "world_before_3_0"}`, ""))
+		expectOk(client.ProduceJson(3, "abc", `{"hello": "world_before_3_1"}`, ""))
 
 		time.Sleep(1 * time.Second)
 		fmt.Println("------------------Updating the topology")
@@ -283,16 +286,16 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 		b4.UpdateTopologyFile(3)
 		b5.UpdateTopologyFile(3)
 
-		// Check b3-b5 can still get traffic
-		for i := 0; i < 500; i++ {
-			for ordinal := 3; ordinal < 6; ordinal++ {
-				message := fmt.Sprintf(`{"hello": "world%d_%d"}`, i, ordinal)
-				expectOkOrMessage(
-					client.ProduceJson(ordinal, "abc", message, ""),
-					"Leader for token [\\-\\d]+ could not be found",
-					"Producing on B%d", ordinal)
-			}
-		}
+		// // Check b3-b5 can still get traffic
+		// for i := 1; i < 500; i++ {
+		// 	for ordinal := 3; ordinal < 6; ordinal++ {
+		// 		message := fmt.Sprintf(`{"hello": "world_while_%d_%d"}`, ordinal, i)
+		// 		expectOkOrMessage(
+		// 			client.ProduceJson(ordinal, "abc", message, ""),
+		// 			"Leader for token [\\-\\d]+ could not be found",
+		// 			"Producing on B%d", ordinal)
+		// 	}
+		// }
 
 		const commitJoinMessage = "Committing \\[-9223372036854775808, -3074457345618259968\\] v2 with B0 as leader for joined ranges"
 		b0.WaitOutput(commitJoinMessage)
@@ -303,16 +306,16 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 		b1.LookForErrors(30)
 		b2.LookForErrors(30)
 
-		// Check b3-b5 can still route traffic
-		for i := 0; i < 500; i++ {
-			for ordinal := 3; ordinal < 6; ordinal++ {
-				message := fmt.Sprintf(`{"hello": "world%d_%d"}`, i, ordinal)
-				expectOkOrMessage(
-					client.ProduceJson(ordinal, "abc", message, ""),
-					"Leader for token [\\-\\d]+ could not be found",
-					"Producing on B%d", ordinal)
-			}
-		}
+		// // Check b3-b5 can still route traffic
+		// for i := 0; i < 500; i++ {
+		// 	for ordinal := 3; ordinal < 6; ordinal++ {
+		// 		message := fmt.Sprintf(`{"hello": "world_route_%d_%d"}`, ordinal, i)
+		// 		expectOkOrMessage(
+		// 			client.ProduceJson(ordinal, "abc", message, ""),
+		// 			"Leader for token [\\-\\d]+ could not be found",
+		// 			"Producing on B%d", ordinal)
+		// 	}
+		// }
 
 		fmt.Println("--Shutting down instances")
 
@@ -331,14 +334,14 @@ var _ = Describe("With a non-reusable cluster", func ()  {
 		b2.WaitOutput("Gossip now contains 2 clients for 2 peers")
 
 		// Produce a new message in the new generation
-		expectOk(client.ProduceJson(0, "abc", `{"hello": "world0_1"}`, ""))
+		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_after_0_0"}`, ""))
 
 		fmt.Println("--Start consuming")
 		// Start polling B0 to obtain data from T0 and T3
 		for i := 0; i < 5; i++ {
 			resp := client.ConsumerPoll(0)
 			if resp.StatusCode == http.StatusNoContent {
-				fmt.Println("--No content", i)
+				fmt.Println("--Messages", i, "<empty>")
 				resp.Body.Close()
 				continue
 			}

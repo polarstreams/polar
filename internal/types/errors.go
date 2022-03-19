@@ -2,6 +2,9 @@ package types
 
 import "fmt"
 
+// Peer processed the GET request, but didn't found the information that was looking for
+var GossipGetNotFound = fmt.Errorf("Information not found")
+
 type HttpError interface {
 	error
 	StatusCode() int
