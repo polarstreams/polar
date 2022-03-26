@@ -31,7 +31,7 @@ type chunkHeader struct {
 	BodyLength   uint32 // The amount of bytes of the body
 	Start        int64  // The offset of the first message
 	RecordLength uint32 // The amount of messages contained in the chunk
-	Crc          int32
+	Crc          uint32
 }
 
 var chunkHeaderSize = utils.BinarySize(chunkHeader{})

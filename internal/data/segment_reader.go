@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"os"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 type SegmentReader struct {
 	Items             chan ReadItem
 	basePath          string
+	headerBuf         []byte
 	config            conf.DatalogConfig
 	group             string
 	isLeader          bool // Determines whether the current broker was the leader of the generation we are reading from
@@ -32,13 +34,10 @@ type SegmentReader struct {
 	messageOffset     int64
 	fileName          string
 	nextFileName      string
-	pollDelay         time.Duration
 	segmentFile       *os.File
 	lastSeek          time.Time
 }
 
-const pollTimes = 10
-const defaultPollDelay = 500 * time.Millisecond
 const minSeekIntervals = 2 * time.Second
 
 // Returns a log file reader.
@@ -65,6 +64,7 @@ func NewSegmentReader(
 		config:            config,
 		basePath:          basePath,
 		Items:             make(chan ReadItem, 16),
+		headerBuf:         make([]byte, chunkHeaderSize),
 		Topic:             topic,
 		group:             group,
 		isLeader:          isLeader,
@@ -73,7 +73,6 @@ func NewSegmentReader(
 		messageOffset:     initialOffset,
 		offsetState:       offsetState,
 		MaxProducedOffset: maxProducedOffset,
-		pollDelay:         defaultPollDelay,
 	}
 
 	if err := s.initRead(true); err != nil {
@@ -91,17 +90,18 @@ func (s *SegmentReader) startReading() {
 	if !s.isLeader {
 		// Start early to initialize in the background
 		s.initRead(false)
-	}
 
-	// Read in loop
-	s.read()
+		s.readAsFollower()
+	} else {
+		s.read()
+	}
 }
 
 func (s *SegmentReader) read() {
 	buf := make([]byte, s.config.ReadAheadSize())
 	var closeError error = nil
-	remainingReader := bytes.NewReader(emptyBuffer)
-	lastCommit := time.Time{}
+	reader := bytes.NewReader(emptyBuffer) // The reader that gets assigned the buffer slice from disk
+	lastCommit := &time.Time{}
 
 	for item := range s.Items {
 		s.storeOffset(lastCommit)
@@ -122,23 +122,20 @@ func (s *SegmentReader) read() {
 			}
 		}
 
-		if remainingReader.Len() > 0 {
+		if reader.Len() > 0 {
 			// Consume all the read-ahead data
-			chunk := readChunk(remainingReader)
-			if chunk != nil {
-				item.SetResult(nil, chunk)
+			if s.serveChunk(reader, item) {
 				continue
 			}
 
 			// There isn't enough data remaining for a chunk.
-			if remainingReader.Len() > 0 {
-				writeIndex = remainingReader.Len()
+			if reader.Len() > 0 {
+				writeIndex = reader.Len()
 				// Drain the remaining reader and copy the bytes to the beginning of the buffer
-				remainingReader.Read(buf)
+				reader.Read(buf)
 			}
 		}
 
-		// TODO: Find a way to avoid polling each time when !isLeader
 		n, err := s.pollFile(buf[writeIndex:])
 
 		if err != nil {
@@ -152,6 +149,7 @@ func (s *SegmentReader) read() {
 			// There's no new data in this file
 			item.SetResult(nil, NewEmptyChunk(s.messageOffset))
 
+			// Check whether we have finished
 			if s.nextFileName == "" {
 				s.nextFileName = s.checkNextFile()
 			} else {
@@ -162,27 +160,26 @@ func (s *SegmentReader) read() {
 			continue
 		}
 
-		reader := bytes.NewReader(buf[:n+writeIndex])
-		chunk := readChunk(reader)
-		remainingReader = reader
+		totalWritten := writeIndex + n
+		reader = bytes.NewReader(buf[:totalWritten])
 
-		if chunk != nil {
-			item.SetResult(nil, chunk)
-			s.messageOffset += chunk.StartOffset() + int64(chunk.RecordLength())
-		} else {
+		if !s.serveChunk(reader, item) {
 			item.SetResult(nil, NewEmptyChunk(s.messageOffset))
 		}
-
-		// TODO: Support discontinuous blocks for replicas
 	}
 
 	s.close(closeError)
 }
 
-func (s *SegmentReader) storeOffset(lastCommit time.Time) {
+func (s *SegmentReader) readAsFollower() {
+	// TODO: Implement
+	s.read()
+}
+
+func (s *SegmentReader) storeOffset(lastCommit *time.Time) {
 	commitType := OffsetCommitLocal
-	if time.Since(lastCommit) >= s.config.AutoCommitInterval() {
-		lastCommit = time.Now()
+	if time.Since(*lastCommit) >= s.config.AutoCommitInterval() {
+		*lastCommit = time.Now()
 		commitType = OffsetCommitAll
 	} else if s.MaxProducedOffset != nil && s.messageOffset >= *s.MaxProducedOffset {
 		log.Debug().Str("group", s.group).Msgf("Consumed all messages of a previous generation %s", &s.Topic)
@@ -335,7 +332,8 @@ func (s *SegmentReader) swapSegmentFile() {
 	s.segmentFile = newFile
 }
 
-// Returns the number of bytes read since index
+// Returns the number of bytes read since index, only returning an error when there's something wrong
+// with the file descriptor (not on EOF)
 func (s *SegmentReader) pollFile(buffer []byte) (int, error) {
 	// buffer might not be a multiple of alignmentSize
 	bytesToAlign := len(buffer) % alignmentSize
@@ -344,27 +342,21 @@ func (s *SegmentReader) pollFile(buffer []byte) (int, error) {
 		buffer = buffer[:len(buffer)-bytesToAlign]
 	}
 
-	for i := 0; i < pollTimes; i++ {
-		n, err := s.segmentFile.Read(buffer)
+	n, err := s.segmentFile.Read(buffer)
 
-		if n != 0 {
-			return n, nil
-		}
-
-		if err == io.EOF || err == nil {
-			// We don't have the necessary data yet
-			time.Sleep(s.pollDelay)
-			continue
-		}
-
-		// There was an error related to either permission change / file not found
-		// or file descriptor closed by the OS
-		message := fmt.Sprintf("Unexpected error reading file %s in %s", s.fileName, s.basePath)
-		log.Err(err).Msg(message)
-		return 0, fmt.Errorf(message)
+	if n != 0 {
+		return n, nil
 	}
 
-	return 0, nil
+	if err == io.EOF {
+		return 0, nil
+	}
+
+	// There was an error related to either permission change / file not found
+	// or file descriptor closed by the OS
+	message := fmt.Sprintf("Unexpected error reading file %s in %s", s.fileName, s.basePath)
+	log.Err(err).Msg(message)
+	return 0, fmt.Errorf(message)
 }
 
 // closes the current file and saves the current state
@@ -378,8 +370,28 @@ func (s *SegmentReader) close(err error) {
 	}
 }
 
-func readChunk(reader *bytes.Reader) SegmentChunk {
-	header := chunkHeader{}
+func (s *SegmentReader) serveChunk(reader *bytes.Reader, item ReadItem) bool {
+	var chunk SegmentChunk = nil
+	for {
+		chunk = s.readChunk(reader)
+		if chunk == nil {
+			return false
+		}
+
+		if chunk.StartOffset() >= s.messageOffset {
+			// Skip chunks served in another session (failover / restarts / ...)
+			break
+		}
+	}
+
+	item.SetResult(nil, chunk)
+	s.messageOffset = chunk.StartOffset() + int64(chunk.RecordLength())
+	return true
+}
+
+// Returns a non-nil chunk when there was a full chunk in the reader bytes.
+// There may be remaining
+func (s *SegmentReader) readChunk(reader *bytes.Reader) SegmentChunk {
 	// Peek the next chunk flags for alignment
 	for {
 		flag, err := reader.ReadByte()
@@ -398,10 +410,9 @@ func readChunk(reader *bytes.Reader) SegmentChunk {
 		return nil
 	}
 
-	err := binary.Read(reader, conf.Endianness, &header)
-	utils.PanicIfErr(err, "Unexpected EOF when reading chunk header")
-
-	// TODO: Check head CRC
+	header, err := s.readHeader(reader)
+	// TODO: Support moving forward
+	utils.PanicIfErr(err, "CRC validation failed")
 
 	if reader.Len() < int(header.BodyLength) {
 		// Rewind to the header position
@@ -416,7 +427,29 @@ func readChunk(reader *bytes.Reader) SegmentChunk {
 	chunk := &ReadSegmentChunk{
 		buffer: readBuffer,
 		start:  header.Start,
-		length: header.BodyLength,
+		length: header.RecordLength,
 	}
 	return chunk
+}
+
+func (s *SegmentReader) readHeader(reader *bytes.Reader) (*chunkHeader, error) {
+	header := &chunkHeader{}
+	_, err := reader.Read(s.headerBuf)
+	utils.PanicIfErr(err, "Unexpected EOF when reading chunk header")
+
+	// The checksum is in the last position of the header
+	expectedChecksum := crc32.ChecksumIEEE(s.headerBuf[:chunkHeaderSize-4])
+
+	err = binary.Read(bytes.NewReader(s.headerBuf), conf.Endianness, header)
+	utils.PanicIfErr(err, "Unexpected EOF when reading chunk header from new reader")
+
+	if expectedChecksum != header.Crc {
+		return nil, fmt.Errorf("Checksum mismatch")
+	}
+
+	if header.Start < 0 {
+		return nil, fmt.Errorf("Invalid length")
+	}
+
+	return header, nil
 }

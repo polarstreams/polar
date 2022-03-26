@@ -3,6 +3,7 @@ package data
 import (
 	"bytes"
 	"encoding/binary"
+	"hash/crc32"
 	"os"
 	"path/filepath"
 	"time"
@@ -201,11 +202,16 @@ func createTestChunk(bodyLength, start, recordLength int) []byte {
 		BodyLength:   uint32(bodyLength),
 		Start:        int64(start),
 		RecordLength: uint32(recordLength),
-		Crc:          123,
+		Crc:          0,
 	}
 
 	buffer := new(bytes.Buffer)
-	binary.Write(buffer, conf.Endianness, &header)
+	binary.Write(buffer, conf.Endianness, header.Flags)
+	binary.Write(buffer, conf.Endianness, header.BodyLength)
+	binary.Write(buffer, conf.Endianness, header.Start)
+	binary.Write(buffer, conf.Endianness, header.RecordLength)
+	header.Crc = crc32.ChecksumIEEE(buffer.Bytes())
+	binary.Write(buffer, conf.Endianness, header.Crc)
 
 	body := make([]byte, bodyLength)
 	for i := 0; i < bodyLength; i++ {
@@ -245,8 +251,8 @@ func newTestReader() *SegmentReader {
 	return &SegmentReader{
 		config:      config,
 		Items:       make(chan ReadItem, 16),
-		pollDelay:   1 * time.Millisecond,
 		offsetState: offsetState,
+		headerBuf:   make([]byte, chunkHeaderSize),
 		isLeader:    true,
 	}
 }
