@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/data"
 	. "github.com/barcostreams/barco/internal/types"
 )
 
@@ -16,6 +17,10 @@ type ConsumerInfo struct {
 
 	// Only used internally
 	assignedTokens []Token
+}
+
+type ReplicationReaderFactory interface {
+	GetOrCreate(topic *TopicDataId, topology *TopologyInfo, topicGen *Generation, offsetState OffsetState) data.ReplicationReader
 }
 
 type segmentReadItem struct {

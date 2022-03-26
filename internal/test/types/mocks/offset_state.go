@@ -12,20 +12,6 @@ type OffsetState struct {
 	mock.Mock
 }
 
-// CanConsume provides a mock function with given fields: group, topicId
-func (_m *OffsetState) CanConsume(group string, topicId types.TopicDataId) bool {
-	ret := _m.Called(group, topicId)
-
-	var r0 bool
-	if rf, ok := ret.Get(0).(func(string, types.TopicDataId) bool); ok {
-		r0 = rf(group, topicId)
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-
-	return r0
-}
-
 // Get provides a mock function with given fields: group, topic, token, rangeIndex
 func (_m *OffsetState) Get(group string, topic string, token types.Token, rangeIndex types.RangeIndex) *types.Offset {
 	ret := _m.Called(group, topic, token, rangeIndex)
@@ -51,6 +37,22 @@ func (_m *OffsetState) Init() error {
 		r0 = rf()
 	} else {
 		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MinOffset provides a mock function with given fields: topic, token, index
+func (_m *OffsetState) MinOffset(topic string, token types.Token, index types.RangeIndex) *types.Offset {
+	ret := _m.Called(topic, token, index)
+
+	var r0 *types.Offset
+	if rf, ok := ret.Get(0).(func(string, types.Token, types.RangeIndex) *types.Offset); ok {
+		r0 = rf(topic, token, index)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*types.Offset)
+		}
 	}
 
 	return r0

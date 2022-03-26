@@ -247,5 +247,6 @@ func newTestReader() *SegmentReader {
 		Items:       make(chan ReadItem, 16),
 		pollDelay:   1 * time.Millisecond,
 		offsetState: offsetState,
+		isLeader:    true,
 	}
 }

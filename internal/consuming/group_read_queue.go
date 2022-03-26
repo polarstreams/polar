@@ -39,6 +39,7 @@ type groupReadQueue struct {
 	offsetState    OffsetState
 	topologyGetter discovery.TopologyGetter
 	gossiper       interbroker.Gossiper
+	rrFactory      ReplicationReaderFactory
 	config         conf.ConsumerConfig
 	readerIndex    uint16
 	readers        map[readerKey]map[string]*SegmentReader // Uses token+index as keys and map of readers per topic as values
@@ -50,6 +51,7 @@ func newGroupReadQueue(
 	offsetState OffsetState,
 	topologyGetter discovery.TopologyGetter,
 	gossiper interbroker.Gossiper,
+	rrFactory ReplicationReaderFactory,
 	config conf.ConsumerConfig,
 ) *groupReadQueue {
 	queue := &groupReadQueue{
@@ -60,6 +62,7 @@ func newGroupReadQueue(
 		offsetState:    offsetState,
 		topologyGetter: topologyGetter,
 		gossiper:       gossiper,
+		rrFactory:      rrFactory,
 		config:         config,
 	}
 	go queue.process()
@@ -433,7 +436,7 @@ func (q *groupReadQueue) createReader(
 		}
 	}
 
-	log.Debug().Msgf("Considering creating reader for token %d/%d and topic '%s'", token, index, topic)
+	log.Debug().Msgf("May create for group %s, token %d/%d and topic '%s'", q.group, token, index, topic)
 	offset := q.offsetState.Get(q.group, topic, token, index)
 
 	if offset == nil {
@@ -481,8 +484,35 @@ func (q *groupReadQueue) createReader(
 		maxProducedOffset = &value
 	}
 
-	log.Info().Msgf("Creating reader for token %d/%d and topic '%s'", token, index, topic)
-	reader, err := NewSegmentReader(q.group, topicId, source.Id(), q.offsetState, maxProducedOffset, q.config)
+	isLeader := true
+	topology := q.topologyGetter.Topology()
+	topicGen := q.topologyGetter.GenerationInfo(topicId.GenId())
+	if topicGen == nil {
+		log.Error().Msgf("Generation %s could not be retrieved to create a reader", topicId.GenId())
+		return nil
+	} else if topicGen.Leader != topology.MyOrdinal() {
+		isLeader = false
+	}
+
+	var replicationReader ReplicationReader
+	if isLeader {
+		log.Info().Msgf("Creating reader for group %s and topic %s", q.group, &topicId)
+	} else {
+		log.Info().Msgf("Creating reader for group %s and topic %s as follower", q.group, &topicId)
+		replicationReader = q.rrFactory.GetOrCreate(&topicId, topology, topicGen, q.offsetState)
+	}
+
+	reader, err := NewSegmentReader(
+		q.group,
+		isLeader,
+		replicationReader,
+		topicId,
+		source.Id(),
+		offset.Offset,
+		q.offsetState,
+		maxProducedOffset,
+		q.config)
+
 	if err != nil {
 		// reader could not be initialized, skip for now
 		return nil

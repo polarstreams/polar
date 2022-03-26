@@ -32,10 +32,11 @@ const (
 	GossipTokenInRange          = "/v1/token/%s/in-range"
 	GossipBrokerIdentifyUrl     = "/v1/broker/identify" // Send/receive my info to the peer
 	GossipHostIsUpUrl           = "/v1/broker/%s/is-up"
-	GossipConsumerGroupsInfoUrl = "/v1/consumer/groups-info"        // Send/receive consumer groups info
-	GossipConsumerOffsetUrl     = "/v1/consumer/offsets"            // Send/receive consumer offsets
-	GossipReadProducerOffsetUrl = "/v1/producer/offset/%s/%s/%s/%s" // Reads the producer offset, with params: topic, token, range, version
-	GossipGoodbyeUrl            = "/v1/goodbye"                     // Send/receive message that a broker is shutting down
+	GossipConsumerGroupsInfoUrl = "/v1/consumer/groups-info"          // Send/receive consumer groups info
+	GossipConsumerOffsetUrl     = "/v1/consumer/offsets"              // Send/receive consumer offsets
+	GossipReadProducerOffsetUrl = "/v1/producer/offset/%s/%s/%s/%s"   // Reads the producer offset, with params: topic, token, range, version
+	GossipReadFileStructureUrl  = "/v1/file-structure/%s/%s/%s/%s/%s" // Reads the file names of a given topic & offset (topic, token, range, version and offset)
+	GossipGoodbyeUrl            = "/v1/goodbye"                       // Send/receive message that a broker is shutting down
 
 	// Routing Urls (using gossip http/2 interface)
 

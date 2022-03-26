@@ -175,3 +175,20 @@ func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
 func (s *defaultOffsetState) ProducerOffsetLocal(topic *TopicDataId) (int64, error) {
 	return data.ReadProducerOffset(topic, s.config)
 }
+
+func (s *defaultOffsetState) MinOffset(topic string, token Token, index RangeIndex) *Offset {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var result *Offset
+
+	for k, value := range s.offsetMap {
+		if k.Topic == topic && k.Token == token && k.RangeIndex == index {
+			if result == nil || result.Compare(value) != CompareLessThan {
+				result = value
+			}
+		}
+	}
+
+	return result
+}

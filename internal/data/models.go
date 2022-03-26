@@ -19,6 +19,12 @@ type ReplicationDataItem interface {
 	SetResult(error)
 }
 
+type ReplicationReader interface {
+	MergeFileStructure() (bool, error) // Merge the index files content and file structures
+
+	StreamChunk()
+}
+
 type chunkHeader struct {
 	// Strict ordering, exported fields
 	Flags        byte

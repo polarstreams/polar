@@ -23,6 +23,8 @@ type SegmentReader struct {
 	basePath          string
 	config            conf.DatalogConfig
 	group             string
+	isLeader          bool // Determines whether the current broker was the leader of the generation we are reading from
+	replicationReader ReplicationReader
 	Topic             TopicDataId
 	SourceVersion     GenId // The version in which this reader was created, a consumer might be on Gen=v3 but the current is v4. In this case, source would be v4 and topic.Version = v3
 	offsetState       OffsetState
@@ -48,8 +50,11 @@ const minSeekIntervals = 2 * time.Second
 // should be a different reader instance per consumer group.
 func NewSegmentReader(
 	group string,
+	isLeader bool,
+	replicationReader ReplicationReader,
 	topic TopicDataId,
 	sourceVersion GenId,
+	initialOffset int64,
 	offsetState OffsetState,
 	maxProducedOffset *int64,
 	config conf.DatalogConfig,
@@ -62,13 +67,16 @@ func NewSegmentReader(
 		Items:             make(chan ReadItem, 16),
 		Topic:             topic,
 		group:             group,
+		isLeader:          isLeader,
+		replicationReader: replicationReader,
 		SourceVersion:     sourceVersion,
+		messageOffset:     initialOffset,
 		offsetState:       offsetState,
 		MaxProducedOffset: maxProducedOffset,
 		pollDelay:         defaultPollDelay,
 	}
 
-	if err := s.initRead(); err != nil {
+	if err := s.initRead(true); err != nil {
 		return nil, err
 	}
 
@@ -78,12 +86,12 @@ func NewSegmentReader(
 }
 
 func (s *SegmentReader) startReading() {
-	// Determine file start position
-
-	// TODO: differentiate between reading from the latest generation or the previous one
-	// TODO: read as leader or replica per generation
-
 	log.Info().Msgf("Start reading for %s", &s.Topic)
+
+	if !s.isLeader {
+		// Start early to initialize in the background
+		s.initRead(false)
+	}
 
 	// Read in loop
 	s.read()
@@ -101,7 +109,7 @@ func (s *SegmentReader) read() {
 		writeIndex := 0
 		if s.segmentFile == nil {
 			// Segment file might be nil when there was no data at the beginning
-			err := s.initRead()
+			err := s.initRead(false)
 			if err != nil {
 				// There was an error opening the file
 				item.SetResult(err, nil)
@@ -130,6 +138,7 @@ func (s *SegmentReader) read() {
 			}
 		}
 
+		// TODO: Find a way to avoid polling each time when !isLeader
 		n, err := s.pollFile(buf[writeIndex:])
 
 		if err != nil {
@@ -195,14 +204,14 @@ func (s *SegmentReader) storeOffset(lastCommit time.Time) {
 
 // Tries open the initial file and seek the correct position, returning an error when there's an
 // I/O-related error
-func (s *SegmentReader) initRead() error {
-	foundFileName, fileOffset, err := s.fullSeek()
+func (s *SegmentReader) initRead(foreground bool) error {
+	foundFileName, fileOffset, err := s.fullSeek(foreground)
 	if err != nil {
 		return err
 	}
 
 	if foundFileName == "" {
-		// No file found on folder
+		// No file found on folder, will attempt later
 		return nil
 	}
 	s.segmentFile, err = os.OpenFile(filepath.Join(s.basePath, foundFileName), conf.SegmentFileReadFlags, 0)
@@ -228,9 +237,23 @@ func (s *SegmentReader) initRead() error {
 // file for the reader.offset value.
 //
 // It returns the file name, file offset and the error (when base path not found) with no side effect.
-func (s *SegmentReader) fullSeek() (string, int64, error) {
+func (s *SegmentReader) fullSeek(foreground bool) (string, int64, error) {
 	pattern := fmt.Sprintf("%s/*.%s", s.basePath, conf.SegmentFileExtension)
+	if !s.isLeader {
+		if foreground {
+			// Avoid blocking when creating a reader
+			return "", 0, nil
+		}
+
+		if done, err := s.setStructureAsFollower(); err != nil {
+			return "", 0, err
+		} else if !done {
+			return "", 0, nil
+		}
+	}
+
 	log.Info().Msgf("Looking for files matching the pattern %s", pattern)
+
 	entries, err := filepath.Glob(pattern)
 	if err != nil {
 		log.Err(err).Msgf("There was an error listing files in %s while seeking", s.basePath)
@@ -260,6 +283,15 @@ func (s *SegmentReader) fullSeek() (string, int64, error) {
 	fileOffset := tryReadIndexFile(s.basePath, dlogFilePrefix, s.messageOffset)
 
 	return fmt.Sprintf("%s.%s", dlogFilePrefix, conf.SegmentFileExtension), fileOffset, nil
+}
+
+func (s *SegmentReader) setStructureAsFollower() (bool, error) {
+	// The path might not exist
+	if err := os.MkdirAll(s.basePath, DirectoryPermissions); err != nil {
+		return false, err
+	}
+
+	return s.replicationReader.MergeFileStructure()
 }
 
 // Returns the name of the file after the current one or an empty string

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/data"
 	"github.com/barcostreams/barco/internal/discovery"
 	"github.com/barcostreams/barco/internal/localdb"
 	"github.com/barcostreams/barco/internal/metrics"
@@ -67,6 +68,9 @@ type Gossiper interface {
 
 	// Reads the producer offset of a certain past topic generatoin
 	ReadProducerOffset(ordinal int, topic *TopicDataId) (int64, error)
+
+	// Retrieves the file structure from the peers and merge it with the local file structure
+	MergeTopicFiles(peers []int, topic *TopicDataId, offset int64) error
 
 	// Adds a listener for consumer information
 	RegisterConsumerInfoListener(listener ConsumerInfoListener)
@@ -411,6 +415,33 @@ func (g *gossiper) ReadProducerOffset(ordinal int, topic *TopicDataId) (int64, e
 		return 0, err
 	}
 	return value, err
+}
+
+func (g *gossiper) MergeTopicFiles(peers []int, topic *TopicDataId, offset int64) error {
+	url := fmt.Sprintf(
+		conf.GossipReadFileStructureUrl,
+		topic.Name,
+		topic.Token.String(),
+		topic.RangeIndex.String(),
+		topic.Version.String(),
+		strconv.FormatInt(offset, 10))
+
+	for _, ordinal := range peers {
+		r, err := g.requestGet(ordinal, url)
+		if err == nil {
+			var message TopicFileStructureMessage
+			defer r.Body.Close()
+			if err = json.NewDecoder(r.Body).Decode(&message); err != nil {
+				log.Err(err).Msgf("There was a problem decoding TopicFileStructureMessage")
+				continue
+			}
+			return data.MergeDataStructure(message.FileNames, topic, offset, g.config)
+		} else if g.IsHostUp(ordinal) {
+			log.Warn().Err(err).Msgf("There was a problem querying B%d to retrieve topic structure", ordinal)
+		}
+	}
+
+	return fmt.Errorf("All queries failed")
 }
 
 func (g *gossiper) SetGenerationAsProposed(

@@ -81,6 +81,13 @@ func (g *gossiper) acceptHttpConnections() error {
 				":token",
 				":rangeIndex",
 				":version"), ToHandle(g.getProducerOffset))
+			router.GET(fmt.Sprintf(
+				conf.GossipReadFileStructureUrl,
+				":topic",
+				":token",
+				":rangeIndex",
+				":version",
+				":offset"), ToHandle(g.getFileStructure))
 			router.GET(fmt.Sprintf(conf.GossipHostIsUpUrl, ":broker"), ToHandle(g.getBrokerIsUpHandler))
 
 			router.POST(conf.GossipConsumerGroupsInfoUrl, ToPostHandle(g.postConsumerGroupInfoHandler))
@@ -292,6 +299,46 @@ func (g *gossiper) getProducerOffset(w http.ResponseWriter, r *http.Request, ps 
 	w.Header().Set("Content-Type", contentType)
 	// Encode can't fail for a bool
 	_ = json.NewEncoder(w).Encode(value)
+	return nil
+}
+
+func (g *gossiper) getFileStructure(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	topic := ps.ByName("topic")
+	if topic == "" {
+		return fmt.Errorf("Empty topic")
+	}
+	token, err := strconv.ParseInt(ps.ByName("token"), 10, 64)
+	if err != nil {
+		return err
+	}
+	rangeIndex, err := strconv.ParseUint(ps.ByName("rangeIndex"), 10, 8)
+	if err != nil {
+		return err
+	}
+	version, err := strconv.ParseUint(ps.ByName("version"), 10, 32)
+	if err != nil {
+		return err
+	}
+	topicId := TopicDataId{
+		Name:       topic,
+		Token:      Token(token),
+		RangeIndex: RangeIndex(rangeIndex),
+		Version:    GenVersion(version),
+	}
+	offset, err := strconv.ParseInt(ps.ByName("offset"), 10, 64)
+	if err != nil {
+		return err
+	}
+
+	fileNames, err := data.ReadFileStructure(&topicId, offset, g.config)
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", contentType)
+	message := TopicFileStructureMessage{
+		FileNames: fileNames,
+	}
+	PanicIfErr(json.NewEncoder(w).Encode(message), "Unexpected error when serializing TopicFileStructureMessage")
 	return nil
 }
 

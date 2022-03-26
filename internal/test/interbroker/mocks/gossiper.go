@@ -124,6 +124,20 @@ func (_m *Gossiper) IsTokenRangeCovered(ordinal int, token types.Token) (bool, e
 	return r0, r1
 }
 
+// MergeTopicFiles provides a mock function with given fields: peers, topic, offset
+func (_m *Gossiper) MergeTopicFiles(peers []int, topic *types.TopicDataId, offset int64) error {
+	ret := _m.Called(peers, topic, offset)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func([]int, *types.TopicDataId, int64) error); ok {
+		r0 = rf(peers, topic, offset)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // OpenConnections provides a mock function with given fields:
 func (_m *Gossiper) OpenConnections() {
 	_m.Called()
