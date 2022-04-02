@@ -23,7 +23,7 @@ type ReplicationReader interface {
 	MergeFileStructure() (bool, error) // Merge the index files content and file structures
 
 	// Reads at least a chunk from a replica and returns the amount of bytes written in the buffer
-	StreamFile(filename string, startOffset int64, buf []byte) (int, error)
+	StreamFile(filename string, topic *TopicDataId, startOffset int64, buf []byte) (int, error)
 }
 
 type chunkHeader struct {

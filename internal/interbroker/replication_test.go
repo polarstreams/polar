@@ -41,8 +41,8 @@ var _ = Describe("SendToFollowers()", func() {
 
 	It("should error when both fail", func() {
 		clients := make(clientMap)
-		clients[1] = &clientInfo{dataMessages: make(chan *dataRequest)}
-		clients[2] = &clientInfo{dataMessages: make(chan *dataRequest)}
+		clients[1] = &clientInfo{dataMessages: make(chan dataRequest)}
+		clients[2] = &clientInfo{dataMessages: make(chan dataRequest)}
 		g.connections.Store(clients)
 		done := make(chan error, 1)
 		go func() {
@@ -50,10 +50,10 @@ var _ = Describe("SendToFollowers()", func() {
 		}()
 
 		request := <-clients[2].dataMessages
-		request.response <- &errorResponse{"test error", 0}
+		request.SetResponse(&errorResponse{"test error", 0})
 
 		request = <-clients[1].dataMessages
-		request.response <- &errorResponse{"test error", 0}
+		request.SetResponse(&errorResponse{"test error", 0})
 
 		var err error
 		select {
@@ -68,8 +68,8 @@ var _ = Describe("SendToFollowers()", func() {
 
 	It("should succeed when there's a single valid response", func() {
 		clients := make(clientMap)
-		clients[1] = &clientInfo{dataMessages: make(chan *dataRequest)}
-		clients[2] = &clientInfo{dataMessages: make(chan *dataRequest)}
+		clients[1] = &clientInfo{dataMessages: make(chan dataRequest)}
+		clients[2] = &clientInfo{dataMessages: make(chan dataRequest)}
 		g.connections.Store(clients)
 		done := make(chan error, 1)
 		go func() {
@@ -77,7 +77,7 @@ var _ = Describe("SendToFollowers()", func() {
 		}()
 
 		request := <-clients[2].dataMessages
-		request.response <- &emptyResponse{op: dataReplicationResponseOp}
+		request.SetResponse(&emptyResponse{op: chunkReplicationResponseOp})
 
 		var err error
 		select {

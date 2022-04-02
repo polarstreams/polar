@@ -183,7 +183,7 @@ var _ = Describe("SegmentReader", func() {
 			pollChunkOnce(s, item, 512-chunkHeaderSize)
 		})
 
-		It("should skip files with invalid names", func ()  {
+		It("should skip files with invalid names", func() {
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(2048)
 			config.On("AutoCommitInterval").Return(1 * time.Second)
@@ -332,7 +332,7 @@ func (f *rrFake) MergeFileStructure() (bool, error) {
 	return true, nil
 }
 
-func (f *rrFake) StreamFile(filename string, startOffset int64, buf []byte) (int, error) {
+func (f *rrFake) StreamFile(filename string, topic *TopicDataId, startOffset int64, buf []byte) (int, error) {
 	atomic.AddInt64(&f.streamCalled, 1)
 	return copy(buf, f.streamBuf), nil
 }

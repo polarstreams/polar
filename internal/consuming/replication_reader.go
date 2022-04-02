@@ -88,6 +88,7 @@ func (r *replicationReader) mergeFileOnce() {
 	}
 }
 
-func (r *replicationReader) StreamFile(filename string, startOffset int64, buf []byte) (int, error) {
+func (r *replicationReader) StreamFile(filename string, topic *TopicDataId, startOffset int64, buf []byte) (int, error) {
+	// r.gossiper.StreamFile(peers)
 	return 0, nil
 }

@@ -100,7 +100,7 @@ func (s *SegmentReader) startReading() {
 
 func (s *SegmentReader) read() {
 	buf := make([]byte, s.config.ReadAheadSize()) // Reusable buffer across calls
-	reader := bytes.NewReader(emptyBuffer) // The reader that gets assigned the buffer slice from disk
+	reader := bytes.NewReader(emptyBuffer)        // The reader that gets assigned the buffer slice from disk
 	var closeError error
 	lastCommit := &time.Time{}
 	nextFileName := ""
@@ -148,7 +148,7 @@ func (s *SegmentReader) read() {
 			closeError = err
 		}
 
-		if len(readBuffer) - remainderIndex <= 0 {
+		if len(readBuffer)-remainderIndex <= 0 {
 			// There's no new data in this file, check whether we have finished
 			if nextFileName == "" {
 				nextFileName, offsetGap = s.checkNextFile()
@@ -189,7 +189,7 @@ func (s *SegmentReader) handleFileGap(offsetGap *int64, reader *bytes.Reader, bu
 			s.readingFromReplica = true
 
 			// Load buffer from peer
-			n, err := s.replicationReader.StreamFile(s.fileName, s.messageOffset, buf)
+			n, err := s.replicationReader.StreamFile(s.fileName, &s.Topic, s.messageOffset, buf)
 			if err != nil {
 				log.Err(err).Msgf("File %s could not be read from replicas", s.fileName)
 			}

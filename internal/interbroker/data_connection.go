@@ -118,21 +118,28 @@ func (c *dataConnection) readDataResponses(config conf.GossipConfig, closeHandle
 			log.Warn().Msg("Invalid data header from peer, closing connection")
 			break
 		}
-
-		body := bodyBuffer[:header.BodyLength]
-		if _, err := io.ReadFull(r, body); err != nil {
-			log.Warn().Msg("There was an error reading body from peer")
-			break
-		}
-
-		response := unmarshallResponse(header, body)
-		value, ok := c.handlers.LoadAndDelete(header.StreamId)
+		handlerValue, ok := c.handlers.LoadAndDelete(header.StreamId)
 
 		if !ok {
 			log.Error().Uint16("streamId", uint16(header.StreamId)).Msg("Invalid message from the server")
 			break
 		}
-		handler := value.(func(dataResponse))
+
+		var response dataResponse
+		if header.Op == fileStreamResponseOp {
+			// Use the request buffer to read the body
+			response = unmarshalFileStreamResponse(header, r)
+		} else {
+			body := bodyBuffer[:header.BodyLength]
+			if _, err := io.ReadFull(r, body); err != nil {
+				log.Warn().Msg("There was an error reading body from peer")
+				break
+			}
+
+			response = unmarshalResponse(header, body)
+		}
+
+		handler := handlerValue.(func(dataResponse))
 		handler(response)
 	}
 
@@ -141,7 +148,7 @@ func (c *dataConnection) readDataResponses(config conf.GossipConfig, closeHandle
 
 func (c *dataConnection) writeDataRequests(config conf.GossipConfig, closeHandler func(string)) {
 	w := utils.NewBufferCap(config.MaxDataBodyLength() + headerSize + dataRequestMetaSize + conf.MaxTopicLength)
-	header := header{Version: 1, Op: dataReplicationOp}
+	header := header{Version: 1} // Reuse the header
 
 	for message := range c.cli.dataMessages {
 		w.Reset()
@@ -152,19 +159,19 @@ func (c *dataConnection) writeDataRequests(config conf.GossipConfig, closeHandle
 		message.Marshal(w, &header)
 
 		// After copying to the underlying buffer, we check whether we can use it
-		if message.ctxt.Err() != nil {
+		if message.Ctxt().Err() != nil {
 			// I can't use the message as it reached the deadline/was cancelled
 			// The message slice is out of date
 			c.streamIds <- streamId
-			//TODO: Use a better error
+			//TODO: Use a more specific error
 			//TODO: Add metrics by data connection host: replicatedMissedWrites
-			message.response <- newErrorResponse(message.ctxt.Err().Error(), &header)
+			message.SetResponse(newErrorResponse(message.Ctxt().Err().Error(), &header))
 			continue
 		}
 
 		// Create the func that will be invoked on response
 		c.handlers.Store(header.StreamId, func(res dataResponse) {
-			message.response <- res
+			message.SetResponse(res)
 			// Enqueue stream id for reuse
 			c.streamIds <- streamId
 		})

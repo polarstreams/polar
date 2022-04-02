@@ -1,6 +1,7 @@
 package interbroker
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -17,12 +18,27 @@ type streamId uint16
 // Operation codes.
 // Use fixed numbers (not iota) to make it harder to break the protocol by moving stuff around.
 const (
-	startupOp                 opcode = 1
-	readyOp                   opcode = 2
-	errorOp                   opcode = 3
-	dataReplicationOp         opcode = 4
-	dataReplicationResponseOp opcode = 5
+	startupOp                  opcode = 1
+	readyOp                    opcode = 2
+	errorOp                    opcode = 3
+	chunkReplicationOp         opcode = 4
+	chunkReplicationResponseOp opcode = 5
+	fileStreamOp               opcode = 6
+	fileStreamResponseOp       opcode = 7
 )
+
+const messageVersion = 1
+
+type dataRequest interface {
+	BodyLength() uint32
+	Ctxt() context.Context
+	Marshal(w types.StringWriter, header *header)
+	SetResponse(res dataResponse)
+}
+
+type dataResponse interface {
+	Marshal(w io.Writer) error
+}
 
 // header is the interbroker message header
 type header struct {
@@ -52,7 +68,7 @@ type dataRequestMeta struct {
 
 var dataRequestMetaSize = utils.BinarySize(dataRequestMeta{})
 
-type dataRequest struct {
+type chunkReplicationRequest struct {
 	meta         dataRequestMeta
 	topic        string
 	data         []byte
@@ -61,38 +77,48 @@ type dataRequest struct {
 	ctxt         context.Context
 }
 
-func (r *dataRequest) BodyLength() uint32 {
+func (r *chunkReplicationRequest) BodyLength() uint32 {
 	return uint32(dataRequestMetaSize) + uint32(r.meta.TopicLength) + uint32(len(r.data))
 }
 
-func (r *dataRequest) DataBlock() []byte {
+func (r *chunkReplicationRequest) DataBlock() []byte {
 	return r.data
 }
 
-func (r *dataRequest) SegmentId() int64 {
+func (r *chunkReplicationRequest) SegmentId() int64 {
 	return r.meta.SegmentId
 }
 
-func (r *dataRequest) StartOffset() int64 {
+func (r *chunkReplicationRequest) StartOffset() int64 {
 	return r.meta.StartOffset
 }
 
-func (r *dataRequest) RecordLength() uint32 {
+func (r *chunkReplicationRequest) RecordLength() uint32 {
 	return r.meta.RecordLength
 }
 
-func (r *dataRequest) SetResult(err error) {
+func (r *chunkReplicationRequest) SetResult(err error) {
 	r.appendResult <- err
 }
 
-func (r *dataRequest) Marshal(w types.StringWriter, header *header) {
+func (r *chunkReplicationRequest) Ctxt() context.Context {
+	return r.ctxt
+}
+
+func (r *chunkReplicationRequest) SetResponse(res dataResponse) {
+	r.response <- res
+}
+
+func (r *chunkReplicationRequest) Marshal(w types.StringWriter, header *header) {
+	header.Op = chunkReplicationOp
+
 	writeHeader(w, header)
 	binary.Write(w, conf.Endianness, r.meta)
 	w.WriteString(r.topic)
 	w.Write(r.data)
 }
 
-func (r *dataRequest) topicId() types.TopicDataId {
+func (r *chunkReplicationRequest) topicId() types.TopicDataId {
 	return types.TopicDataId{
 		Name:       r.topic,
 		Token:      r.meta.Token,
@@ -101,8 +127,32 @@ func (r *dataRequest) topicId() types.TopicDataId {
 	}
 }
 
-type dataResponse interface {
-	Marshal(w io.Writer) error
+// Represents a request message to stream a file starting from offset.
+type fileStreamRequest struct {
+	meta     dataRequestMeta
+	topic    string
+	fileName string
+	response chan dataResponse
+	ctxt     context.Context
+}
+
+func (r *fileStreamRequest) Marshal(w types.StringWriter, header *header) {
+	header.Op = fileStreamOp
+	writeHeader(w, header)
+	binary.Write(w, conf.Endianness, r.meta)
+	w.WriteString(r.topic)
+}
+
+func (r *fileStreamRequest) Ctxt() context.Context {
+	return r.ctxt
+}
+
+func (r *fileStreamRequest) BodyLength() uint32 {
+	return uint32(dataRequestMetaSize) + uint32(r.meta.TopicLength)
+}
+
+func (r *fileStreamRequest) SetResponse(res dataResponse) {
+	r.response <- res
 }
 
 type errorResponse struct {
@@ -118,7 +168,7 @@ func newErrorResponse(message string, requestHeader *header) *errorResponse {
 func (r *errorResponse) Marshal(w io.Writer) error {
 	message := []byte(r.message)
 	if err := writeHeader(w, &header{
-		Version:    1,
+		Version:    messageVersion,
 		StreamId:   r.streamId,
 		Op:         errorOp,
 		BodyLength: uint32(len(message)),
@@ -147,14 +197,14 @@ type emptyResponse struct {
 
 func (r *emptyResponse) Marshal(w io.Writer) error {
 	return writeHeader(w, &header{
-		Version:    1,
+		Version:    messageVersion,
 		StreamId:   r.streamId,
 		Op:         r.op,
 		BodyLength: 0,
 	})
 }
 
-func unmarshallResponse(header *header, body []byte) dataResponse {
+func unmarshalResponse(header *header, body []byte) dataResponse {
 	if header.Op == errorOp {
 		return newErrorResponse(string(body), header)
 	}
@@ -164,8 +214,39 @@ func unmarshallResponse(header *header, body []byte) dataResponse {
 	}
 }
 
+type fileStreamResponse struct {
+	// Fields for server
+	streamId streamId
+	op       opcode
+
+	// Field for both the client and the server
+	bodyLength uint32
+
+	// For the client
+	reader *bufio.Reader
+}
+
+func (r *fileStreamResponse) Marshal(w io.Writer) error {
+	return writeHeader(w, &header{
+		Version:    messageVersion,
+		StreamId:   r.streamId,
+		Op:         r.op,
+		BodyLength: r.bodyLength,
+	})
+}
+
+func unmarshalFileStreamResponse(header *header, r *bufio.Reader) dataResponse {
+	res := &fileStreamResponse{
+		streamId:   header.StreamId,
+		op:         header.Op,
+		bodyLength: header.BodyLength,
+		reader:     r, // Store the reader to get the data
+	}
+	return res
+}
+
 // decodes into a data request (without response channel)
-func unmarshalDataRequest(body []byte) (*dataRequest, error) {
+func unmarshalDataRequest(body []byte) (*chunkReplicationRequest, error) {
 	meta := dataRequestMeta{}
 	reader := bytes.NewReader(body)
 	if err := binary.Read(reader, conf.Endianness, &meta); err != nil {
@@ -175,7 +256,7 @@ func unmarshalDataRequest(body []byte) (*dataRequest, error) {
 	index := dataRequestMetaSize
 	topic := string(body[index : index+int(meta.TopicLength)])
 	index += int(meta.TopicLength)
-	request := &dataRequest{
+	request := &chunkReplicationRequest{
 		meta:  meta,
 		topic: topic,
 		data:  body[index:],

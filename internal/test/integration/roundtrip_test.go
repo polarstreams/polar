@@ -32,7 +32,7 @@ const (
 
 var _ = Describe("A 3 node cluster", func() {
 	// Note that on macos you need to manually create the alias for the loopback addresses, for example
-	// for i in {0..12}; do sudo ifconfig lo0 alias 127.0.0.$i up; done
+	// for i in {2..6}; do sudo ifconfig lo0 alias 127.0.0.$i up; done
 
 	Describe("Producing and consuming", func() {
 		var b0, b1, b2, b3, b4, b5 *TestBroker
@@ -63,7 +63,7 @@ var _ = Describe("A 3 node cluster", func() {
 			}
 		})
 
-		It("should work", func() {
+		It("should work with a healthy cluster", func() {
 			start := time.Now()
 			b0.WaitForStart()
 			b1.WaitForStart()

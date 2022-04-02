@@ -186,7 +186,7 @@ func (g *gossiper) createClient(broker BrokerInfo) *clientInfo {
 		dataConn:                 &atomic.Value{},
 		hostName:                 broker.HostName,
 		isConnected:              0,
-		dataMessages:             make(chan *dataRequest, 256),
+		dataMessages:             make(chan dataRequest, 256),
 		onHostDown:               g.onHostDown,
 		onHostUp:                 g.onHostUp,
 		readyNewDataConnection:   make(chan bool, 2),
@@ -280,7 +280,7 @@ type clientInfo struct {
 	gossipConnection         *atomic.Value // Tracked connection to determine gossip state
 	dataConn                 *atomic.Value // Client data connection
 	isConnected              int32         // Determines whether there's an open connection to gossip HTTP/2 server
-	dataMessages             chan *dataRequest
+	dataMessages             chan dataRequest
 	hostName                 string
 	isReconnecting           int32             // Used for concurrency control on reconnection
 	isLeaving                int32             // Determines whether the host is leaving the cluster

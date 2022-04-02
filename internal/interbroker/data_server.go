@@ -114,7 +114,7 @@ func (s *peerDataServer) serve() {
 			break
 		}
 
-		if header.Op != dataReplicationOp {
+		if header.Op != chunkReplicationOp {
 			s.responses <- newErrorResponse("Only data replication operations are supported", header)
 			break
 		}
@@ -138,7 +138,7 @@ func (s *peerDataServer) parseAndAppend(header *header, bodyBuf []byte, done cha
 }
 
 // append stores data as a replica
-func (s *peerDataServer) append(d *dataRequest, requestHeader *header) dataResponse {
+func (s *peerDataServer) append(d *chunkReplicationRequest, requestHeader *header) dataResponse {
 	metrics.InterbrokerReceivedGroups.Inc()
 	writer, err := s.segmentWriter(d)
 
@@ -157,10 +157,10 @@ func (s *peerDataServer) append(d *dataRequest, requestHeader *header) dataRespo
 		return newErrorResponse(fmt.Sprintf("Append error: %s", err.Error()), requestHeader)
 	}
 
-	return &emptyResponse{streamId: requestHeader.StreamId, op: dataReplicationResponseOp}
+	return &emptyResponse{streamId: requestHeader.StreamId, op: chunkReplicationResponseOp}
 }
 
-func (s *peerDataServer) segmentWriter(d *dataRequest) (*data.SegmentWriter, error) {
+func (s *peerDataServer) segmentWriter(d *chunkReplicationRequest) (*data.SegmentWriter, error) {
 	topic := d.topicId()
 	segmentId := d.meta.SegmentId
 	writer, _, err := s.replicaWriters.LoadOrStore(topic, func() (interface{}, error) {
