@@ -30,14 +30,16 @@ const (
 const messageVersion = 1
 
 type dataRequest interface {
-	BodyLength() uint32
 	Ctxt() context.Context
 	Marshal(w types.StringWriter, header *header)
 	SetResponse(res dataResponse)
+	BodyLength() uint32
 }
 
 type dataResponse interface {
 	Marshal(w io.Writer) error
+	BodyLength() uint32
+	BodyBuffer() []byte // When set, it hints that the body will not be marshalled and the buffer should be used instead
 }
 
 // header is the interbroker message header
@@ -180,6 +182,14 @@ func (r *errorResponse) Marshal(w io.Writer) error {
 	return err
 }
 
+func (r *errorResponse) BodyLength() uint32 {
+	return uint32(len(r.message))
+}
+
+func (r *errorResponse) BodyBuffer() []byte {
+	return nil
+}
+
 func writeHeader(w io.Writer, header *header) error {
 	return binary.Write(w, conf.Endianness, header)
 }
@@ -204,6 +214,14 @@ func (r *emptyResponse) Marshal(w io.Writer) error {
 	})
 }
 
+func (r *emptyResponse) BodyLength() uint32 {
+	return 0
+}
+
+func (r *emptyResponse) BodyBuffer() []byte {
+	return nil
+}
+
 func unmarshalResponse(header *header, body []byte) dataResponse {
 	if header.Op == errorOp {
 		return newErrorResponse(string(body), header)
@@ -215,15 +233,16 @@ func unmarshalResponse(header *header, body []byte) dataResponse {
 }
 
 type fileStreamResponse struct {
-	// Fields for server
-	streamId streamId
-	op       opcode
-
 	// Field for both the client and the server
+	streamId   streamId
+	op         opcode
 	bodyLength uint32
 
 	// For the client
 	reader *bufio.Reader
+
+	// For the server
+	buf []byte
 }
 
 func (r *fileStreamResponse) Marshal(w io.Writer) error {
@@ -233,6 +252,14 @@ func (r *fileStreamResponse) Marshal(w io.Writer) error {
 		Op:         r.op,
 		BodyLength: r.bodyLength,
 	})
+}
+
+func (r *fileStreamResponse) BodyLength() uint32 {
+	return r.bodyLength
+}
+
+func (r *fileStreamResponse) BodyBuffer() []byte {
+	return r.buf
 }
 
 func unmarshalFileStreamResponse(header *header, r *bufio.Reader) dataResponse {

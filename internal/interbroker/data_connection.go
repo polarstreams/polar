@@ -107,7 +107,7 @@ func sendStartupMessage(conn net.Conn) error {
 func (c *dataConnection) readDataResponses(config conf.GossipConfig, closeHandler func(string)) {
 	r := bufio.NewReaderSize(c.conn, receiveBufferSize)
 	headerBuffer := make([]byte, headerSize)
-	bodyBuffer := make([]byte, maxDataResponseSize)
+	bodyBuffer := make([]byte, maxResponseGroupSize)
 	for {
 		if n, err := io.ReadFull(r, headerBuffer); err != nil {
 			log.Warn().Err(err).Int("n", n).Msg("There was an error reading header from peer server")

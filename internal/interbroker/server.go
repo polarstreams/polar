@@ -20,7 +20,7 @@ import (
 	"golang.org/x/net/http2/h2c"
 )
 
-const maxDataResponseSize = 1024
+const maxResponseGroupSize = 16 * 1024
 const receiveBufferSize = 32 * 1024
 
 func (g *gossiper) AcceptConnections() error {

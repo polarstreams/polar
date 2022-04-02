@@ -50,10 +50,6 @@ func (g *gossiper) acceptDataConnections() error {
 }
 
 func (g *gossiper) handleData(conn net.Conn) {
-	if tcpConn, isTcp := conn.(*net.TCPConn); isTcp {
-		tcpConn.SetNoDelay(false)
-	}
-
 	s := &peerDataServer{
 		conn:           conn,
 		config:         g.config,
@@ -175,23 +171,98 @@ func (s *peerDataServer) segmentWriter(d *chunkReplicationRequest) (*data.Segmen
 }
 
 func (s *peerDataServer) writeResponses() {
-	// TODO: Coalesce responses and disable Nagle
-	w := utils.NewBufferCap(maxDataResponseSize)
-	for response := range s.responses {
+	w := utils.NewBufferCap(maxResponseGroupSize)
+
+	shouldExit := false
+	var previousItem dataResponse
+	for !shouldExit {
 		w.Reset()
-		if err := response.Marshal(w); err != nil {
-			log.Warn().Err(err).Msg("There was an error while marshalling, closing connection")
-			break
+		groupSize := 0
+		group := make([]dataResponse, 0)
+		canAddNext := true
+
+		if previousItem != nil {
+			group = append(group, previousItem)
+			groupSize += totalResponseSize(previousItem)
 		}
-		if n, err := s.conn.Write(w.Bytes()); err != nil {
-			log.Warn().Err(err).Msg("There was an error while writing to peer, closing connection")
-			break
-		} else if n < w.Len() {
-			log.Warn().Msg("Peer data server write was not able to send all the data")
-			break
+
+		// Coalesce responses w/ Nagle disabled
+		for canAddNext && !shouldExit {
+			select {
+			case response, ok := <-s.responses:
+				previousItem = nil
+				if !ok {
+					shouldExit = true
+					break
+				}
+				responseSize := totalResponseSize(response)
+				if responseSize+w.Len() > maxResponseGroupSize {
+					canAddNext = false
+					previousItem = response
+					break
+				}
+				group = append(group, response)
+				groupSize += responseSize
+
+			default:
+				canAddNext = false
+			}
+		}
+
+		bufferedResponses := make([]dataResponse, 0)
+		for _, response := range group {
+			if response.BodyBuffer() != nil {
+				// Put it in a separate list that will be sent in a separate buffer
+				bufferedResponses = append(bufferedResponses, response)
+				continue
+			}
+			if err := response.Marshal(w); err != nil {
+				log.Warn().Err(err).Msg("There was an error while marshalling, closing connection")
+				shouldExit = true
+				break
+			}
+		}
+
+		if w.Len() > 0 {
+			if _, err := s.conn.Write(w.Bytes()); err != nil {
+				log.Warn().Err(err).Msg("There was an error while writing to peer, closing connection")
+				shouldExit = true
+				break
+			}
+		}
+
+		if len(bufferedResponses) > 0 {
+			// Use the provided buffer and not copy the buffer contents
+			for _, response := range bufferedResponses {
+				// Marshal and write header
+				w.Reset()
+				if err := response.Marshal(w); err != nil {
+					log.Warn().Err(err).Msg("There was an error while marshalling, closing connection")
+					shouldExit = true
+					break
+				}
+
+				// Write header
+				_, writeErr := s.conn.Write(w.Bytes())
+
+				if writeErr == nil {
+					// Write body body
+					_, writeErr = s.conn.Write(response.BodyBuffer())
+				}
+
+				if writeErr != nil {
+					log.Warn().Err(writeErr).Msg("There was an error while writing to peer, closing connection")
+					shouldExit = true
+					break
+				}
+			}
 		}
 	}
 
 	log.Info().Msgf("Data server writer closing connection to %s", s.conn.RemoteAddr())
 	_ = s.conn.Close()
+}
+
+func totalResponseSize(r dataResponse) int {
+	return int(r.BodyLength()) + headerSize
 }

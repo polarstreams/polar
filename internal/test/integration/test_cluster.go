@@ -95,7 +95,7 @@ func (b *TestBroker) Start() {
 	Expect(err).NotTo(HaveOccurred())
 
 	mu := sync.Mutex{}
-	const maxOutput = 100
+	const maxOutput = 200
 	b.output = make([]string, 0, maxOutput)
 
 	scanner := bufio.NewScanner(stderr)
