@@ -88,6 +88,6 @@ func (r *replicationReader) mergeFileOnce() {
 	}
 }
 
-func (r *replicationReader) StreamChunk() {
-
+func (r *replicationReader) StreamFile(filename string, startOffset int64, buf []byte) (int, error) {
+	return 0, nil
 }

@@ -6,6 +6,7 @@ import (
 	"hash/crc32"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
@@ -28,7 +29,7 @@ var _ = Describe("SegmentReader", func() {
 			go s.read()
 
 			item := newTestReadItem()
-			pollChunkAndAssert(s, item, 0)
+			pollChunkOnce(s, item, 0)
 		})
 
 		It("should support partial chunks", func() {
@@ -38,22 +39,22 @@ var _ = Describe("SegmentReader", func() {
 
 			s.segmentFile, err = os.Open(file.Name())
 			Expect(err).NotTo(HaveOccurred())
-			chunkBuffer := createTestChunk(50, 10, 100)
+			chunkBuffer := createTestChunk(50, 0, 100)
 			file.Write(chunkBuffer[:2])
 
 			go s.read()
 
 			item := newTestReadItem()
 			// Initially is empty
-			pollChunkAndAssert(s, item, 0)
+			pollChunkOnce(s, item, 0)
 
 			// Write the rest of the header: still empty result
 			file.Write(chunkBuffer[2:chunkHeaderSize])
-			pollChunkAndAssert(s, item, 0)
+			pollChunkOnce(s, item, 0)
 
 			// Write the rest of the body: data is returned
 			file.Write(chunkBuffer[chunkHeaderSize:])
-			pollChunkAndAssert(s, item, 50)
+			pollChunkOnce(s, item, 50)
 
 			close(s.Items)
 		})
@@ -92,13 +93,15 @@ var _ = Describe("SegmentReader", func() {
 			defer close(s.Items)
 
 			item := newTestReadItem()
-			pollChunkAndAssert(s, item, 512-chunkHeaderSize)
+			pollChunkOnce(s, item, 0)
+			pollChunkOnce(s, item, 512-chunkHeaderSize)
 			// First empty poll
-			pollChunkAndAssert(s, item, 0)
+			pollChunkOnce(s, item, 0)
+			pollChunkOnce(s, item, 0)
 			// Second empty poll swaps the file
-			pollChunkAndAssert(s, item, 0)
-			pollChunkAndAssert(s, item, 512*2-chunkHeaderSize)
-			pollChunkAndAssert(s, item, 512-chunkHeaderSize)
+			pollChunkOnce(s, item, 0)
+			pollChunkOnce(s, item, 512*2-chunkHeaderSize)
+			pollChunkOnce(s, item, 512-chunkHeaderSize)
 		})
 
 		It("should read alignment", func() {
@@ -131,10 +134,12 @@ var _ = Describe("SegmentReader", func() {
 			defer close(s.Items)
 
 			item := newTestReadItem()
-			pollChunkAndAssert(s, item, 510-chunkHeaderSize)
+			pollChunkOnce(s, item, 0)
+			pollChunkOnce(s, item, 510-chunkHeaderSize)
 			// First empty poll
-			pollChunkAndAssert(s, item, 512*2-3-chunkHeaderSize)
-			pollChunkAndAssert(s, item, 0)
+			pollChunkOnce(s, item, 0)
+			pollChunkOnce(s, item, 512*2-3-chunkHeaderSize)
+			pollChunkOnce(s, item, 0)
 		})
 
 		It("should poll until there's new data", func() {
@@ -164,17 +169,139 @@ var _ = Describe("SegmentReader", func() {
 			defer close(s.Items)
 
 			item := newTestReadItem()
-			pollChunkAndAssert(s, item, 510-chunkHeaderSize)
-			pollChunkAndAssert(s, item, 0)
-			pollChunkAndAssert(s, item, 0)
-			pollChunkAndAssert(s, item, 0)
+			pollChunkOnce(s, item, 0)
+			pollChunkOnce(s, item, 510-chunkHeaderSize)
+			pollChunkOnce(s, item, 0)
+			pollChunkOnce(s, item, 0)
+			pollChunkOnce(s, item, 0)
 
 			// New data
 			_, err = file.Write(createTestChunk(512-chunkHeaderSize, 20, 30))
 			Expect(err).NotTo(HaveOccurred())
 			file.Sync()
 
-			pollChunkAndAssert(s, item, 512-chunkHeaderSize)
+			pollChunkOnce(s, item, 512-chunkHeaderSize)
+		})
+
+		It("should skip files with invalid names", func ()  {
+			config := new(mocks.Config)
+			config.On("ReadAheadSize").Return(2048)
+			config.On("AutoCommitInterval").Return(1 * time.Second)
+
+			dir, err := os.MkdirTemp("", "poll_gap_empty_file_*")
+			Expect(err).NotTo(HaveOccurred())
+			file1, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			Expect(err).NotTo(HaveOccurred())
+			file2, err := os.Create(filepath.Join(dir, "invalid.dlog"))
+			Expect(err).NotTo(HaveOccurred())
+			file3, err := os.Create(filepath.Join(dir, "00050.dlog"))
+			Expect(err).NotTo(HaveOccurred())
+			defer file1.Close()
+			defer file2.Close()
+			defer file3.Close()
+
+			// Write a chunk, followed by an alignment buffer
+			file1.Write(createAlignedChunk(100, 0, 50))
+			file3.Write(createAlignedChunk(200, 50, 50))
+			file1.Sync()
+			file3.Sync()
+
+			s := newTestReader()
+			s.config = config
+			s.basePath = dir
+
+			go s.read()
+			defer close(s.Items)
+
+			item := newTestReadItem()
+			pollChunk(s, item, 100)
+			pollChunk(s, item, 200)
+		})
+
+		It("should recognize gaps from chunks", func() {
+			config := new(mocks.Config)
+			config.On("ReadAheadSize").Return(2048)
+			config.On("AutoCommitInterval").Return(1 * time.Second)
+
+			dir, err := os.MkdirTemp("", "poll_stream_*")
+			Expect(err).NotTo(HaveOccurred())
+			file, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			Expect(err).NotTo(HaveOccurred())
+			defer file.Close()
+
+			// Write a chunk, followed by an alignment buffer
+			_, err = file.Write(createAlignedChunk(1200, 0, 20))
+			Expect(err).NotTo(HaveOccurred())
+			file.Write(createAlignedChunk(200, 50, 50))
+			file.Write(createAlignedChunk(300, 100, 120))
+
+			file.Sync()
+
+			rr := &rrFake{
+				// fake chunks starting at 20 and finishing at 50
+				streamBuf: append(createTestChunk(100, 20, 15), createTestChunk(150, 35, 15)...),
+			}
+
+			s := newTestReader()
+			s.replicationReader = rr
+			s.config = config
+			s.basePath = dir
+
+			go s.read()
+			defer close(s.Items)
+
+			item := newTestReadItem()
+			pollChunk(s, item, 1200)
+			pollChunk(s, item, 100)
+			pollChunk(s, item, 150)
+			Expect(atomic.LoadInt64(&rr.streamCalled)).To(BeNumerically(">", int64(0)))
+
+			pollChunk(s, item, 200)
+			pollChunk(s, item, 300)
+		})
+
+		It("should recognize gaps from empty files", func() {
+			config := new(mocks.Config)
+			config.On("ReadAheadSize").Return(2048)
+			config.On("AutoCommitInterval").Return(1 * time.Second)
+
+			dir, err := os.MkdirTemp("", "poll_gap_empty_file_*")
+			Expect(err).NotTo(HaveOccurred())
+			file1, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			Expect(err).NotTo(HaveOccurred())
+			file2, err := os.Create(filepath.Join(dir, "00020.dlog"))
+			Expect(err).NotTo(HaveOccurred())
+			file3, err := os.Create(filepath.Join(dir, "00050.dlog"))
+			Expect(err).NotTo(HaveOccurred())
+			defer file1.Close()
+			defer file2.Close()
+			defer file3.Close()
+
+			// Write a chunk, followed by an alignment buffer
+			_, err = file1.Write(createAlignedChunk(100, 0, 20))
+			Expect(err).NotTo(HaveOccurred())
+			file3.Write(createAlignedChunk(300, 50, 50))
+
+			file1.Sync()
+
+			rr := &rrFake{
+				// fake chunk starting at 20 and finishing at 50
+				streamBuf: createTestChunk(200, 20, 30),
+			}
+
+			s := newTestReader()
+			s.replicationReader = rr
+			s.config = config
+			s.basePath = dir
+
+			go s.read()
+			defer close(s.Items)
+
+			item := newTestReadItem()
+			pollChunk(s, item, 100)
+			pollChunk(s, item, 200)
+			pollChunk(s, item, 300)
+			Expect(atomic.LoadInt64(&rr.streamCalled)).To(BeNumerically(">", int64(0)))
 		})
 	})
 })
@@ -194,6 +321,20 @@ func newTestReadItem() *testReadItem {
 func (r *testReadItem) SetResult(err error, chunk SegmentChunk) {
 	r.chunkResult <- chunk
 	r.errorResult <- err
+}
+
+type rrFake struct {
+	streamBuf    []byte
+	streamCalled int64
+}
+
+func (f *rrFake) MergeFileStructure() (bool, error) {
+	return true, nil
+}
+
+func (f *rrFake) StreamFile(filename string, startOffset int64, buf []byte) (int, error) {
+	atomic.AddInt64(&f.streamCalled, 1)
+	return copy(buf, f.streamBuf), nil
 }
 
 func createTestChunk(bodyLength, start, recordLength int) []byte {
@@ -222,7 +363,50 @@ func createTestChunk(bodyLength, start, recordLength int) []byte {
 	return buffer.Bytes()
 }
 
-func pollChunkAndAssert(s *SegmentReader, item *testReadItem, bodyLength int) {
+func createAlignedChunk(bodyLength, start, recordLength int) []byte {
+	chunk := createTestChunk(bodyLength, start, recordLength)
+	rem := len(chunk) % alignmentSize
+
+	if rem == 0 {
+		return chunk
+	}
+
+	totalSize := len(chunk) + alignmentSize - rem
+	result := make([]byte, totalSize)
+	n := copy(result, chunk)
+
+	for i := n; i < totalSize; i++ {
+		result[i] = alignmentFlag
+	}
+	return result
+}
+
+// Polls multiple times, skiping empty chunks
+func pollChunk(s *SegmentReader, item *testReadItem, bodyLength int) {
+	Expect(bodyLength).To(BeNumerically(">", 0), "bodyLength must be greater than 0")
+	var chunk SegmentChunk
+	for i := 0; i < 10; i++ {
+		s.Items <- item
+		chunk = <-item.chunkResult
+		err := <-item.errorResult
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(chunk).ToNot(BeNil())
+		if len(chunk.DataBlock()) > 0 {
+			break
+		}
+	}
+
+	Expect(chunk.DataBlock()).To(HaveLen(bodyLength))
+	expectedBody := make([]byte, bodyLength)
+	for i := 0; i < bodyLength; i++ {
+		expectedBody[i] = byte(i)
+	}
+
+	Expect(chunk.DataBlock()).To(Equal(expectedBody))
+}
+
+func pollChunkOnce(s *SegmentReader, item *testReadItem, bodyLength int) {
 	s.Items <- item
 	chunk := <-item.chunkResult
 	err := <-item.errorResult

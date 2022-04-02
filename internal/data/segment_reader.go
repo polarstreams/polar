@@ -20,22 +20,25 @@ import (
 )
 
 type SegmentReader struct {
-	Items             chan ReadItem
-	basePath          string
-	headerBuf         []byte
-	config            conf.DatalogConfig
-	group             string
-	isLeader          bool // Determines whether the current broker was the leader of the generation we are reading from
-	replicationReader ReplicationReader
-	Topic             TopicDataId
-	SourceVersion     GenId // The version in which this reader was created, a consumer might be on Gen=v3 but the current is v4. In this case, source would be v4 and topic.Version = v3
-	offsetState       OffsetState
-	MaxProducedOffset *int64 // When set, it determines the last offset produced for this topicId for an old generation
-	messageOffset     int64
-	fileName          string
-	nextFileName      string
-	segmentFile       *os.File
-	lastSeek          time.Time
+	Items                 chan ReadItem
+	basePath              string
+	headerBuf             []byte
+	config                conf.DatalogConfig
+	group                 string
+	isLeader              bool // Determines whether the current broker was the leader of the generation we are reading from
+	replicationReader     ReplicationReader
+	Topic                 TopicDataId
+	SourceVersion         GenId // The version in which this reader was created, a consumer might be on Gen=v3 but the current is v4. In this case, source would be v4 and topic.Version = v3
+	offsetState           OffsetState
+	MaxProducedOffset     *int64 // When set, it determines the last offset produced for this topicId for an old generation
+	messageOffset         int64
+	fileName              string
+	segmentFile           *os.File
+	lastSeek              time.Time
+	lastChunkFilePosition int64 // The file offset where the last chunk starts
+	filePosition          int64
+	skipFromFile          int64 // The number of bytes to skip after reading from file (to seek with alignment)
+	readingFromReplica    bool
 }
 
 const minSeekIntervals = 2 * time.Second
@@ -90,90 +93,126 @@ func (s *SegmentReader) startReading() {
 	if !s.isLeader {
 		// Start early to initialize in the background
 		s.initRead(false)
-
-		s.readAsFollower()
-	} else {
-		s.read()
 	}
+
+	s.read()
 }
 
 func (s *SegmentReader) read() {
-	buf := make([]byte, s.config.ReadAheadSize())
-	var closeError error = nil
+	buf := make([]byte, s.config.ReadAheadSize()) // Reusable buffer across calls
 	reader := bytes.NewReader(emptyBuffer) // The reader that gets assigned the buffer slice from disk
+	var closeError error
 	lastCommit := &time.Time{}
+	nextFileName := ""
+	offsetGap := int64(0)
 
 	for item := range s.Items {
 		s.storeOffset(lastCommit)
 
-		writeIndex := 0
-		if s.segmentFile == nil {
-			// Segment file might be nil when there was no data at the beginning
-			err := s.initRead(false)
-			if err != nil {
-				// There was an error opening the file
-				item.SetResult(err, nil)
-				continue
-			}
-			if s.segmentFile == nil {
-				// There's still no file to read
-				item.SetResult(nil, NewEmptyChunk(s.messageOffset))
-				continue
-			}
-		}
+		remainderIndex := 0
+		var chunk SegmentChunk
 
 		if reader.Len() > 0 {
 			// Consume all the read-ahead data
-			if s.serveChunk(reader, item) {
+			var gap int64
+			chunk, gap = s.consumeReadAhead(reader, buf, &remainderIndex)
+
+			if gap > 0 {
+				offsetGap = gap // There's a gap in the current buffer, override
+			}
+		}
+
+		if chunk != nil {
+			item.SetResult(nil, chunk)
+			continue
+		}
+
+		item.SetResult(nil, NewEmptyChunk(s.messageOffset))
+
+		if s.handleFileGap(&offsetGap, reader, buf) {
+			continue
+		}
+
+		if s.segmentFile == nil {
+			// Segment file might be nil when there was no data initially
+			s.initRead(false)
+			if s.segmentFile == nil {
 				continue
 			}
-
-			// There isn't enough data remaining for a chunk.
-			if reader.Len() > 0 {
-				writeIndex = reader.Len()
-				// Drain the remaining reader and copy the bytes to the beginning of the buffer
-				reader.Read(buf)
-			}
 		}
 
-		n, err := s.pollFile(buf[writeIndex:])
+		readBuffer, err := s.pollFile(buf, remainderIndex)
 
 		if err != nil {
-			// There's no point in trying to continue reading
+			// TODO: Determine what to do in case of error
 			closeError = err
-			item.SetResult(err, nil)
-			break
 		}
 
-		if n == 0 {
-			// There's no new data in this file
-			item.SetResult(nil, NewEmptyChunk(s.messageOffset))
-
-			// Check whether we have finished
-			if s.nextFileName == "" {
-				s.nextFileName = s.checkNextFile()
+		if len(readBuffer) - remainderIndex <= 0 {
+			// There's no new data in this file, check whether we have finished
+			if nextFileName == "" {
+				nextFileName, offsetGap = s.checkNextFile()
 			} else {
 				// We've polled the previous file after discovering a new one
 				// We can safely switch the active file
-				s.swapSegmentFile()
+				s.swapSegmentFile(&nextFileName)
 			}
 			continue
 		}
 
-		totalWritten := writeIndex + n
-		reader = bytes.NewReader(buf[:totalWritten])
-
-		if !s.serveChunk(reader, item) {
-			item.SetResult(nil, NewEmptyChunk(s.messageOffset))
-		}
+		reader.Reset(readBuffer)
 	}
 
 	s.close(closeError)
 }
 
-func (s *SegmentReader) readAsFollower() {
-	// TODO: Implement
-	s.read()
+func (s *SegmentReader) consumeReadAhead(reader *bytes.Reader, buf []byte, remainderIndex *int) (SegmentChunk, int64) {
+	var offsetGap int64
+	chunk := s.readChunk(reader, &offsetGap)
+
+	if chunk == nil && reader.Len() > 0 {
+		// There isn't enough data remaining for a chunk.
+		*remainderIndex = reader.Len()
+		// Drain the remaining reader and copy the bytes to the beginning of the buffer
+		reader.Read(buf)
+	}
+
+	return chunk, offsetGap
+}
+
+// Returns true when there was a file gap and it attempted read from a replica
+func (s *SegmentReader) handleFileGap(offsetGap *int64, reader *bytes.Reader, buf []byte) bool {
+	gap := *offsetGap
+	if gap > 0 {
+		if s.messageOffset < gap {
+			log.Debug().Msgf("Handling file gap in %s/%s", s.basePath, s.fileName)
+			s.readingFromReplica = true
+
+			// Load buffer from peer
+			n, err := s.replicationReader.StreamFile(s.fileName, s.messageOffset, buf)
+			if err != nil {
+				log.Err(err).Msgf("File %s could not be read from replicas", s.fileName)
+			}
+
+			reader.Reset(buf[:n])
+
+			return true
+		}
+
+		*offsetGap = 0
+		s.readingFromReplica = false
+
+		// Reset file position: aligned seek
+		s.skipFromFile = s.lastChunkFilePosition % alignmentSize
+		fileOffset := s.lastChunkFilePosition - s.skipFromFile // Align position
+
+		log.Info().Msgf("Seeking position %d of file %s/%s after gap", fileOffset, s.basePath, s.fileName)
+		if _, err := s.segmentFile.Seek(fileOffset, io.SeekStart); err != nil {
+			log.Err(err).Msgf("Could not seek position in %s in %s", s.fileName, s.basePath)
+		}
+	}
+
+	return false
 }
 
 func (s *SegmentReader) storeOffset(lastCommit *time.Time) {
@@ -227,6 +266,20 @@ func (s *SegmentReader) initRead(foreground bool) error {
 		log.Info().Msgf("Started reading file %s from position 0", foundFileName)
 	}
 
+	return nil
+}
+
+func (s *SegmentReader) open(fileName string) error {
+	file, err := os.OpenFile(filepath.Join(s.basePath, fileName), conf.SegmentFileReadFlags, 0)
+	if err != nil {
+		log.Err(err).Msgf("File %s in %s could not be opened by reader", fileName, s.basePath)
+		return err
+	}
+	s.segmentFile = file
+	s.fileName = fileName
+	s.lastChunkFilePosition = 0
+	s.filePosition = 0
+	s.skipFromFile = 0
 	return nil
 }
 
@@ -291,72 +344,106 @@ func (s *SegmentReader) setStructureAsFollower() (bool, error) {
 	return s.replicationReader.MergeFileStructure()
 }
 
-// Returns the name of the file after the current one or an empty string
-func (s *SegmentReader) checkNextFile() string {
+// Returns the name of the file after the current one or an empty string,
+// along with offset representing the gap in the local file system
+func (s *SegmentReader) checkNextFile() (string, int64) {
 	entries, err := filepath.Glob(fmt.Sprintf("%s/*.%s", s.basePath, conf.SegmentFileExtension))
 	if err != nil {
 		log.Err(err).Msgf("There was an error listing files in %s checking for next file", s.basePath)
-		return ""
+		return "", 0
 	}
 
 	sort.Strings(entries)
-	nextIndex := -1
+	foundCurrent := false
+	nextFileName := ""
+	offsetGap := int64(0)
 
-	for i, entry := range entries {
-		if filepath.Base(entry) == s.fileName {
-			nextIndex = i + 1
+	for _, entry := range entries {
+		fileName := filepath.Base(entry)
+		if foundCurrent {
+			// Check file pattern
+			nameWithoutExt := fileName[:len(fileName)-len(conf.SegmentFileExtension)-1]
+			offset, err := strconv.ParseInt(nameWithoutExt, 10, 64)
+			if err != nil {
+				// The filename is invalid, skip it
+				continue
+			}
+			if offset > s.messageOffset {
+				offsetGap = offset
+			}
+			nextFileName = fileName
 			break
+		}
+
+		if fileName == s.fileName {
+			foundCurrent = true
 		}
 	}
 
-	if nextIndex > 0 && len(entries) > nextIndex {
-		return filepath.Base(entries[nextIndex])
+	if offsetGap > 0 {
+		return "", offsetGap
 	}
 
-	return ""
+	if nextFileName != "" {
+		return nextFileName, 0
+	}
+
+	if s.MaxProducedOffset != nil && s.messageOffset < *s.MaxProducedOffset {
+		// There's an expected file that was not found
+		return "", *s.MaxProducedOffset
+	}
+
+	return "", 0
 }
 
 // Closes the previous segment file and opens the new one, setting is as the current one.
-func (s *SegmentReader) swapSegmentFile() {
-	newFile, err := os.OpenFile(filepath.Join(s.basePath, s.nextFileName), conf.SegmentFileReadFlags, 0)
+func (s *SegmentReader) swapSegmentFile(nextFileName *string) {
+	previousFile := s.segmentFile
+	err := s.open(*nextFileName)
+	*nextFileName = ""
+
 	if err != nil {
 		log.Err(err).Msgf("Next file could not be opened")
 		return
 	}
-	s.fileName = s.nextFileName
-	s.nextFileName = ""
 
-	if err := s.segmentFile.Close(); err != nil {
+	if err := previousFile.Close(); err != nil {
 		log.Warn().Err(err).Msgf("There was an error when closing file in %s", s.basePath)
 	}
-	s.segmentFile = newFile
 }
 
 // Returns the number of bytes read since index, only returning an error when there's something wrong
 // with the file descriptor (not on EOF)
-func (s *SegmentReader) pollFile(buffer []byte) (int, error) {
-	// buffer might not be a multiple of alignmentSize
-	bytesToAlign := len(buffer) % alignmentSize
+func (s *SegmentReader) pollFile(buf []byte, remainderIndex int) ([]byte, error) {
+	fileBuffer := buf[remainderIndex:]
+	bytesToAlign := len(fileBuffer) % alignmentSize
+
 	if bytesToAlign > 0 {
 		// Crop the last bytes to make to compatible with DIRECT I/O
-		buffer = buffer[:len(buffer)-bytesToAlign]
+		fileBuffer = fileBuffer[:len(fileBuffer)-bytesToAlign]
 	}
 
-	n, err := s.segmentFile.Read(buffer)
+	n, err := s.segmentFile.Read(fileBuffer)
+	totalRead := remainderIndex + n
 
-	if n != 0 {
-		return n, nil
-	}
-
-	if err == io.EOF {
-		return 0, nil
+	if totalRead > 0 || err == io.EOF {
+		if s.skipFromFile > 0 {
+			// There was a previous seek that needed to be aligned
+			skip := s.skipFromFile
+			s.skipFromFile = 0
+			if skip <= int64(n) {
+				return buf[skip:totalRead], nil
+			}
+		}
+		// Ignore EOF error
+		return buf[:totalRead], nil
 	}
 
 	// There was an error related to either permission change / file not found
 	// or file descriptor closed by the OS
 	message := fmt.Sprintf("Unexpected error reading file %s in %s", s.fileName, s.basePath)
 	log.Err(err).Msg(message)
-	return 0, fmt.Errorf(message)
+	return nil, fmt.Errorf(message)
 }
 
 // closes the current file and saves the current state
@@ -370,33 +457,52 @@ func (s *SegmentReader) close(err error) {
 	}
 }
 
-func (s *SegmentReader) serveChunk(reader *bytes.Reader, item ReadItem) bool {
+// Reads the following chunks until finding the one with expected start offset
+func (s *SegmentReader) readChunk(reader *bytes.Reader, offsetGap *int64) SegmentChunk {
 	var chunk SegmentChunk = nil
+
+	// Skip chunks served in another session (failover / restarts / ...)
 	for {
-		chunk = s.readChunk(reader)
+		var n int
+		initialFilePosition := s.filePosition
+		n, chunk = s.readSingleChunk(reader)
+
+		if !s.readingFromReplica {
+			s.filePosition += int64(n)
+		}
 		if chunk == nil {
-			return false
+			return nil
 		}
 
-		if chunk.StartOffset() >= s.messageOffset {
-			// Skip chunks served in another session (failover / restarts / ...)
+		// Store the last known position of a valid chunk
+		if !s.readingFromReplica {
+			s.lastChunkFilePosition = initialFilePosition
+		}
+
+		if chunk.StartOffset() > s.messageOffset {
+			// There's a gap in the file, we need
+			*offsetGap = chunk.StartOffset()
+			return nil
+		}
+
+		if chunk.StartOffset() == s.messageOffset {
 			break
 		}
 	}
 
-	item.SetResult(nil, chunk)
 	s.messageOffset = chunk.StartOffset() + int64(chunk.RecordLength())
-	return true
+	return chunk
 }
 
 // Returns a non-nil chunk when there was a full chunk in the reader bytes.
 // There may be remaining
-func (s *SegmentReader) readChunk(reader *bytes.Reader) SegmentChunk {
+func (s *SegmentReader) readSingleChunk(reader *bytes.Reader) (int, SegmentChunk) {
 	// Peek the next chunk flags for alignment
+	n := 0
 	for {
 		flag, err := reader.ReadByte()
 		if err == io.EOF {
-			return nil
+			return n, nil
 		}
 		utils.PanicIfErr(err, "Unexpected error when reading chunk header")
 		if flag != alignmentFlag {
@@ -404,32 +510,36 @@ func (s *SegmentReader) readChunk(reader *bytes.Reader) SegmentChunk {
 			_ = reader.UnreadByte()
 			break
 		}
+		n++
 	}
 
 	if reader.Len() < chunkHeaderSize {
-		return nil
+		return n, nil
 	}
 
 	header, err := s.readHeader(reader)
-	// TODO: Support moving forward
+	// TODO: Support moving forward for corrupted files
 	utils.PanicIfErr(err, "CRC validation failed")
 
 	if reader.Len() < int(header.BodyLength) {
 		// Rewind to the header position
 		reader.Seek(-int64(chunkHeaderSize), io.SeekCurrent)
-		return nil
+		return n, nil
 	}
+
+	n += chunkHeaderSize
 
 	// TODO: read buffer pooling
 	readBuffer := make([]byte, int(header.BodyLength))
-	_, _ = reader.Read(readBuffer)
+	nBody, _ := reader.Read(readBuffer)
+	n += nBody
 
 	chunk := &ReadSegmentChunk{
 		buffer: readBuffer,
 		start:  header.Start,
 		length: header.RecordLength,
 	}
-	return chunk
+	return n, chunk
 }
 
 func (s *SegmentReader) readHeader(reader *bytes.Reader) (*chunkHeader, error) {

@@ -242,6 +242,20 @@ func (_m *Config) IndexFilePeriodBytes() int {
 	return r0
 }
 
+// Init provides a mock function with given fields:
+func (_m *Config) Init() error {
+	ret := _m.Called()
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func() error); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // ListenOnAllAddresses provides a mock function with given fields:
 func (_m *Config) ListenOnAllAddresses() bool {
 	ret := _m.Called()

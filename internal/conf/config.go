@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -37,6 +38,7 @@ var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
 
 // Config represents the application configuration
 type Config interface {
+	Initializer
 	LocalDbConfig
 	GossipConfig
 	ProducerConfig
@@ -136,6 +138,13 @@ func parseHostName(hostName string) (baseHostName string, ordinal int) {
 	m := matches[0]
 	ordinal, _ = strconv.Atoi(m[2])
 	return m[1] + "-", ordinal
+}
+
+func (c *config) Init() error {
+	if c.ReadAheadSize() < c.MaxGroupSize() {
+		return fmt.Errorf("ReadAheadSize can be lower than MaxGroupSize")
+	}
+	return nil
 }
 
 func (c *config) ProducerPort() int {

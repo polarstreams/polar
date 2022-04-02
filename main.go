@@ -42,6 +42,10 @@ func main() {
 		log.Info().Msg("Starting Barco in dev mode")
 	}
 
+	if err := config.Init(); err != nil {
+		log.Fatal().Err(err).Msg("Configuration not valid, exiting")
+	}
+
 	log.Info().Msgf("Using home dir as %s", config.HomePath())
 	config.CreateAllDirs()
 
