@@ -3,6 +3,7 @@ package interbroker
 import (
 	"fmt"
 	"io"
+	"math"
 	"time"
 
 	. "github.com/barcostreams/barco/internal/types"
@@ -125,12 +126,13 @@ func (g *gossiper) StreamFile(
 
 	request := &fileStreamRequest{
 		meta: dataRequestMeta{
-			SegmentId:   segmentId,
-			Token:       topic.Token,
-			GenVersion:  topic.Version,
-			RangeIndex:  topic.RangeIndex,
-			StartOffset: startOffset,
-			TopicLength: uint8(len(topic.Name)),
+			SegmentId:    segmentId,
+			Token:        topic.Token,
+			GenVersion:   topic.Version,
+			RangeIndex:   topic.RangeIndex,
+			StartOffset:  startOffset,
+			RecordLength: math.MaxInt32, // TODO: Set it to the amount of records needed
+			TopicLength:  uint8(len(topic.Name)),
 		},
 		topic:    topic.Name,
 		ctxt:     ctxt,

@@ -22,7 +22,7 @@ type indexOffset struct {
 
 var indexItemSize = utils.BinarySize(indexOffset{})
 
-// Reads the file offset from the index file
+// Gets the known highest file offset from the index file that contains message offset
 func tryReadIndexFile(basePath string, filePrefix string, messageOffset int64) int64 {
 	// Use the OS page cache for reading index file
 	// as it will simplify the logic needed. The page cache usage should be neglegible for this
@@ -32,6 +32,7 @@ func tryReadIndexFile(basePath string, filePrefix string, messageOffset int64) i
 	fileOffset := int64(0)
 
 	if err != nil {
+		log.Warn().Msgf("Could not read index file at %s", indexFileName)
 		// No index file
 		return fileOffset
 	}

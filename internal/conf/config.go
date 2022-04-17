@@ -71,6 +71,7 @@ type DatalogConfig interface {
 	AutoCommitInterval() time.Duration
 	IndexFilePeriodBytes() int // How frequently write to the index file based on the segment size.
 	SegmentFlushInterval() time.Duration
+	StreamBufferSize() int // Max size of the file stream buffers (2 of them atm)
 }
 
 type DiscovererConfig interface {
@@ -142,7 +143,10 @@ func parseHostName(hostName string) (baseHostName string, ordinal int) {
 
 func (c *config) Init() error {
 	if c.ReadAheadSize() < c.MaxGroupSize() {
-		return fmt.Errorf("ReadAheadSize can be lower than MaxGroupSize")
+		return fmt.Errorf("ReadAheadSize can not be lower than MaxGroupSize")
+	}
+	if c.StreamBufferSize() < c.MaxGroupSize() {
+		return fmt.Errorf("StreamBufferSize can not be lower than MaxGroupSize")
 	}
 	return nil
 }
@@ -192,7 +196,7 @@ func (c *config) MaxGroupSize() int {
 }
 
 func (c *config) ReadAheadSize() int {
-	return c.MaxGroupSize() * 10
+	return c.MaxGroupSize() * 8
 }
 
 func (c *config) AutoCommitInterval() time.Duration {
@@ -231,6 +235,10 @@ func (c *config) MaxSegmentSize() int {
 
 func (c *config) SegmentBufferSize() int {
 	return 8 * Mib
+}
+
+func (c *config) StreamBufferSize() int {
+	return c.SegmentBufferSize()
 }
 
 func (c *config) MaxDataBodyLength() int {
@@ -295,4 +303,9 @@ func envInt(name string, defaultValue int) int {
 		panic(err)
 	}
 	return intValue
+}
+
+// Gets the formatted file name based on the segment id
+func SegmentFileName(segmentId int64) string {
+	return fmt.Sprintf("%020d.%s", segmentId, SegmentFileExtension)
 }

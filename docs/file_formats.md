@@ -32,7 +32,7 @@ The log segment is composed of compressed chunks.
 | .                                                             |
 |                                                               |
 +---------------------------------------------------------------+
-| alignment (zeroed bytes)                                      |
+| alignment (0x80) - not  included in header length             |
 +---------------------------------------------------------------+
 ```
 

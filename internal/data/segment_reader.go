@@ -415,13 +415,7 @@ func (s *SegmentReader) swapSegmentFile(nextFileName *string) {
 // Returns the number of bytes read since index, only returning an error when there's something wrong
 // with the file descriptor (not on EOF)
 func (s *SegmentReader) pollFile(buf []byte, remainderIndex int) ([]byte, error) {
-	fileBuffer := buf[remainderIndex:]
-	bytesToAlign := len(fileBuffer) % alignmentSize
-
-	if bytesToAlign > 0 {
-		// Crop the last bytes to make to compatible with DIRECT I/O
-		fileBuffer = fileBuffer[:len(fileBuffer)-bytesToAlign]
-	}
+	fileBuffer := alignBuffer(buf[remainderIndex:])
 
 	n, err := s.segmentFile.Read(fileBuffer)
 	totalRead := remainderIndex + n
@@ -517,7 +511,7 @@ func (s *SegmentReader) readSingleChunk(reader *bytes.Reader) (int, SegmentChunk
 		return n, nil
 	}
 
-	header, err := s.readHeader(reader)
+	header, err := readChunkHeader(reader, s.headerBuf)
 	// TODO: Support moving forward for corrupted files
 	utils.PanicIfErr(err, "CRC validation failed")
 
@@ -542,15 +536,15 @@ func (s *SegmentReader) readSingleChunk(reader *bytes.Reader) (int, SegmentChunk
 	return n, chunk
 }
 
-func (s *SegmentReader) readHeader(reader *bytes.Reader) (*chunkHeader, error) {
+func readChunkHeader(reader *bytes.Reader, buf []byte) (*chunkHeader, error) {
 	header := &chunkHeader{}
-	_, err := reader.Read(s.headerBuf)
+	_, err := reader.Read(buf)
 	utils.PanicIfErr(err, "Unexpected EOF when reading chunk header")
 
 	// The checksum is in the last position of the header
-	expectedChecksum := crc32.ChecksumIEEE(s.headerBuf[:chunkHeaderSize-4])
+	expectedChecksum := crc32.ChecksumIEEE(buf[:chunkHeaderSize-4])
 
-	err = binary.Read(bytes.NewReader(s.headerBuf), conf.Endianness, header)
+	err = binary.Read(bytes.NewReader(buf), conf.Endianness, header)
 	utils.PanicIfErr(err, "Unexpected EOF when reading chunk header from new reader")
 
 	if expectedChecksum != header.Crc {

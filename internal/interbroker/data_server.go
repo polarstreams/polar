@@ -53,6 +53,7 @@ func (g *gossiper) handleData(conn net.Conn) {
 	s := &peerDataServer{
 		conn:           conn,
 		config:         g.config,
+		datalog:        g.datalog,
 		replicaWriters: g.replicaWriters,
 		responses:      make(chan dataResponse, 512),
 	}
@@ -66,6 +67,7 @@ type peerDataServer struct {
 	conn           net.Conn
 	initialized    bool
 	config         conf.GossipConfig
+	datalog        data.Datalog
 	replicaWriters *utils.CopyOnWriteMap
 	responses      chan dataResponse
 }
@@ -102,39 +104,54 @@ func (s *peerDataServer) serve() {
 			continue
 		}
 
-		<-canUseReusableBuffer
-		bodyBuf := largeBodyBuf[:header.BodyLength]
+		if header.Op == chunkReplicationOp {
+			// Use a reusable buffer for data replication requests
+			<-canUseReusableBuffer
+			bodyBuf := largeBodyBuf[:header.BodyLength]
 
-		if _, err := io.ReadFull(reader, bodyBuf); err != nil {
-			log.Warn().Msg("There was an error reading body from peer")
-			break
+			if _, err := io.ReadFull(reader, bodyBuf); err != nil {
+				log.Warn().Msg("There was an error reading body from peer")
+				break
+			}
+
+			// Append in the background while the next message is received
+			go s.handleChunkReplication(header, bodyBuf, canUseReusableBuffer)
+			continue
 		}
 
-		if header.Op != chunkReplicationOp {
-			s.responses <- newErrorResponse("Only data replication operations are supported", header)
-			break
+		if header.Op == fileStreamOp {
+			// TODO: Logic can be moved to function
+			// file stream request bodies are very small (meta & some other field), use tiny buffers
+			bodyBuf := make([]byte, header.BodyLength)
+			if _, err := io.ReadFull(reader, bodyBuf); err != nil {
+				log.Warn().Msg("There was an error reading body from peer")
+				break
+			}
+			// respond in the background
+			go s.handleFileStreamRequest(header, bodyBuf)
+			continue
 		}
 
-		// Append in the background while the next message is received
-		go s.parseAndAppend(header, bodyBuf, canUseReusableBuffer)
+		s.responses <- newErrorResponse("Only data replication operations are supported", header)
+
 	}
 	log.Info().Msg("Data server reader closing connection")
 	_ = s.conn.Close()
 }
 
-func (s *peerDataServer) parseAndAppend(header *header, bodyBuf []byte, done chan bool) {
+func (s *peerDataServer) handleChunkReplication(header *header, bodyBuf []byte, done chan bool) {
 	request, err := unmarshalDataRequest(bodyBuf)
 
 	if err != nil {
 		s.responses <- newErrorResponse("Parsing error", header)
 	} else {
-		s.responses <- s.append(request, header)
+		s.responses <- s.appendChunk(request, header)
 	}
 	done <- true
 }
 
 // append stores data as a replica
-func (s *peerDataServer) append(d *chunkReplicationRequest, requestHeader *header) dataResponse {
+func (s *peerDataServer) appendChunk(d *chunkReplicationRequest, requestHeader *header) dataResponse {
 	metrics.InterbrokerReceivedGroups.Inc()
 	writer, err := s.segmentWriter(d)
 
@@ -168,6 +185,22 @@ func (s *peerDataServer) segmentWriter(d *chunkReplicationRequest) (*data.Segmen
 	}
 
 	return writer.(*data.SegmentWriter), nil
+}
+
+func (s *peerDataServer) handleFileStreamRequest(header *header, bodyBuf []byte) {
+	// r, err := unmarshalFileStreamRequest(bodyBuf)
+
+	// if err != nil {
+	// 	s.responses <- newErrorResponse("Parsing error", header)
+	// 	return
+	// }
+
+	// topic := r.topicId()
+	// buf = s.datalog.StreamBuffer()
+	// TODO: Read from file
+	// segmentId := r.meta.SegmentId
+
+	s.responses <- newErrorResponse("Not implemented", header)
 }
 
 func (s *peerDataServer) writeResponses() {
@@ -243,12 +276,15 @@ func (s *peerDataServer) writeResponses() {
 				}
 
 				// Write header
-				_, writeErr := s.conn.Write(w.Bytes())
+				var writeErr error
 
-				if writeErr == nil {
+				if _, writeErr = s.conn.Write(w.Bytes()); writeErr == nil {
 					// Write body body
 					_, writeErr = s.conn.Write(response.BodyBuffer())
 				}
+
+				// Whether the writing succeeded or failed, we should release the buffer
+				response.ReleaseBuffer()
 
 				if writeErr != nil {
 					log.Warn().Err(writeErr).Msg("There was an error while writing to peer, closing connection")

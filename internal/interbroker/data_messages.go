@@ -40,6 +40,7 @@ type dataResponse interface {
 	Marshal(w io.Writer) error
 	BodyLength() uint32
 	BodyBuffer() []byte // When set, it hints that the body will not be marshalled and the buffer should be used instead
+	ReleaseBuffer()     // For buffered responses, it marks the body buffer for reuse
 }
 
 // header is the interbroker message header
@@ -131,10 +132,13 @@ func (r *chunkReplicationRequest) topicId() types.TopicDataId {
 
 // Represents a request message to stream a file starting from offset.
 type fileStreamRequest struct {
-	meta     dataRequestMeta
-	topic    string
-	fileName string
-	response chan dataResponse
+	// Field for both the client and the server
+	meta    dataRequestMeta
+	maxSize uint32 // The maximum amount of bytes to be streamed in a single response
+	topic   string
+
+	// Fields exclusively used by the client
+	response chan dataResponse // channel for the response for the client
 	ctxt     context.Context
 }
 
@@ -142,6 +146,7 @@ func (r *fileStreamRequest) Marshal(w types.StringWriter, header *header) {
 	header.Op = fileStreamOp
 	writeHeader(w, header)
 	binary.Write(w, conf.Endianness, r.meta)
+	binary.Write(w, conf.Endianness, r.maxSize)
 	w.WriteString(r.topic)
 }
 
@@ -150,7 +155,18 @@ func (r *fileStreamRequest) Ctxt() context.Context {
 }
 
 func (r *fileStreamRequest) BodyLength() uint32 {
-	return uint32(dataRequestMetaSize) + uint32(r.meta.TopicLength)
+	return uint32(dataRequestMetaSize) +
+		uint32(r.meta.TopicLength) +
+		4 // uint32 for max size
+}
+
+func (r *fileStreamRequest) topicId() types.TopicDataId {
+	return types.TopicDataId{
+		Name:       r.topic,
+		Token:      r.meta.Token,
+		Version:    r.meta.GenVersion,
+		RangeIndex: r.meta.RangeIndex,
+	}
 }
 
 func (r *fileStreamRequest) SetResponse(res dataResponse) {
@@ -190,6 +206,8 @@ func (r *errorResponse) BodyBuffer() []byte {
 	return nil
 }
 
+func (r *errorResponse) ReleaseBuffer() {}
+
 func writeHeader(w io.Writer, header *header) error {
 	return binary.Write(w, conf.Endianness, header)
 }
@@ -221,6 +239,8 @@ func (r *emptyResponse) BodyLength() uint32 {
 func (r *emptyResponse) BodyBuffer() []byte {
 	return nil
 }
+
+func (r *emptyResponse) ReleaseBuffer() {}
 
 func unmarshalResponse(header *header, body []byte) dataResponse {
 	if header.Op == errorOp {
@@ -262,6 +282,11 @@ func (r *fileStreamResponse) BodyBuffer() []byte {
 	return r.buf
 }
 
+func (r *fileStreamResponse) ReleaseBuffer() {
+	// TODO: Implement ReleaseBuffer via channel
+	// panic("Not implemented")
+}
+
 func unmarshalFileStreamResponse(header *header, r *bufio.Reader) dataResponse {
 	res := &fileStreamResponse{
 		streamId:   header.StreamId,
@@ -290,4 +315,23 @@ func unmarshalDataRequest(body []byte) (*chunkReplicationRequest, error) {
 	}
 
 	return request, nil
+}
+
+func unmarshalFileStreamRequest(body []byte) (*fileStreamRequest, error) {
+	request := fileStreamRequest{}
+	reader := bytes.NewReader(body)
+	if err := binary.Read(reader, conf.Endianness, &request.meta); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, conf.Endianness, &request.maxSize); err != nil {
+		return nil, err
+	}
+
+	topic := make([]byte, request.meta.TopicLength)
+	if _, err := reader.Read(topic); err != nil {
+		return nil, err
+	}
+	request.topic = string(topic)
+	return &request, nil
 }

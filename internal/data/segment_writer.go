@@ -3,7 +3,6 @@ package data
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"hash/crc32"
 	"math"
 	"os"
@@ -187,7 +186,7 @@ func (s *SegmentWriter) maybeFlush() bool {
 
 func (s *SegmentWriter) createFile(segmentId int64) {
 	s.segmentId = segmentId
-	name := fmt.Sprintf("%020d.%s", s.segmentId, conf.SegmentFileExtension)
+	name := conf.SegmentFileName(s.segmentId)
 	log.Debug().Msgf("Creating segment file %s on %s", name, s.basePath)
 
 	f, err := os.OpenFile(filepath.Join(s.basePath, name), conf.SegmentFileWriteFlags, FilePermissions)

@@ -119,11 +119,17 @@ type GenerationGossiper interface {
 	RegisterHostUpDownListener(listener PeerStateListener)
 }
 
-func NewGossiper(config conf.GossipConfig, discoverer discovery.Discoverer, localDb localdb.Client) Gossiper {
+func NewGossiper(
+	config conf.GossipConfig,
+	discoverer discovery.Discoverer,
+	localDb localdb.Client,
+	datalog data.Datalog,
+) Gossiper {
 	return &gossiper{
 		config:              config,
 		discoverer:          discoverer,
 		localDb:             localDb,
+		datalog:             datalog,
 		connectionsMutex:    sync.Mutex{},
 		connections:         atomic.Value{},
 		replicaWriters:      utils.NewCopyOnWriteMap(),
@@ -135,6 +141,7 @@ type gossiper struct {
 	config               conf.GossipConfig
 	discoverer           discovery.Discoverer
 	localDb              localdb.Client
+	datalog              data.Datalog
 	httpListener         net.Listener
 	dataListener         net.Listener
 	genListener          GenListener

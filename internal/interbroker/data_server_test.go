@@ -45,7 +45,7 @@ var _ = Describe("peerDataServer", func() {
 			Expect(conn.WriteBuffers[1]).To(HaveLen(headerSize+len("Hello")), "The second buffer with the error messages")
 		})
 
-		It("should send buffered responses", func ()  {
+		It("should send buffered responses", func() {
 			conn := &fakes.Connection{
 				WriteBuffers: make([][]byte, 0),
 			}
