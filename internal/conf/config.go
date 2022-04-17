@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	Mib                    = 1024 * 1024
-	allocationPoolSize     = 32 * Mib
+	MiB                    = 1024 * 1024
+	allocationPoolSize     = 32 * MiB
 	filePermissions        = 0755
 	SegmentFileExtension   = "dlog"
 	IndexFileExtension     = "index"
@@ -188,11 +188,11 @@ func (c *config) ConsumerRanges() int {
 }
 
 func (c *config) MaxMessageSize() int {
-	return Mib
+	return MiB
 }
 
 func (c *config) MaxGroupSize() int {
-	return 2 * Mib
+	return 2 * MiB
 }
 
 func (c *config) ReadAheadSize() int {
@@ -230,11 +230,11 @@ func (c *config) ShutdownDelay() time.Duration {
 }
 
 func (c *config) MaxSegmentSize() int {
-	return 1024 * Mib
+	return 1024 * MiB
 }
 
 func (c *config) SegmentBufferSize() int {
-	return 8 * Mib
+	return 8 * MiB
 }
 
 func (c *config) StreamBufferSize() int {

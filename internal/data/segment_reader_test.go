@@ -427,7 +427,7 @@ func pollChunkOnce(s *SegmentReader, item *testReadItem, bodyLength int) {
 
 func newTestReader() *SegmentReader {
 	config := new(mocks.Config)
-	config.On("ReadAheadSize").Return(1 * conf.Mib)
+	config.On("ReadAheadSize").Return(1 * conf.MiB)
 	config.On("AutoCommitInterval").Return(1 * time.Second)
 	offsetState := new(tMocks.OffsetState)
 	offsetState.On("Set",

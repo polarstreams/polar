@@ -23,6 +23,17 @@ const streamBufferLength = 2 // Amount of buffers for file streaming
 type Datalog interface {
 	Initializer
 
+	// Seeks the position and fills the buffer with chunks until maxSize or maxRecords is reached.
+	// Opens and close the file handle. It may issue several reads to reach to the position.
+	ReadFileFrom(
+		buf []byte,
+		maxSize int,
+		segmentId int64,
+		startOffset int64,
+		maxRecords int,
+		topic *TopicDataId,
+	) ([]byte, error)
+
 	// Blocks until there's an available buffer to be used to stream.
 	// After use, it should be released
 	StreamBuffer() *bytes.Buffer
@@ -61,9 +72,7 @@ func (d *datalog) ReleaseStreamBuffer(b *bytes.Buffer) {
 	d.streamBufferChan <- b
 }
 
-// Seeks the position and fills the buffer with chunks until maxSize or maxRecords is reached.
-// Opens and close the file handle. It may issue several reads to reach to the position.
-func (d *datalog) readFileFrom(
+func (d *datalog) ReadFileFrom(
 	buf []byte,
 	maxSize int,
 	segmentId int64,
@@ -130,7 +139,6 @@ func readChunksUntil(buf []byte, startOffset int64, maxRecords int) ([]byte, boo
 	headerBuf := make([]byte, chunkHeaderSize)
 	for len(buf) > 0 {
 		header, alignment, err := readNextChunk(buf, headerBuf)
-		fmt.Println("--Read chunk in loop", header, err)
 		if err != nil {
 			return nil, false, err
 		}
@@ -144,6 +152,7 @@ func readChunksUntil(buf []byte, startOffset int64, maxRecords int) ([]byte, boo
 			// We found the starting chunk
 			end := 0
 			maxOffset := startOffset + int64(maxRecords) - 1
+			initialAlignment := alignment
 			for {
 				end += alignment + chunkHeaderSize + int(header.BodyLength)
 				header, alignment, _ = readNextChunk(buf[end:], headerBuf)
@@ -153,7 +162,7 @@ func readChunksUntil(buf []byte, startOffset int64, maxRecords int) ([]byte, boo
 					break
 				}
 			}
-			return buf[:end], true, nil
+			return buf[initialAlignment:end], true, nil
 		}
 
 		// Skip the chunk
