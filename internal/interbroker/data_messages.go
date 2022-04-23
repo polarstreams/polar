@@ -32,7 +32,7 @@ const messageVersion = 1
 type dataRequest interface {
 	Ctxt() context.Context
 	Marshal(w types.StringWriter, header *header)
-	SetResponse(res dataResponse)
+	SetResponse(res dataResponse) error
 	BodyLength() uint32
 }
 
@@ -108,8 +108,9 @@ func (r *chunkReplicationRequest) Ctxt() context.Context {
 	return r.ctxt
 }
 
-func (r *chunkReplicationRequest) SetResponse(res dataResponse) {
+func (r *chunkReplicationRequest) SetResponse(res dataResponse) error {
 	r.response <- res
+	return nil
 }
 
 func (r *chunkReplicationRequest) Marshal(w types.StringWriter, header *header) {
@@ -138,8 +139,9 @@ type fileStreamRequest struct {
 	topic   string
 
 	// Fields exclusively used by the client
-	response chan dataResponse // channel for the response for the client
-	ctxt     context.Context
+	response    chan dataResponse // channel for the response for the client
+	responseBuf []byte            // The buffer to be filled with the response body
+	ctxt        context.Context
 }
 
 func (r *fileStreamRequest) Marshal(w types.StringWriter, header *header) {
@@ -169,8 +171,24 @@ func (r *fileStreamRequest) topicId() types.TopicDataId {
 	}
 }
 
-func (r *fileStreamRequest) SetResponse(res dataResponse) {
+func (r *fileStreamRequest) SetResponse(res dataResponse) error {
+	fileResponse, ok := res.(*fileStreamResponse)
+	if ok {
+		// We need to consume the reader here in the foreground
+		// Use the
+		buf := r.responseBuf
+		if int(fileResponse.bodyLength) < len(r.responseBuf) {
+			buf = buf[:fileResponse.bodyLength]
+		}
+		n, err := io.ReadFull(fileResponse.reader, buf)
+		if err != nil {
+			return err
+		}
+		fileResponse.readBytes = n
+	}
+
 	r.response <- res
+	return nil
 }
 
 type errorResponse struct {
@@ -259,7 +277,8 @@ type fileStreamResponse struct {
 	bodyLength uint32
 
 	// For the client
-	reader *bufio.Reader
+	reader    *bufio.Reader
+	readBytes int
 
 	// For the server
 	buf            []byte

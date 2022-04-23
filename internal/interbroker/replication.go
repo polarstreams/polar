@@ -2,7 +2,6 @@ package interbroker
 
 import (
 	"fmt"
-	"io"
 	"time"
 
 	. "github.com/barcostreams/barco/internal/types"
@@ -134,10 +133,11 @@ func (g *gossiper) StreamFile(
 			RecordLength: uint32(maxRecords),
 			TopicLength:  uint8(len(topic.Name)),
 		},
-		maxSize:  uint32(len(buf)),
-		topic:    topic.Name,
-		ctxt:     ctxt,
-		response: response,
+		topic:       topic.Name,
+		ctxt:        ctxt,
+		maxSize:     uint32(len(buf)),
+		responseBuf: buf,
+		response:    response,
 	}
 
 	lastError := "<empty>"
@@ -164,12 +164,8 @@ func (g *gossiper) StreamFile(
 		}
 
 		if res, ok := r.(*fileStreamResponse); ok && res.op == fileStreamResponseOp {
-			n, err := io.ReadFull(res.reader, buf)
-			if err != nil {
-				log.Warn().Err(err).Msg("There was an error streaming data from peer")
-			}
-			if n > 0 {
-				return n, nil
+			if res.readBytes > 0 {
+				return res.readBytes, nil
 			}
 		}
 	}

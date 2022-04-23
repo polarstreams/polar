@@ -269,12 +269,12 @@ var _ = Describe("SegmentReader", func() {
 			Expect(err).NotTo(HaveOccurred())
 			file1, err := os.Create(filepath.Join(dir, "00000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
-			file2, err := os.Create(filepath.Join(dir, "00020.dlog"))
+			emptyFile2, err := os.Create(filepath.Join(dir, "00020.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			file3, err := os.Create(filepath.Join(dir, "00050.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file1.Close()
-			defer file2.Close()
+			defer emptyFile2.Close()
 			defer file3.Close()
 
 			// Write a chunk, followed by an alignment buffer

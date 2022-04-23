@@ -315,7 +315,7 @@ func SegmentIdFromName(fileName string) int64 {
 	parts := strings.Split(fileName, ".")
 	value, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		panic(fmt.Sprintf("Invalid fileName %s: %s", fileName, err.Error()))
+		panic(fmt.Sprintf("Invalid fileName '%s': %s", fileName, err.Error()))
 	}
 	return value
 }

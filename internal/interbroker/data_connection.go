@@ -121,7 +121,7 @@ func (c *dataConnection) readDataResponses(config conf.GossipConfig, closeHandle
 		handlerValue, ok := c.handlers.LoadAndDelete(header.StreamId)
 
 		if !ok {
-			log.Error().Uint16("streamId", uint16(header.StreamId)).Msg("Invalid message from the server")
+			log.Error().Uint16("streamId", uint16(header.StreamId)).Msg("Unexpected streamId from server")
 			break
 		}
 
@@ -139,8 +139,13 @@ func (c *dataConnection) readDataResponses(config conf.GossipConfig, closeHandle
 			response = unmarshalResponse(header, body)
 		}
 
-		handler := handlerValue.(func(dataResponse))
-		handler(response)
+		handler := handlerValue.(func(dataResponse) error)
+		err = handler(response)
+
+		if err != nil {
+			log.Err(err).Msg("Error when invoking the invoking the request handler with the response, closing connection")
+			break
+		}
 	}
 
 	closeHandler("reader")
@@ -170,10 +175,10 @@ func (c *dataConnection) writeDataRequests(config conf.GossipConfig, closeHandle
 		}
 
 		// Create the func that will be invoked on response
-		c.handlers.Store(header.StreamId, func(res dataResponse) {
-			message.SetResponse(res)
+		c.handlers.Store(header.StreamId, func(res dataResponse) error {
 			// Enqueue stream id for reuse
 			c.streamIds <- streamId
+			return message.SetResponse(res)
 		})
 
 		if n, err := c.conn.Write(w.Bytes()); err != nil {

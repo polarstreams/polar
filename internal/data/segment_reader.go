@@ -30,8 +30,8 @@ type SegmentReader struct {
 	Topic                 TopicDataId
 	SourceVersion         GenId // The version in which this reader was created, a consumer might be on Gen=v3 but the current is v4. In this case, source would be v4 and topic.Version = v3
 	offsetState           OffsetState
-	MaxProducedOffset     *int64 // When set, it determines the last offset produced for this topicId for an old generation
-	messageOffset         int64
+	MaxProducedOffset     *int64 // When set, it determines the last offset produced for this topicId for an old generation, inclusive
+	messageOffset         int64  // The expected next message offset, e.g. "0" when no message was read; "10" when 0-9 were read
 	fileName              string
 	segmentFile           *os.File
 	lastSeek              time.Time
@@ -104,7 +104,7 @@ func (s *SegmentReader) read() {
 	var closeError error
 	lastCommit := &time.Time{}
 	nextFileName := ""
-	var offsetGap int64
+	offsetGap := int64(-1) // The last message offset (inclusive) of the missing messages range: [s.messageOffset, offsetGap]
 
 	for item := range s.Items {
 		s.storeOffset(lastCommit)
@@ -117,7 +117,7 @@ func (s *SegmentReader) read() {
 			var gap int64
 			chunk, gap = s.consumeReadAhead(reader, buf, &remainderIndex)
 
-			if gap > 0 {
+			if gap >= 0 {
 				offsetGap = gap // There's a gap in the current buffer, override
 			}
 		}
@@ -167,7 +167,7 @@ func (s *SegmentReader) read() {
 }
 
 func (s *SegmentReader) consumeReadAhead(reader *bytes.Reader, buf []byte, remainderIndex *int) (SegmentChunk, int64) {
-	var offsetGap int64
+	offsetGap := int64(-1)
 	chunk := s.readChunk(reader, &offsetGap)
 
 	if chunk == nil && reader.Len() > 0 {
@@ -183,13 +183,13 @@ func (s *SegmentReader) consumeReadAhead(reader *bytes.Reader, buf []byte, remai
 // Returns true when there was a file gap and it attempted read from a replica
 func (s *SegmentReader) handleFileGap(offsetGap *int64, reader *bytes.Reader, buf []byte) bool {
 	gap := *offsetGap
-	if gap > 0 {
-		if s.messageOffset < gap {
-			log.Debug().Msgf("Handling file gap in %s/%s", s.basePath, s.fileName)
+	if gap >= 0 {
+		if s.messageOffset <= gap {
+			log.Debug().Msgf("Handling file gap in %s/%s with the range [%d, %d]", s.basePath, s.fileName, s.messageOffset, gap)
 			s.readingFromReplica = true
 
 			segmentId := conf.SegmentIdFromName(s.fileName)
-			maxRecords := int(s.messageOffset - gap)
+			maxRecords := int(s.messageOffset-gap) + 1
 
 			// Read into buffer from peer
 			n, err := s.replicationReader.StreamFile(segmentId, &s.Topic, s.messageOffset, maxRecords, buf)
@@ -197,12 +197,13 @@ func (s *SegmentReader) handleFileGap(offsetGap *int64, reader *bytes.Reader, bu
 				log.Err(err).Msgf("File %s/%s could not be read from replicas", s.basePath, s.fileName)
 			}
 
+			log.Debug().Msgf("Obtained %d bytes from peer for file gap %s/%s", n, s.basePath, s.fileName)
 			reader.Reset(buf[:n])
 
 			return true
 		}
 
-		*offsetGap = 0
+		*offsetGap = -1
 		s.readingFromReplica = false
 
 		// Reset file position: aligned seek
@@ -266,7 +267,7 @@ func (s *SegmentReader) initRead(foreground bool) error {
 		_, err = s.segmentFile.Seek(fileOffset, io.SeekStart)
 		log.Warn().Err(err).Msgf("Segment file could not be seeked")
 	} else {
-		log.Info().Msgf("Started reading file %s from position 0", foundFileName)
+		log.Info().Msgf("Started reading file %s/%s from position 0", s.basePath, foundFileName)
 	}
 
 	return nil
@@ -348,31 +349,31 @@ func (s *SegmentReader) setStructureAsFollower() (bool, error) {
 }
 
 // Returns the name of the file after the current one or an empty string,
-// along with offset representing the gap in the local file system
+// along with offset representing the gap (last message offset inclusive) missing in the local file system
 func (s *SegmentReader) checkNextFile() (string, int64) {
 	entries, err := filepath.Glob(fmt.Sprintf("%s/*.%s", s.basePath, conf.SegmentFileExtension))
 	if err != nil {
 		log.Err(err).Msgf("There was an error listing files in %s checking for next file", s.basePath)
-		return "", 0
+		return "", -1
 	}
 
 	sort.Strings(entries)
 	foundCurrent := false
 	nextFileName := ""
-	offsetGap := int64(0)
+	offsetGap := int64(-1)
 
 	for _, entry := range entries {
 		fileName := filepath.Base(entry)
 		if foundCurrent {
 			// Check file pattern
 			nameWithoutExt := fileName[:len(fileName)-len(conf.SegmentFileExtension)-1]
-			offset, err := strconv.ParseInt(nameWithoutExt, 10, 64)
+			segmentId, err := strconv.ParseInt(nameWithoutExt, 10, 64)
 			if err != nil {
 				// The filename is invalid, skip it
 				continue
 			}
-			if offset > s.messageOffset {
-				offsetGap = offset
+			if segmentId > s.messageOffset {
+				offsetGap = segmentId - 1
 			}
 			nextFileName = fileName
 			break
@@ -383,20 +384,20 @@ func (s *SegmentReader) checkNextFile() (string, int64) {
 		}
 	}
 
-	if offsetGap > 0 {
+	if offsetGap >= 0 {
 		return "", offsetGap
 	}
 
 	if nextFileName != "" {
-		return nextFileName, 0
+		return nextFileName, -1
 	}
 
-	if s.MaxProducedOffset != nil && s.messageOffset < *s.MaxProducedOffset {
+	if s.MaxProducedOffset != nil && s.messageOffset <= *s.MaxProducedOffset {
 		// There's an expected file that was not found
 		return "", *s.MaxProducedOffset
 	}
 
-	return "", 0
+	return "", -1
 }
 
 // Closes the previous segment file and opens the new one, setting is as the current one.
@@ -485,8 +486,8 @@ func (s *SegmentReader) readChunk(reader *bytes.Reader, offsetGap *int64) Segmen
 		}
 
 		if chunk.StartOffset() > s.messageOffset {
-			// There's a gap in the file, we need
-			*offsetGap = chunk.StartOffset()
+			// There's a gap in the file, set offsetGap to the last message offset missing
+			*offsetGap = chunk.StartOffset() - 1
 			return nil
 		}
 
