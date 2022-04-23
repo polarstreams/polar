@@ -17,7 +17,6 @@ import (
 )
 
 const flushResolution = 200 * time.Millisecond
-const alignmentSize = 512
 const alignmentFlag = byte(1 << 7)
 
 var alignmentBuffer = createAlignmentBuffer()

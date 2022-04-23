@@ -5,6 +5,9 @@ import (
 	"github.com/barcostreams/barco/internal/utils"
 )
 
+// See: https://lwn.net/Articles/12032/
+const alignmentSize = 512
+
 var emptyBuffer = make([]byte, 0)
 
 type LocalWriteItem interface {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"unsafe"
 
 	"github.com/barcostreams/barco/internal/conf"
 	. "github.com/barcostreams/barco/internal/types"
@@ -93,6 +94,7 @@ func (d *datalog) ReadFileFrom(
 		log.Err(err).Msgf("Could not open file %s/%s", basePath, fileName)
 		return nil, err
 	}
+	defer file.Close()
 
 	if fileOffset > 0 {
 		if _, err := file.Seek(fileOffset, io.SeekStart); err != nil {
@@ -104,7 +106,8 @@ func (d *datalog) ReadFileFrom(
 	remainderIndex := 0
 	//read chunks until a segment containing startOffset is found
 	for {
-		n, err := file.Read(alignBuffer(buf[remainderIndex:]))
+		readBuf, alignOffset := alignExistingBuffer(buf[remainderIndex:])
+		n, err := file.Read(readBuf)
 		if err != nil && err != io.EOF {
 			log.Err(err).Msgf("Could not read file %s/%s", basePath, fileName)
 			return nil, err
@@ -115,8 +118,12 @@ func (d *datalog) ReadFileFrom(
 			return nil, nil
 		}
 
-		remainderIndex = 0
-		if chunksBuf, completeChunk, err := readChunksUntil(buf[:totalRead], startOffset, maxRecords); err != nil {
+		// Move the initial bytes to the position before aligned offset
+		copy(buf[alignOffset:], buf[0:remainderIndex])
+		// Create a slice from alignOffset+remainderIndex-remainderIndex
+		dataBuf := buf[alignOffset : remainderIndex+alignOffset+n]
+
+		if chunksBuf, completeChunk, err := readChunksUntil(dataBuf, startOffset, maxRecords); err != nil {
 			log.Err(err).Msgf("Error reading chunks in file %s/%s", basePath, fileName)
 			return nil, err
 		} else if completeChunk {
@@ -202,6 +209,7 @@ func readNextChunk(buf []byte, headerBuf []byte) (*chunkHeader, int, error) {
 	return header, alignment, nil
 }
 
+//TODO: Remove
 func alignBuffer(buf []byte) []byte {
 	bytesToAlign := len(buf) % alignmentSize
 	if bytesToAlign > 0 {
@@ -209,4 +217,47 @@ func alignBuffer(buf []byte) []byte {
 		buf = buf[:len(buf)-bytesToAlign]
 	}
 	return buf
+}
+
+// Gets the address offset of the buffer relative to the alignment
+func addressAlignment(buf []byte) int {
+	return int(uintptr(unsafe.Pointer(&buf[0])) & uintptr(alignmentSize-1))
+}
+
+// Creates an aligned buffer of at least "length" in size
+func makeAlignedBuffer(length int) []byte {
+	// Align initial length
+	length = length - (length % alignmentSize)
+	buf := make([]byte, length+alignmentSize)
+
+	// Align address
+	index := addressAlignment(buf)
+	offset := 0
+	if index != 0 {
+		offset = alignmentSize - index
+	}
+	buf = buf[offset : offset+length]
+	if addressAlignment(buf) != 0 {
+		panic("Failed to align buffer")
+	}
+	return buf
+}
+
+// Aligns an existing buffer moving the index and length of the buffer.
+// Returns the new slice and the offset that was moved from the original.
+func alignExistingBuffer(buf []byte) ([]byte, int) {
+	index := addressAlignment(buf)
+	offset := 0
+	if index != 0 {
+		offset = alignmentSize - index
+	}
+	length := len(buf)
+	endRem := (length - offset) % alignmentSize
+	end := length - endRem
+	buf = buf[offset:end]
+
+	if addressAlignment(buf) != 0 {
+		panic("Failed to align buffer")
+	}
+	return buf, offset
 }

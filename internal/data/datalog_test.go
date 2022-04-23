@@ -13,16 +13,30 @@ import (
 )
 
 var _ = Describe("datalog", func() {
-	Describe("alignBuffer()", func() {
-		It("return the buffer aligned", func() {
-			buf := make([]byte, alignmentSize*4)
-			for i := 0; i < len(buf); i++ {
-				buf[i] = byte(i)
+	Describe("alignExistingBuffer()", func() {
+		It("should have the address aligned", func() {
+			buf := make([]byte, 10000)
+			for i := 0; i < alignmentSize+2; i++ {
+				result, offset := alignExistingBuffer(buf[i:])
+				Expect(addressAlignment(result)).To(Equal(0))
+				Expect(offset).To(BeNumerically("<", alignmentSize))
 			}
+		})
 
-			Expect(alignBuffer(buf[:alignmentSize+3])).To(Equal(buf[:alignmentSize]))
-			Expect(alignBuffer(buf[:alignmentSize*2-1])).To(Equal(buf[:alignmentSize]))
-			Expect(alignBuffer(buf[:alignmentSize*2+1])).To(Equal(buf[:alignmentSize*2]))
+		It("should have the length aligned", func() {
+			buf := makeAlignedBuffer(alignmentSize * 4)
+			result, offset := alignExistingBuffer(buf[5:])
+			Expect(len(result)).To(Equal(alignmentSize * 3))
+
+			result, offset = alignExistingBuffer(buf)
+			Expect(len(buf)).To(Equal(alignmentSize * 4))
+			Expect(offset).To(BeZero())
+
+			result, _ = alignExistingBuffer(buf[alignmentSize:])
+			Expect(len(result)).To(Equal(alignmentSize * 3))
+
+			result, _ = alignExistingBuffer(buf[alignmentSize+1:])
+			Expect(len(result)).To(Equal(alignmentSize * 2))
 		})
 	})
 
@@ -90,7 +104,7 @@ var _ = Describe("datalog", func() {
 			d := &datalog{config: config}
 
 			const maxChunkSize = 4096
-			buf := make([]byte, maxChunkSize)
+			buf := makeAlignedBuffer(maxChunkSize)
 
 			// Request 100->120 range
 			obtained, err := d.ReadFileFrom(buf, conf.MiB, segmentId, 100, 20, nil)
@@ -114,7 +128,7 @@ var _ = Describe("datalog", func() {
 			d := &datalog{config: config}
 
 			const maxChunkSize = 4096
-			buf := make([]byte, maxChunkSize)
+			buf := makeAlignedBuffer(maxChunkSize)
 
 			// Request 100->400 range
 			obtained, err := d.ReadFileFrom(buf, conf.MiB, segmentId, 100, 300, nil)
@@ -137,7 +151,7 @@ var _ = Describe("datalog", func() {
 			d := &datalog{config: config}
 
 			const maxChunkSize = 4096
-			buf := make([]byte, maxChunkSize)
+			buf := makeAlignedBuffer(maxChunkSize)
 
 			// Request 100->400 range
 			obtained, err := d.ReadFileFrom(buf, conf.MiB, segmentId, 100, 300, nil)
@@ -149,7 +163,7 @@ var _ = Describe("datalog", func() {
 
 		It("should issue multiple reads when not fitting into memory after skipping", func() {
 			const segmentId = 0
-			const maxChunkSize = 4096
+			const maxChunkSize = alignmentSize * 8
 			const largeChunkLength = maxChunkSize - 1000
 			chunks := [][]byte{
 				createAlignedChunk(largeChunkLength, 0, 100),   // 0 -> 100
@@ -159,7 +173,7 @@ var _ = Describe("datalog", func() {
 			config := createSegmentFileAndConfig(segmentId, chunks)
 			d := &datalog{config: config}
 
-			buf := make([]byte, maxChunkSize)
+			buf := makeAlignedBuffer(maxChunkSize)
 
 			// Request 200->400 range
 			obtained, err := d.ReadFileFrom(buf, conf.MiB, segmentId, 200, 300, nil)
@@ -181,10 +195,21 @@ func createSegmentFileAndConfig(segmentId int64, chunks [][]byte) *mocks.Config 
 	fileName := filepath.Join(dir, conf.SegmentFileName(segmentId))
 	file, err := os.OpenFile(fileName, conf.SegmentFileWriteFlags, FilePermissions)
 	Expect(err).NotTo(HaveOccurred())
+	defer file.Close()
 
+	totalLength := 0
 	for _, chunk := range chunks {
-		Expect(file.Write(chunk)).NotTo(BeZero())
+		totalLength += len(chunk)
 	}
+
+	buf := makeAlignedBuffer(totalLength)
+	index := 0
+	for _, chunk := range chunks {
+		index += copy(buf[index:], chunk)
+	}
+
+	Expect(file.Write(buf)).NotTo(BeZero())
+	Expect(file.Sync()).NotTo(HaveOccurred())
 
 	return config
 }
