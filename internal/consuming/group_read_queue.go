@@ -141,10 +141,11 @@ func (q *groupReadQueue) process() {
 			if len(errors) > 0 {
 				http.Error(item.writer, "Internal server error", 500)
 			} else if time.Since(item.timestamp) < fetchMaxWait-requeueDelay {
-				// We can requeue it to await for new data and move on
+				// We requeue it to await for new data and move on
+				itemCaptured := item
 				go func() {
 					time.Sleep(requeueDelay)
-					q.items <- item
+					q.items <- itemCaptured
 				}()
 				continue
 			} else {

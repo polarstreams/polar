@@ -209,7 +209,6 @@ func (s *SegmentWriter) flush(reason string) {
 		Msgf("Flushing segment file %d on %s", s.segmentId, s.basePath)
 
 	buf := s.buffer.Bytes()
-	log.Debug().Msgf("--Writing to file (address alignment: %v; length alignment: %d)", addressAlignment(buf), len(buf)%alignmentSize)
 	// Sync copy the buffer to the file
 	if _, err := s.segmentFile.Write(buf); err != nil {
 		// Data loss, we should panic

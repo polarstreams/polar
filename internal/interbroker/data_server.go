@@ -234,23 +234,30 @@ func (s *peerDataServer) writeResponses() {
 	w := utils.NewBufferCap(maxResponseGroupSize)
 
 	shouldExit := false
-	var previousItem dataResponse
+	var item dataResponse
 	for !shouldExit {
 		w.Reset()
 		groupSize := 0
 		group := make([]dataResponse, 0)
 		canAddNext := true
 
-		if previousItem != nil {
-			group = append(group, previousItem)
-			groupSize += totalResponseSize(previousItem)
+		if item == nil {
+			// Block for the first item
+			var ok bool
+			item, ok = <-s.responses
+			if !ok {
+				break
+			}
 		}
+
+		group = append(group, item)
+		groupSize += totalResponseSize(item)
+		item = nil
 
 		// Coalesce responses w/ Nagle disabled
 		for canAddNext && !shouldExit {
 			select {
 			case response, ok := <-s.responses:
-				previousItem = nil
 				if !ok {
 					shouldExit = true
 					break
@@ -258,7 +265,7 @@ func (s *peerDataServer) writeResponses() {
 				responseSize := totalResponseSize(response)
 				if responseSize+w.Len() > maxResponseGroupSize {
 					canAddNext = false
-					previousItem = response
+					item = response
 					break
 				}
 				group = append(group, response)

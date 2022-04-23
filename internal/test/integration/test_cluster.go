@@ -59,6 +59,7 @@ func NewTestBroker(ordinal int, options... *TestBrokerOptions) *TestBroker {
 
 func (b *TestBroker) Start() {
 	buildOutput, err := exec.Command("go", "build", "-o", "barco.exe", "../../../.").CombinedOutput()
+	// buildOutput, err := exec.Command("go", "build", "-tags=profiling", "-o", "barco.exe", "../../../.").CombinedOutput()
 	Expect(err).NotTo(HaveOccurred(), "Build failed: %s", string(buildOutput))
 	cmd := exec.Command("./barco.exe", "-debug")
 	os.RemoveAll(fmt.Sprintf("./home%d", b.ordinal))

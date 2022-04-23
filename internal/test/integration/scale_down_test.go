@@ -35,7 +35,7 @@ var _ = Describe("Scale down with a non-reusable cluster", func ()  {
 		}
 	})
 
-	XIt("should scale down", func () {
+	It("should scale down", func () {
 		b0 = NewTestBroker(0, &TestBrokerOptions{InitialClusterSize: 6})
 		b1 = NewTestBroker(1, &TestBrokerOptions{InitialClusterSize: 6})
 		b2 = NewTestBroker(2, &TestBrokerOptions{InitialClusterSize: 6})
@@ -117,11 +117,10 @@ var _ = Describe("Scale down with a non-reusable cluster", func ()  {
 		// Produce a new message in the new generation
 		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_after_0_0"}`, ""))
 
-		fmt.Println("--Start consuming")
-
 		allMessages := make([]consumerResponseItem, 0)
 		// Start polling B0 to obtain data from T0 and T3
-		for i := 0; i < 4; i++ {
+		for i := 0; i < 6; i++ {
+			fmt.Println("--Sending poll", i)
 			resp := client.ConsumerPoll(0)
 			if resp.StatusCode == http.StatusNoContent {
 				fmt.Println("--Messages", i, "<empty>")

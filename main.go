@@ -42,6 +42,11 @@ func main() {
 		log.Info().Msg("Starting Barco in dev mode")
 	}
 
+	if conf.StartProfiling() {
+		log.Info().Msgf("Profiling enabled")
+		defer conf.StopProfiling()
+	}
+
 	if err := config.Init(); err != nil {
 		log.Fatal().Err(err).Msg("Configuration not valid, exiting")
 	}
