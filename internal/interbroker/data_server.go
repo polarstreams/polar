@@ -120,15 +120,10 @@ func (s *peerDataServer) serve() {
 		}
 
 		if header.Op == fileStreamOp {
-			// TODO: Logic can be moved to function
-			// file stream request bodies are very small (meta & some other field), use tiny buffers
-			bodyBuf := make([]byte, header.BodyLength)
-			if _, err := io.ReadFull(reader, bodyBuf); err != nil {
-				log.Warn().Msg("There was an error reading body from peer")
+			if err := s.handleFileStreamRequest(header, reader); err != nil {
+				log.Warn().Err(err).Msg("There was an error reading body from peer")
 				break
 			}
-			// respond in the background
-			go s.handleFileStreamRequest(header, bodyBuf)
 			continue
 		}
 
@@ -187,20 +182,52 @@ func (s *peerDataServer) segmentWriter(d *chunkReplicationRequest) (*data.Segmen
 	return writer.(*data.SegmentWriter), nil
 }
 
-func (s *peerDataServer) handleFileStreamRequest(header *header, bodyBuf []byte) {
-	// r, err := unmarshalFileStreamRequest(bodyBuf)
+// Reads the body in the foreground and returns while serving the response in the background
+func (s *peerDataServer) handleFileStreamRequest(header *header, reader io.Reader) error {
+	// file stream request bodies are very small (meta & some other field), use tiny buffers
+	bodyBuf := make([]byte, header.BodyLength)
+	if _, err := io.ReadFull(reader, bodyBuf); err != nil {
+		return err
+	}
+	// respond in the background
+	go s.serveFileStream(header, bodyBuf)
+	return nil
+}
 
-	// if err != nil {
-	// 	s.responses <- newErrorResponse("Parsing error", header)
-	// 	return
-	// }
+// Designed to run in the background, it reads from the file and sends it in a response
+func (s *peerDataServer) serveFileStream(requestHeader *header, bodyBuf []byte) {
+	r, err := unmarshalFileStreamRequest(bodyBuf)
 
-	// topic := r.topicId()
-	// buf = s.datalog.StreamBuffer()
-	// TODO: Read from file
-	// segmentId := r.meta.SegmentId
+	if err != nil {
+		s.responses <- newErrorResponse("Parsing error", requestHeader)
+		log.Err(err).Msg("Parsing error when parsing a file stream request")
+		return
+	}
 
-	s.responses <- newErrorResponse("Not implemented", header)
+	pooledBuf := s.datalog.StreamBuffer()
+	topic := r.topicId()
+
+	result, err := s.datalog.ReadFileFrom(
+		pooledBuf, int(r.maxSize), r.meta.SegmentId, r.meta.StartOffset, int(r.meta.RecordLength), &topic)
+
+	if err != nil {
+		s.responses <- newErrorResponse("Read file error", requestHeader)
+		log.Debug().Err(err).Msg("Read file error while serving a file stream request")
+		return
+	}
+
+	response := &fileStreamResponse{
+		streamId:   requestHeader.StreamId,
+		op:         fileStreamResponseOp,
+		bodyLength: uint32(len(result)),
+		buf:        result,
+		// Release the buffer after writing the response
+		releaseHandler: func() {
+			s.datalog.ReleaseStreamBuffer(pooledBuf)
+		},
+	}
+
+	s.responses <- response
 }
 
 func (s *peerDataServer) writeResponses() {
@@ -272,6 +299,7 @@ func (s *peerDataServer) writeResponses() {
 				if err := response.Marshal(w); err != nil {
 					log.Warn().Err(err).Msg("There was an error while marshalling, closing connection")
 					shouldExit = true
+					response.ReleaseBuffer()
 					break
 				}
 

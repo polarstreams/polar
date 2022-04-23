@@ -10,7 +10,6 @@ import (
 
 	"github.com/barcostreams/barco/internal/conf"
 	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -37,17 +36,17 @@ type Datalog interface {
 
 	// Blocks until there's an available buffer to be used to stream.
 	// After use, it should be released
-	StreamBuffer() *bytes.Buffer
+	StreamBuffer() []byte
 
 	// Releases the stream buffer
-	ReleaseStreamBuffer(b *bytes.Buffer)
+	ReleaseStreamBuffer(buf []byte)
 }
 
 func NewDatalog(config conf.DatalogConfig) Datalog {
-	streamBufferChan := make(chan *bytes.Buffer, 2)
-	// Add 2 buffers by default with 1/16 the capacity
+	streamBufferChan := make(chan []byte, 2)
+	// Add a couple of buffers by default
 	for i := 0; i < streamBufferLength; i++ {
-		streamBufferChan <- utils.NewBufferCap(config.StreamBufferSize() / 16)
+		streamBufferChan <- make([]byte, config.StreamBufferSize())
 	}
 
 	return &datalog{
@@ -58,19 +57,19 @@ func NewDatalog(config conf.DatalogConfig) Datalog {
 
 type datalog struct {
 	config           conf.DatalogConfig
-	streamBufferChan chan *bytes.Buffer
+	streamBufferChan chan []byte
 }
 
 func (d *datalog) Init() error {
 	return nil
 }
 
-func (d *datalog) StreamBuffer() *bytes.Buffer {
+func (d *datalog) StreamBuffer() []byte {
 	return <-d.streamBufferChan
 }
 
-func (d *datalog) ReleaseStreamBuffer(b *bytes.Buffer) {
-	d.streamBufferChan <- b
+func (d *datalog) ReleaseStreamBuffer(buf []byte) {
+	d.streamBufferChan <- buf
 }
 
 func (d *datalog) ReadFileFrom(

@@ -262,7 +262,8 @@ type fileStreamResponse struct {
 	reader *bufio.Reader
 
 	// For the server
-	buf []byte
+	buf            []byte
+	releaseHandler func()
 }
 
 func (r *fileStreamResponse) Marshal(w io.Writer) error {
@@ -283,8 +284,7 @@ func (r *fileStreamResponse) BodyBuffer() []byte {
 }
 
 func (r *fileStreamResponse) ReleaseBuffer() {
-	// TODO: Implement ReleaseBuffer via channel
-	// panic("Not implemented")
+	r.releaseHandler()
 }
 
 func unmarshalFileStreamResponse(header *header, r *bufio.Reader) dataResponse {

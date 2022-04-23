@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	. "github.com/barcostreams/barco/internal/types"
@@ -308,4 +309,13 @@ func envInt(name string, defaultValue int) int {
 // Gets the formatted file name based on the segment id
 func SegmentFileName(segmentId int64) string {
 	return fmt.Sprintf("%020d.%s", segmentId, SegmentFileExtension)
+}
+
+func SegmentIdFromName(fileName string) int64 {
+	parts := strings.Split(fileName, ".")
+	value, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		panic(fmt.Sprintf("Invalid fileName %s: %s", fileName, err.Error()))
+	}
+	return value
 }

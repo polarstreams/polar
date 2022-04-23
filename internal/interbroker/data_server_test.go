@@ -1,6 +1,7 @@
 package interbroker
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/barcostreams/barco/internal/test/fakes"
@@ -56,10 +57,14 @@ var _ = Describe("peerDataServer", func() {
 			}
 
 			startWriting := make(chan bool)
+			var releaseCalled int64
 			bufferedResponse := &fileStreamResponse{
 				streamId: 1,
 				op:       fileStreamResponseOp,
 				buf:      []byte{0, 1, 2, 3},
+				releaseHandler: func() {
+					atomic.AddInt64(&releaseCalled, 1)
+				},
 			}
 
 			go func() {
@@ -83,6 +88,7 @@ var _ = Describe("peerDataServer", func() {
 			Expect(conn.WriteBuffers[0]).To(HaveLen(headerSize*2), "The first buffer with the empty messages")
 			Expect(conn.WriteBuffers[1]).To(HaveLen(headerSize), "The 2nd buffer with the buffered responses")
 			Expect(conn.WriteBuffers[2]).To(Equal(bufferedResponse.buf), "The 3rd buffer with the body")
+			Expect(atomic.LoadInt64(&releaseCalled)).To(Equal(int64(1)))
 		})
 	})
 })

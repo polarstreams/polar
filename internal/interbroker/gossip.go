@@ -55,7 +55,13 @@ type Gossiper interface {
 		body io.Reader) error
 
 	// Sends a request to get file part to one or more peers
-	StreamFile(peers []int, segmentId int64, topic *TopicDataId, startOffset int64, buf []byte) (int, error)
+	StreamFile(
+		peers []int,
+		segmentId int64,
+		topic *TopicDataId,
+		startOffset int64,
+		maxRecords int,
+		buf []byte) (int, error)
 
 	// Queries a peer for the state of another broker
 	ReadBrokerIsUp(ordinal int, brokerUpOrdinal int) (bool, error)

@@ -29,7 +29,7 @@ func (w *offsetFileWriter) create(basePath string) {
 	f, err := os.OpenFile(filepath.Join(basePath, conf.ProducerOffsetFileName), conf.ProducerOffsetFileWriteFlags, FilePermissions)
 	utils.PanicIfErr(err, "Producer offset file could not be created")
 	w.file = f
-	w.buf = make([]byte, alignmentSize)
+	w.buf = makeAlignedBuffer(alignmentSize)
 	w.writer = bytes.NewBuffer(w.buf)
 }
 

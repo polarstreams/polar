@@ -19,7 +19,7 @@ func ReadProducerOffset(topicId *TopicDataId, config conf.DatalogConfig) (int64,
 		return 0, err
 	}
 	defer file.Close()
-	buf := make([]byte, alignmentSize)
+	buf := makeAlignedBuffer(alignmentSize)
 	if _, err = file.Read(buf); err != nil {
 		return 0, err
 	}

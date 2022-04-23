@@ -3,7 +3,6 @@ package interbroker
 import (
 	"fmt"
 	"io"
-	"math"
 	"time"
 
 	. "github.com/barcostreams/barco/internal/types"
@@ -112,6 +111,7 @@ func (g *gossiper) StreamFile(
 	segmentId int64,
 	topic *TopicDataId,
 	startOffset int64,
+	maxRecords int,
 	buf []byte,
 ) (int, error) {
 	peerClients, ok := g.connections.Load().(clientMap)
@@ -131,9 +131,10 @@ func (g *gossiper) StreamFile(
 			GenVersion:   topic.Version,
 			RangeIndex:   topic.RangeIndex,
 			StartOffset:  startOffset,
-			RecordLength: math.MaxInt32, // TODO: Set it to the amount of records needed
+			RecordLength: uint32(maxRecords),
 			TopicLength:  uint8(len(topic.Name)),
 		},
+		maxSize:  uint32(len(buf)),
 		topic:    topic.Name,
 		ctxt:     ctxt,
 		response: response,

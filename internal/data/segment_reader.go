@@ -104,7 +104,7 @@ func (s *SegmentReader) read() {
 	var closeError error
 	lastCommit := &time.Time{}
 	nextFileName := ""
-	offsetGap := int64(0)
+	var offsetGap int64
 
 	for item := range s.Items {
 		s.storeOffset(lastCommit)
@@ -188,10 +188,13 @@ func (s *SegmentReader) handleFileGap(offsetGap *int64, reader *bytes.Reader, bu
 			log.Debug().Msgf("Handling file gap in %s/%s", s.basePath, s.fileName)
 			s.readingFromReplica = true
 
-			// Load buffer from peer
-			n, err := s.replicationReader.StreamFile(s.fileName, &s.Topic, s.messageOffset, buf)
+			segmentId := conf.SegmentIdFromName(s.fileName)
+			maxRecords := int(s.messageOffset - gap)
+
+			// Read into buffer from peer
+			n, err := s.replicationReader.StreamFile(segmentId, &s.Topic, s.messageOffset, maxRecords, buf)
 			if err != nil {
-				log.Err(err).Msgf("File %s could not be read from replicas", s.fileName)
+				log.Err(err).Msgf("File %s/%s could not be read from replicas", s.basePath, s.fileName)
 			}
 
 			reader.Reset(buf[:n])

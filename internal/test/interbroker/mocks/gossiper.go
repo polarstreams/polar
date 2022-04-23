@@ -331,20 +331,20 @@ func (_m *Gossiper) SetGenerationAsProposed(ordinal int, newGen *types.Generatio
 	return r0
 }
 
-// StreamFile provides a mock function with given fields: peers, segmentId, topic, startOffset, buf
-func (_m *Gossiper) StreamFile(peers []int, segmentId int64, topic *types.TopicDataId, startOffset int64, buf []byte) (int, error) {
-	ret := _m.Called(peers, segmentId, topic, startOffset, buf)
+// StreamFile provides a mock function with given fields: peers, segmentId, topic, startOffset, maxRecords, buf
+func (_m *Gossiper) StreamFile(peers []int, segmentId int64, topic *types.TopicDataId, startOffset int64, maxRecords int, buf []byte) (int, error) {
+	ret := _m.Called(peers, segmentId, topic, startOffset, maxRecords, buf)
 
 	var r0 int
-	if rf, ok := ret.Get(0).(func([]int, int64, *types.TopicDataId, int64, []byte) int); ok {
-		r0 = rf(peers, segmentId, topic, startOffset, buf)
+	if rf, ok := ret.Get(0).(func([]int, int64, *types.TopicDataId, int64, int, []byte) int); ok {
+		r0 = rf(peers, segmentId, topic, startOffset, maxRecords, buf)
 	} else {
 		r0 = ret.Get(0).(int)
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func([]int, int64, *types.TopicDataId, int64, []byte) error); ok {
-		r1 = rf(peers, segmentId, topic, startOffset, buf)
+	if rf, ok := ret.Get(1).(func([]int, int64, *types.TopicDataId, int64, int, []byte) error); ok {
+		r1 = rf(peers, segmentId, topic, startOffset, maxRecords, buf)
 	} else {
 		r1 = ret.Error(1)
 	}

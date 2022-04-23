@@ -360,7 +360,7 @@ func (f *rrFake) MergeFileStructure() (bool, error) {
 	return true, nil
 }
 
-func (f *rrFake) StreamFile(filename string, topic *TopicDataId, startOffset int64, buf []byte) (int, error) {
+func (f *rrFake) StreamFile(segmentId int64, topic *TopicDataId, startOffset int64, maxRecords int, buf []byte) (int, error) {
 	atomic.AddInt64(&f.streamCalled, 1)
 	return copy(buf, f.streamBuf), nil
 }
