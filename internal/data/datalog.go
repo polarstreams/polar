@@ -235,6 +235,12 @@ func makeAlignedBuffer(length int) []byte {
 	return buf
 }
 
+// Creates a bytes.Buffer backed by an aligned buffer with initial length zero.
+func createAlignedByteBuffer(capacity int) *bytes.Buffer {
+	buf := makeAlignedBuffer(capacity)
+	return bytes.NewBuffer(buf[:0])
+}
+
 // Aligns an existing buffer moving the index and length of the buffer.
 // Returns the new slice and the offset that was moved from the original.
 func alignBuffer(buf []byte) ([]byte, int) {

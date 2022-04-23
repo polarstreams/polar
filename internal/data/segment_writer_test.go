@@ -1,14 +1,12 @@
 package data
 
 import (
-	"bytes"
 	"io/ioutil"
 	"time"
 
 	"github.com/barcostreams/barco/internal/test/conf/mocks"
 	mocks2 "github.com/barcostreams/barco/internal/test/types/mocks"
 	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -19,7 +17,7 @@ var _ = Describe("SegmentWriter", func() {
 		const alignment = 512
 		It("should complete the remaining length", func() {
 			s := &SegmentWriter{
-				buffer: new(bytes.Buffer),
+				buffer: createAlignedByteBuffer(alignmentSize * 10),
 			}
 
 			s.writeAlignmentBytes()
@@ -67,7 +65,7 @@ var _ = Describe("SegmentWriter", func() {
 			Expect(err).NotTo(HaveOccurred())
 			s := &SegmentWriter{
 				Items:      make(chan SegmentChunk, 0),
-				buffer:     utils.NewBufferCap(100),
+				buffer:     createAlignedByteBuffer(alignmentSize * 10),
 				config:     config,
 				indexFile:  newIndexFileWriter(dir, config),
 				basePath:   dir,

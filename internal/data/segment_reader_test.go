@@ -54,7 +54,7 @@ var _ = Describe("SegmentReader", func() {
 
 			// Write the rest of the body: data is returned
 			file.Write(chunkBuffer[chunkHeaderSize:])
-			pollChunkOnce(s, item, 50)
+			pollChunk(s, item, 50)
 
 			close(s.Items)
 		})

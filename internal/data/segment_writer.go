@@ -28,7 +28,7 @@ type SegmentWriter struct {
 	Items          chan SegmentChunk
 	Topic          TopicDataId
 	segmentId      int64
-	buffer         *bytes.Buffer
+	buffer         *bytes.Buffer // Must be backed by an aligned buffer
 	lastFlush      time.Time
 	bufferedOffset int64 // Stores the offset of the first message buffered since it was buffered
 	tailOffset     int64 // Value of the last written message
@@ -52,16 +52,12 @@ func NewSegmentWriter(
 		return nil, err
 	}
 
-	// Use an aligned buffer for writing
-	buf := makeAlignedBuffer(config.SegmentBufferSize())
-	buffer := bytes.NewBuffer(buf[:0])
-
 	s := &SegmentWriter{
 		// Limit's to 1 outstanding write (the current one)
 		// The next group can be generated while the previous is being flushed and sent
 		Items:       make(chan SegmentChunk, 0),
 		Topic:       topic,
-		buffer:      buffer,
+		buffer:      createAlignedByteBuffer(config.SegmentBufferSize()), // Use an aligned buffer for writing
 		config:      config,
 		segmentFile: nil,
 		indexFile:   newIndexFileWriter(basePath, config),
@@ -212,8 +208,10 @@ func (s *SegmentWriter) flush(reason string) {
 		Str("reason", reason).
 		Msgf("Flushing segment file %d on %s", s.segmentId, s.basePath)
 
+	buf := s.buffer.Bytes()
+	log.Debug().Msgf("--Writing to file (address alignment: %v; length alignment: %d)", addressAlignment(buf), len(buf)%alignmentSize)
 	// Sync copy the buffer to the file
-	if _, err := s.segmentFile.Write(s.buffer.Bytes()); err != nil {
+	if _, err := s.segmentFile.Write(buf); err != nil {
 		// Data loss, we should panic
 		log.Err(err).Msgf("Failed to write to segment file %d at %s", s.segmentId, s.basePath)
 		panic(err)
