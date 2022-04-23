@@ -12,7 +12,6 @@ import (
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/metrics"
 	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -53,12 +52,16 @@ func NewSegmentWriter(
 		return nil, err
 	}
 
+	// Use an aligned buffer for writing
+	buf := makeAlignedBuffer(config.SegmentBufferSize())
+	buffer := bytes.NewBuffer(buf[:0])
+
 	s := &SegmentWriter{
 		// Limit's to 1 outstanding write (the current one)
 		// The next group can be generated while the previous is being flushed and sent
 		Items:       make(chan SegmentChunk, 0),
 		Topic:       topic,
-		buffer:      utils.NewBufferCap(config.SegmentBufferSize()),
+		buffer:      buffer,
 		config:      config,
 		segmentFile: nil,
 		indexFile:   newIndexFileWriter(basePath, config),
@@ -198,7 +201,7 @@ func (s *SegmentWriter) createFile(segmentId int64) {
 }
 
 func (s *SegmentWriter) flush(reason string) {
-	s.alignBuffer()
+	s.writeAlignmentBytes()
 	length := int64(s.buffer.Len())
 
 	if s.segmentFile == nil {
@@ -292,14 +295,14 @@ func (c *SegmentWriter) flushTimer() {
 	}
 }
 
-func (s *SegmentWriter) alignBuffer() {
+// Adds the alignment bytes to the buffer
+func (s *SegmentWriter) writeAlignmentBytes() {
 	rem := s.buffer.Len() % alignmentSize
 	if rem == 0 {
 		return
 	}
 
 	toAlign := alignmentSize - rem
-
 	s.buffer.Write(alignmentBuffer[0:toAlign])
 }
 

@@ -104,9 +104,10 @@ func (d *datalog) ReadFileFrom(
 	}
 
 	remainderIndex := 0
-	//read chunks until a segment containing startOffset is found
+
+	// read chunks until a segment containing startOffset is found
 	for {
-		readBuf, alignOffset := alignExistingBuffer(buf[remainderIndex:])
+		readBuf, alignOffset := alignBuffer(buf[remainderIndex:])
 		n, err := file.Read(readBuf)
 		if err != nil && err != io.EOF {
 			log.Err(err).Msgf("Could not read file %s/%s", basePath, fileName)
@@ -118,8 +119,11 @@ func (d *datalog) ReadFileFrom(
 			return nil, nil
 		}
 
-		// Move the initial bytes to the position before aligned offset
-		copy(buf[alignOffset:], buf[0:remainderIndex])
+		if remainderIndex > 0 {
+			// Move the initial bytes to the position before aligned offset
+			copy(buf[alignOffset:], buf[0:remainderIndex])
+		}
+
 		// Create a slice from alignOffset+remainderIndex-remainderIndex
 		dataBuf := buf[alignOffset : remainderIndex+alignOffset+n]
 
@@ -209,16 +213,6 @@ func readNextChunk(buf []byte, headerBuf []byte) (*chunkHeader, int, error) {
 	return header, alignment, nil
 }
 
-//TODO: Remove
-func alignBuffer(buf []byte) []byte {
-	bytesToAlign := len(buf) % alignmentSize
-	if bytesToAlign > 0 {
-		// Crop the last bytes to make to compatible with DIRECT I/O
-		buf = buf[:len(buf)-bytesToAlign]
-	}
-	return buf
-}
-
 // Gets the address offset of the buffer relative to the alignment
 func addressAlignment(buf []byte) int {
 	return int(uintptr(unsafe.Pointer(&buf[0])) & uintptr(alignmentSize-1))
@@ -245,7 +239,7 @@ func makeAlignedBuffer(length int) []byte {
 
 // Aligns an existing buffer moving the index and length of the buffer.
 // Returns the new slice and the offset that was moved from the original.
-func alignExistingBuffer(buf []byte) ([]byte, int) {
+func alignBuffer(buf []byte) ([]byte, int) {
 	index := addressAlignment(buf)
 	offset := 0
 	if index != 0 {

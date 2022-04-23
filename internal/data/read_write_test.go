@@ -55,7 +55,7 @@ var _ = Describe("I/O Techniques", func() {
 		for i := 0; i < initialReadOffset; i++ {
 			buf[i] = 0xf0
 		}
-		readBuf, offset := alignExistingBuffer(buf[initialReadOffset:])
+		readBuf, offset := alignBuffer(buf[initialReadOffset:])
 		Expect(offset).To(BeNumerically(">", 0))
 		n := fakeAlignedFileRead(readBuf)
 

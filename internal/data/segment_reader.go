@@ -413,31 +413,39 @@ func (s *SegmentReader) swapSegmentFile(nextFileName *string) {
 }
 
 // Returns the number of bytes read since index, only returning an error when there's something wrong
-// with the file descriptor (not on EOF)
+// with the file descriptor (not on EOF).
+//
+// Direct I/O alignment requirement makes logic harder to follow
 func (s *SegmentReader) pollFile(buf []byte, remainderIndex int) ([]byte, error) {
-	fileBuffer := alignBuffer(buf[remainderIndex:])
-
+	fileBuffer, alignOffset := alignBuffer(buf[remainderIndex:])
 	n, err := s.segmentFile.Read(fileBuffer)
-	totalRead := remainderIndex + n
 
-	if totalRead > 0 || err == io.EOF {
-		if s.skipFromFile > 0 {
-			// There was a previous seek that needed to be aligned
-			skip := s.skipFromFile
-			s.skipFromFile = 0
-			if skip <= int64(n) {
-				return buf[skip:totalRead], nil
-			}
-		}
-		// Ignore EOF error
-		return buf[:totalRead], nil
+	// Ignore EOF error
+	if err != nil && err != io.EOF {
+		// There was an error related likely either permission change / file not found
+		// or file descriptor closed by the OS
+		message := fmt.Sprintf("Unexpected error reading file %s in %s", s.fileName, s.basePath)
+		log.Err(err).Msg(message)
+		return nil, fmt.Errorf(message)
 	}
 
-	// There was an error related to either permission change / file not found
-	// or file descriptor closed by the OS
-	message := fmt.Sprintf("Unexpected error reading file %s in %s", s.fileName, s.basePath)
-	log.Err(err).Msg(message)
-	return nil, fmt.Errorf(message)
+	if remainderIndex > 0 {
+		// Move the initial bytes to the position before aligned offset
+		copy(buf[alignOffset:], buf[0:remainderIndex])
+	}
+
+	// Create a slice from alignOffset+remainderIndex-remainderIndex
+	result := buf[alignOffset : remainderIndex+alignOffset+n]
+
+	if s.skipFromFile > 0 {
+		// There was a previous seek that needed to be aligned
+		skip := s.skipFromFile
+		s.skipFromFile = 0
+		if skip <= int64(n) {
+			return result[skip:], nil
+		}
+	}
+	return result, nil
 }
 
 // closes the current file and saves the current state

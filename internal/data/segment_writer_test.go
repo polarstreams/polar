@@ -22,11 +22,11 @@ var _ = Describe("SegmentWriter", func() {
 				buffer: new(bytes.Buffer),
 			}
 
-			s.alignBuffer()
+			s.writeAlignmentBytes()
 			Expect(s.buffer.Len()).To(Equal(0))
 
 			s.buffer.Write([]byte{0, 0, 0})
-			s.alignBuffer()
+			s.writeAlignmentBytes()
 			Expect(s.buffer.Len()).To(Equal(alignment))
 			Expect(s.buffer.Bytes()[:3]).To(Equal([]byte{0, 0, 0}))
 
@@ -36,11 +36,11 @@ var _ = Describe("SegmentWriter", func() {
 			}
 
 			// It's aligned, no effect
-			s.alignBuffer()
+			s.writeAlignmentBytes()
 			Expect(s.buffer.Len()).To(Equal(alignment))
 
 			s.buffer.Write([]byte{1})
-			s.alignBuffer()
+			s.writeAlignmentBytes()
 			Expect(s.buffer.Len()).To(Equal(alignment * 2))
 			Expect(s.buffer.Bytes()[alignment]).To(Equal(byte(1)))
 

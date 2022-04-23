@@ -13,11 +13,11 @@ import (
 )
 
 var _ = Describe("datalog", func() {
-	Describe("alignExistingBuffer()", func() {
+	Describe("alignBuffer()", func() {
 		It("should have the address aligned", func() {
 			buf := make([]byte, 10000)
 			for i := 0; i < alignmentSize+2; i++ {
-				result, offset := alignExistingBuffer(buf[i:])
+				result, offset := alignBuffer(buf[i:])
 				Expect(addressAlignment(result)).To(Equal(0))
 				Expect(offset).To(BeNumerically("<", alignmentSize))
 			}
@@ -25,17 +25,17 @@ var _ = Describe("datalog", func() {
 
 		It("should have the length aligned", func() {
 			buf := makeAlignedBuffer(alignmentSize * 4)
-			result, offset := alignExistingBuffer(buf[5:])
+			result, offset := alignBuffer(buf[5:])
 			Expect(len(result)).To(Equal(alignmentSize * 3))
 
-			result, offset = alignExistingBuffer(buf)
+			result, offset = alignBuffer(buf)
 			Expect(len(buf)).To(Equal(alignmentSize * 4))
 			Expect(offset).To(BeZero())
 
-			result, _ = alignExistingBuffer(buf[alignmentSize:])
+			result, _ = alignBuffer(buf[alignmentSize:])
 			Expect(len(result)).To(Equal(alignmentSize * 3))
 
-			result, _ = alignExistingBuffer(buf[alignmentSize+1:])
+			result, _ = alignBuffer(buf[alignmentSize+1:])
 			Expect(len(result)).To(Equal(alignmentSize * 2))
 		})
 	})
