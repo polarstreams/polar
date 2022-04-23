@@ -2,7 +2,6 @@ package data
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -81,7 +80,7 @@ func (d *datalog) ReadFileFrom(
 	topic *TopicDataId,
 ) ([]byte, error) {
 	basePath := d.config.DatalogPath(topic)
-	fileOffset := tryReadIndexFile(basePath, fmt.Sprint(segmentId), startOffset)
+	fileOffset := tryReadIndexFile(basePath, conf.SegmentFilePrefix(segmentId), startOffset)
 	fileName := conf.SegmentFileName(segmentId)
 
 	if maxSize < len(buf) {

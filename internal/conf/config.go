@@ -308,7 +308,12 @@ func envInt(name string, defaultValue int) int {
 
 // Gets the formatted file name based on the segment id
 func SegmentFileName(segmentId int64) string {
-	return fmt.Sprintf("%020d.%s", segmentId, SegmentFileExtension)
+	return fmt.Sprintf("%s.%s", SegmentFilePrefix(segmentId), SegmentFileExtension)
+}
+
+// Gets the formatted value of the id for the file name (%020d) w/o the extension, e.g. 123 -> "00000000000000000123"
+func SegmentFilePrefix(segmentId int64) string {
+	return fmt.Sprintf("%020d", segmentId)
 }
 
 func SegmentIdFromName(fileName string) int64 {

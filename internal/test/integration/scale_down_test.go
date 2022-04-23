@@ -35,7 +35,7 @@ var _ = Describe("Scale down with a non-reusable cluster", func ()  {
 		}
 	})
 
-	It("should scale down", func () {
+	XIt("should scale down", func () {
 		b0 = NewTestBroker(0, &TestBrokerOptions{InitialClusterSize: 6})
 		b1 = NewTestBroker(1, &TestBrokerOptions{InitialClusterSize: 6})
 		b2 = NewTestBroker(2, &TestBrokerOptions{InitialClusterSize: 6})
