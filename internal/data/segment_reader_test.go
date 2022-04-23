@@ -304,6 +304,34 @@ var _ = Describe("SegmentReader", func() {
 			Expect(atomic.LoadInt64(&rr.streamCalled)).To(BeNumerically(">", int64(0)))
 		})
 	})
+
+	Describe("pollFile()", func() {
+		It("should align when remainingIndex is not zero", func() {
+			const bodyLength = 700
+			s := newTestReader()
+			file, err := os.CreateTemp("", "segment_file_poll_file*.dlog")
+			Expect(err).NotTo(HaveOccurred())
+			chunk := createAlignedChunk(bodyLength, 0, 20)
+			Expect(file.Write(chunk)).NotTo(BeZero())
+			Expect(file.Sync()).NotTo(HaveOccurred())
+			file.Close()
+
+			s.segmentFile, err = os.OpenFile(file.Name(), conf.SegmentFileReadFlags, 0)
+			defer s.segmentFile.Close()
+
+			buf := makeAlignedBuffer(alignmentSize * 8)
+			const remainingIndex = 5
+			// Fill with data until remainingIndex
+			for i := 0; i < remainingIndex; i++ {
+				buf[i] = 0xf0
+			}
+			result, err := s.pollFile(buf, remainingIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result[0]).To(Equal(byte(0xf0)))
+			Expect(result[:remainingIndex]).To(Equal(buf[:remainingIndex]))
+			Expect(result[remainingIndex:]).To(Equal(chunk))
+		})
+	})
 })
 
 type testReadItem struct {
@@ -372,7 +400,7 @@ func createAlignedChunk(bodyLength, start, recordLength int) []byte {
 	}
 
 	totalSize := len(chunk) + alignmentSize - rem
-	result := make([]byte, totalSize)
+	result := makeAlignedBuffer(totalSize)
 	n := copy(result, chunk)
 
 	for i := n; i < totalSize; i++ {
