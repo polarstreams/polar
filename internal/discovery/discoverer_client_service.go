@@ -29,8 +29,17 @@ func (d *discoverer) startClientDiscoveryServer() error {
 	address := utils.GetServiceAddress(port, d.LocalInfo(), d.config)
 	router := httprouter.New()
 	router.GET(conf.StatusUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		generations := d.generations.Load().(genMap)
+		if len(generations) == 0 {
+			fmt.Fprintf(w, "Broker is unavailable to handle producer/consumer requests")
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
 		fmt.Fprintf(w, "Client discovery server listening on %d\n", port)
 	})
+
 	router.GET(conf.ClientDiscoveryUrl, utils.ToHandle(d.getTopologyHandler))
 
 	h2s := &http2.Server{}

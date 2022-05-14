@@ -28,8 +28,8 @@ type TestClientOptions struct {
 }
 
 const (
-	producerPort = 8081
-	consumerPort = 8082
+	producerPort = conf.DefaultProducerPort
+	consumerPort = conf.DefaultConsumerPort
 )
 
 // Creates a htt

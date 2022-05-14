@@ -37,6 +37,16 @@ const (
 	envServiceName             = "BARCO_SERVICE_NAME"
 )
 
+// Port defaults
+const (
+	DefaultClientDiscoveryPort = 9250
+	DefaultProducerPort = 9251
+	DefaultConsumerPort = 9252
+	DefaultMetricsPort = 9253
+	DefaultGossipPort = 9254
+	DefaultGossipDataPort = 9255
+)
+
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
 
 // Config represents the application configuration
@@ -156,27 +166,27 @@ func (c *config) Init() error {
 }
 
 func (c *config) ProducerPort() int {
-	return 8081
+	return DefaultProducerPort
 }
 
 func (c *config) ConsumerPort() int {
-	return 8082
+	return DefaultConsumerPort
 }
 
 func (c *config) ClientDiscoveryPort() int {
-	return 8083
+	return DefaultClientDiscoveryPort
 }
 
 func (c *config) MetricsPort() int {
-	return 9902
+	return DefaultMetricsPort
 }
 
 func (c *config) GossipPort() int {
-	return envInt(envGossipPort, 8084)
+	return envInt(envGossipPort, DefaultGossipPort)
 }
 
 func (c *config) GossipDataPort() int {
-	return envInt(envGossipDataPort, 8085)
+	return envInt(envGossipDataPort, DefaultGossipDataPort)
 }
 
 func (c *config) ListenOnAllAddresses() bool {

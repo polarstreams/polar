@@ -132,7 +132,7 @@ func (d *discoverer) Init() error {
 
 	go func() {
 		for {
-			time.Sleep(5 * time.Second)
+			time.Sleep(30 * time.Second)
 			existingMap := d.generations.Load().(genMap)
 			if len(existingMap) == 0 {
 				log.Debug().Msgf("No generations")

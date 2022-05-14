@@ -4,10 +4,10 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY . .
-
 ARG TARGETOS TARGETARCH
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=1 go install github.com/mattn/go-sqlite3
+
+COPY . .
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal

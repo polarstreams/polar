@@ -8,9 +8,6 @@ on:
   pull_request:
     branches: [ main ]
 
-env:
-  BARCO_GOSSIP_PORT: 9044
-
 jobs:
 
   build:
