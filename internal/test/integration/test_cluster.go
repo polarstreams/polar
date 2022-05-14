@@ -80,6 +80,7 @@ func (b *TestBroker) Start() {
 		"BARCO_CONSUMER_ADD_DELAY_MS=200",
 		"BARCO_CONSUMER_RANGES=4",
 		"BARCO_TOPOLOGY_FILE_POLL_DELAY_MS=400",
+		"BARCO_MAX_SEGMENT_FILE_SIZE=16777216", // 16MiB
 		"BARCO_SHUTDOWN_DELAY_SECS=2")
 
 	if !b.options.DevMode {
@@ -214,11 +215,24 @@ func (b *TestBroker) WaitForVersion1() {
 	b.WaitOutput("Committing \\[.*\\] v1 with B%d as leader", b.ordinal)
 }
 
-func (b *TestBroker) Shutdown() {
+func (b *TestBroker) StartShutdown() {
 	log.Debug().Msgf("Shutting down test broker B%d", b.ordinal)
 	err := b.cmd.Process.Signal(os.Interrupt)
 	Expect(err).NotTo(HaveOccurred())
+}
 
+func (b *TestBroker) Shutdown() {
+	b.WaitForShutdownOrKill()
+}
+
+func (b *TestBroker) Kill() error {
+	log.Debug().Msgf("Killing broker %d", b.ordinal)
+	err := b.cmd.Process.Kill()
+	Expect(err).NotTo(HaveOccurred())
+	return b.cmd.Wait()
+}
+
+func (b *TestBroker) WaitForShutdownOrKill() {
 	exited := false
 	timerChan := time.After(5 * time.Second)
 	exitChan := make(chan bool, 1)
@@ -240,9 +254,12 @@ func (b *TestBroker) Shutdown() {
 	}
 }
 
-func (b *TestBroker) Kill() error {
-	log.Debug().Msgf("Killing broker %d", b.ordinal)
-	err := b.cmd.Process.Kill()
-	Expect(err).NotTo(HaveOccurred())
-	return b.cmd.Wait()
+func ShutdownInParallel(brokers... *TestBroker) {
+	for _, b := range brokers {
+		b.StartShutdown()
+	}
+
+	for _, b := range brokers {
+		b.WaitForShutdownOrKill()
+	}
 }

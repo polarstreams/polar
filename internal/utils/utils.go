@@ -139,7 +139,6 @@ func BinarySize(v interface{}) int {
 
 // Adds a +-5% jitter to the duration with millisecond resolution
 func Jitter(t time.Duration) time.Duration {
-	rand.Float64()
 	ms := float64(t.Milliseconds())
 	maxJitter := 0.1 * ms
 	if maxJitter < 1 {

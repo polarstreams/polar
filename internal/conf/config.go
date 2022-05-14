@@ -28,6 +28,7 @@ const (
 	envGossipPort              = "BARCO_GOSSIP_PORT"
 	envGossipDataPort          = "BARCO_GOSSIP_DATA_PORT"
 	envSegmentFlushIntervalMs  = "BARCO_SEGMENT_FLUSH_INTERVAL_MS"
+	envMaxSegmentSize          = "BARCO_MAX_SEGMENT_FILE_SIZE"
 	envConsumerAddDelay        = "BARCO_CONSUMER_ADD_DELAY_MS"
 	envConsumerRanges          = "BARCO_CONSUMER_RANGES"
 	envTopologyFilePollDelayMs = "BARCO_TOPOLOGY_FILE_POLL_DELAY_MS"
@@ -64,7 +65,7 @@ type LocalDbConfig interface {
 
 type DatalogConfig interface {
 	DatalogPath(topicDataId *TopicDataId) string
-	MaxSegmentSize() int
+	MaxSegmentSize() int    // Maximum file size in bytes
 	SegmentBufferSize() int // The amount of bytes that the segment buffer can hold
 	MaxMessageSize() int
 	MaxGroupSize() int  // MaxGroupSize is the maximum size of an uncompressed group of messages
@@ -231,7 +232,7 @@ func (c *config) ShutdownDelay() time.Duration {
 }
 
 func (c *config) MaxSegmentSize() int {
-	return 1024 * MiB
+	return envInt(envMaxSegmentSize, 1024*MiB)
 }
 
 func (c *config) SegmentBufferSize() int {

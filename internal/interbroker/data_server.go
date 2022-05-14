@@ -78,8 +78,8 @@ func (s *peerDataServer) serve() {
 	largeBodyBuf := make([]byte, s.config.MaxDataBodyLength())
 	canUseReusableBuffer := make(chan bool, 1)
 	canUseReusableBuffer <- true
+
 	for {
-		reader.Reset(s.conn)
 		if n, err := io.ReadFull(reader, headerBuf); err != nil {
 			log.Warn().Err(err).Int("n", n).Msg("There was an error reading header from peer client")
 			break

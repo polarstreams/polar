@@ -67,14 +67,18 @@ func NewTestClient(options *TestClientOptions) *TestClient {
 }
 
 func (c *TestClient) ProduceJson(ordinal int, topic string, message string, partitionKey string) *http.Response {
+	url := c.ProducerUrl(ordinal, topic, partitionKey)
+	resp, err := c.client.Post(url, "application/json", strings.NewReader(message))
+	Expect(err).NotTo(HaveOccurred())
+	return resp
+}
+
+func (c *TestClient) ProducerUrl(ordinal int, topic string, partitionKey string) string {
 	querystring := ""
 	if partitionKey != "" {
 		querystring = fmt.Sprintf("?partitionKey=%s", partitionKey)
 	}
-	url := fmt.Sprintf("http://127.0.0.%d:%d/v1/topic/%s/messages%s", ordinal+1, producerPort, topic, querystring)
-	resp, err := c.client.Post(url, "application/json", strings.NewReader(message))
-	Expect(err).NotTo(HaveOccurred())
-	return resp
+	return fmt.Sprintf("http://127.0.0.%d:%d/v1/topic/%s/messages%s", ordinal+1, producerPort, topic, querystring)
 }
 
 func (c *TestClient) RegisterAsConsumer(clusterSize int, message string) {

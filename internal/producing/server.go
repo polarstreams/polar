@@ -85,7 +85,9 @@ func (p *producer) AcceptConnections() error {
 		Handler: h2c.NewHandler(router, h2s),
 	}
 
-	http2.ConfigureServer(server, h2s)
+	if err := http2.ConfigureServer(server, h2s); err != nil {
+		return err
+	}
 
 	c := make(chan bool, 1)
 	go func() {
@@ -160,9 +162,19 @@ func (p *producer) handleMessage(topic string, querystring url.Values, contentLe
 
 	coalescer := p.getCoalescer(topic, replication.Token, replication.RangeIndex)
 	if err := coalescer.append(replication, uint32(contentLength), timestampMicros, body); err != nil {
-		return err
+		return p.adaptCoalescerError(err)
 	}
 	return nil
+}
+
+func (p *producer) adaptCoalescerError(err error) error {
+	inner, ok := err.(types.ProducingError)
+	if ok && !inner.WasWriteAttempted() {
+		return types.NewHttpError(
+			http.StatusMisdirectedRequest,
+			fmt.Sprintf("Producer request could not be handled at the moment: %s", err.Error()))
+	}
+	return err
 }
 
 func (p *producer) getCoalescer(topicName string, token types.Token, rangeIndex types.RangeIndex) *coalescer {

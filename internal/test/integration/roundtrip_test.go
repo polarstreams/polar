@@ -6,7 +6,9 @@ package integration_test
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -47,19 +49,18 @@ var _ = Describe("A 3 node cluster", func() {
 
 		AfterEach(func ()  {
 			log.Debug().Msgf("Shutting down test cluster")
-			b0.Shutdown()
-			b1.Shutdown()
-			b2.Shutdown()
 
+			brokers := []*TestBroker{b0, b1, b2}
 			if b3 != nil {
-				b3.Shutdown()
+				brokers = append(brokers, b3)
 			}
 			if b4 != nil {
-				b4.Shutdown()
+				brokers = append(brokers, b4)
 			}
 			if b5 != nil {
-				b5.Shutdown()
+				brokers = append(brokers, b5)
 			}
+			ShutdownInParallel(brokers...)
 		})
 
 		It("should work with a healthy cluster", func() {
@@ -177,14 +178,56 @@ var _ = Describe("A 3 node cluster", func() {
 			Expect(topicId.Token).To(Equal(GetTokenAtIndex(3, 1)), "Token should be T1")
 
 			b1.Start()
+
+			// Use the Producer API while the server is restarting
+			const totalRequests = 100
+			c := make(chan httpResponseResult, totalRequests)
+			go func ()  {
+				url := client.ProducerUrl(1, "abc", partitionKeyT1Range)
+				message := `{"hello": "world1_restarting"}`
+				for i := 0; i < totalRequests; i++ {
+					resp, err := http.Post(url, "application/json", strings.NewReader(message))
+					c <- httpResponseResult{resp, err}
+					if resp != nil {
+						resp.Body.Close()
+					}
+					time.Sleep(5 * time.Millisecond)
+				}
+				close(c)
+			}()
+
 			b1.WaitForStart()
 
 			// There should be a version 3 of T1
 			b1.WaitOutput("Committing \\[-3074457345618259968, 3074457345618255872\\] v3 with B1 as leader")
 			expectOk(client.ProduceJson(1, "abc", `{"hello": "world1_2"}`, partitionKeyT1Range))
-			time.Sleep(1 * time.Second)
+
+			for httpResult := range c {
+				if httpResult.err != nil {
+					Expect(httpResult.err).To(MatchError(MatchRegexp("connection refused")))
+				} else {
+					if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusMisdirectedRequest {
+						Fail(fmt.Sprintf("Expected 200 or 421 HTTP status, obtained %d", resp.StatusCode))
+					}
+				}
+			}
 
 			client.Close()
+		})
+
+		It("should create multiple segments", func ()  {
+			b0.WaitForStart().WaitForVersion1()
+			b1.WaitForStart().WaitForVersion1()
+			b2.WaitForStart().WaitForVersion1()
+
+			client := NewTestClient(nil)
+			for i := 0; i < 50; i++ {
+				// Generate a message each time to make it harder to compress
+				message := fmt.Sprintf(`{"long_message": "%s"}`, generateString(500 * 1024))
+				resp := client.ProduceJson(0, "abc", message, partitionKeyT0Range)
+				expectOk(resp)
+			}
+			time.Sleep(1 * time.Second)
 		})
 
 		It("should get topology changes and resize the ring", func () {
@@ -223,7 +266,7 @@ var _ = Describe("A 3 node cluster", func() {
 
 func expectOk(resp *http.Response, description... interface{}) {
 	defer resp.Body.Close()
-	Expect(resp.StatusCode).To(Equal(200), description...)
+	Expect(resp.StatusCode).To(Equal(http.StatusOK), description...)
 	Expect(ReadBody(resp)).To(Equal("OK"))
 }
 
@@ -233,7 +276,7 @@ func expectOkOrMessage(resp *http.Response, message string, description... inter
 		Expect(ReadBody(resp)).To(MatchRegexp(message))
 		return
 	}
-	Expect(resp.StatusCode).To(Equal(200), description...)
+	Expect(resp.StatusCode).To(Equal(http.StatusOK), description...)
 	Expect(ReadBody(resp)).To(Equal("OK"))
 }
 
@@ -245,6 +288,21 @@ type consumerResponseItem struct {
 type record struct {
 	timestamp time.Time
 	body string
+}
+
+type httpResponseResult struct {
+	resp *http.Response
+	err error
+}
+
+// Use pseudo random value that is hard to compress
+func generateString(length int) string {
+	result := ""
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for len(result) < length {
+		result += fmt.Sprint(r.Int())
+	}
+	return result
 }
 
 func unmarshalConsumerResponseItem(r io.Reader) consumerResponseItem {

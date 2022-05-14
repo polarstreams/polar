@@ -108,11 +108,13 @@ func (c *dataConnection) readDataResponses(config conf.GossipConfig, closeHandle
 	r := bufio.NewReaderSize(c.conn, receiveBufferSize)
 	headerBuffer := make([]byte, headerSize)
 	bodyBuffer := make([]byte, maxResponseGroupSize)
+
 	for {
 		if n, err := io.ReadFull(r, headerBuffer); err != nil {
 			log.Warn().Err(err).Int("n", n).Msg("There was an error reading header from peer server")
 			break
 		}
+
 		header, err := readHeader(headerBuffer)
 		if err != nil {
 			log.Warn().Msg("Invalid data header from peer, closing connection")
@@ -174,11 +176,13 @@ func (c *dataConnection) writeDataRequests(config conf.GossipConfig, closeHandle
 			continue
 		}
 
+		// Capture it
+		m := message
 		// Create the func that will be invoked on response
 		c.handlers.Store(header.StreamId, func(res dataResponse) error {
 			// Enqueue stream id for reuse
 			c.streamIds <- streamId
-			return message.SetResponse(res)
+			return m.SetResponse(res)
 		})
 
 		if n, err := c.conn.Write(w.Bytes()); err != nil {

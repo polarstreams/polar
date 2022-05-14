@@ -28,7 +28,7 @@ func (g *gossiper) SendToFollowers(
 	}
 
 	sent := 0
-	response := make(chan dataResponse, 1)
+	response := make(chan dataResponse, len(replicationInfo.Followers))
 
 	// The provided body is only valid for the lifetime of this call
 	// By using a context, we make sure the client doesn't use the
@@ -59,8 +59,11 @@ func (g *gossiper) SendToFollowers(
 			continue
 		}
 		sent += 1
+
+		// Capture it
+		requestChan := c.dataMessages
 		go func() {
-			c.dataMessages <- request
+			requestChan <- request
 		}()
 	}
 
