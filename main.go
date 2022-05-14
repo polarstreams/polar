@@ -117,6 +117,7 @@ func main() {
 	}
 
 	gossiper.Close()
+	discoverer.Close()
 	localDbClient.Close()
 	log.Info().Msg("Barco shutdown completed")
 }

@@ -89,11 +89,10 @@ spec:
       terminationGracePeriodSeconds: 1
       containers:
       - name: barco
-        image: golang:1.17-buster
-        command: ["/bin/bash"]
-        args: ["-c", "while true; do echo hello; sleep 10;done"]
+        image: jorgebay/barco:test1
+        imagePullPolicy: Always
         env:
-        - name: SERVICE_NAME
+        - name: BARCO_SERVICE_NAME
           value: barco
         - name: POD_NAME
           valueFrom:
@@ -125,4 +124,3 @@ spec:
             resourceFieldRef:
               resource: limits.memory
               divisor: 1Ki
-

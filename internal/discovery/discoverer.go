@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -30,11 +31,11 @@ var roundRobinBrokerIndex uint32 = 0
 // It emits events that others like Gossipper listens to.
 type Discoverer interface {
 	Initializer
+	Closer
 	TopologyGetter
 	// Adds a listener that will be invoked when there are changes in the number of replicas change.
 	// The func will be invoked using in a single thread, if there are multiple changes it will be invoked sequentially
 	RegisterListener(l TopologyChangeListener)
-	Shutdown()
 }
 
 type TopologyGetter interface {
@@ -83,20 +84,24 @@ func NewDiscoverer(config conf.DiscovererConfig, localDb localdb.Client) Discove
 }
 
 type discoverer struct {
-	config           conf.DiscovererConfig
-	localDb          localdb.Client
-	listeners        []TopologyChangeListener
-	topology         atomic.Value // Gets the current brokers, index and ring
-	previousTopology atomic.Value // Stores the previous topology to try to access the peers that are leaving the cluster, if possible
-	k8sClient        k8sClient
-	genMutex         sync.Mutex
-	genProposed      genMap
-	generations      atomic.Value // copy on write semantics
+	config                conf.DiscovererConfig
+	localDb               localdb.Client
+	listeners             []TopologyChangeListener
+	topology              atomic.Value // Gets the current brokers, index and ring
+	previousTopology      atomic.Value // Stores the previous topology to try to access the peers that are leaving the cluster, if possible
+	k8sClient             k8sClient
+	genMutex              sync.Mutex
+	genProposed           genMap
+	generations           atomic.Value // copy on write semantics
+	clientDiscoveryServer *http.Server
 }
 
 func (d *discoverer) Init() error {
 	if d.config.DevMode() {
-		return d.loadFixedTopology(0)
+		if err := d.loadFixedTopology(0); err != nil {
+			return err
+		}
+		return d.startClientDiscoveryServer()
 	}
 
 	if fixedOrdinal, err := strconv.Atoi(os.Getenv(envOrdinal)); err != nil {
@@ -118,6 +123,10 @@ func (d *discoverer) Init() error {
 	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.Topology().Brokers))
 
 	if err := d.loadGenerations(); err != nil {
+		return err
+	}
+
+	if err := d.startClientDiscoveryServer(); err != nil {
 		return err
 	}
 
@@ -201,6 +210,7 @@ func (d *discoverer) loadTopology() error {
 func createTopology(totalBrokers int, config conf.DiscovererConfig) *TopologyInfo {
 	baseHostName := config.BaseHostName()
 	localOrdinal := config.Ordinal()
+	serviceName := config.ServiceName()
 
 	// Ring in sorted by ordinal
 	brokers := make([]BrokerInfo, 0, totalBrokers)
@@ -209,7 +219,7 @@ func createTopology(totalBrokers int, config conf.DiscovererConfig) *TopologyInf
 		brokers = append(brokers, BrokerInfo{
 			IsSelf:   isSelf,
 			Ordinal:  i,
-			HostName: fmt.Sprintf("%s%d", baseHostName, i),
+			HostName: fmt.Sprintf("%s%d.%s", baseHostName, i, serviceName),
 		})
 	}
 
@@ -417,7 +427,11 @@ func (d *discoverer) emitTopologyChangeEvent(previousTopology *TopologyInfo, new
 	}
 }
 
-func (d *discoverer) Shutdown() {}
+func (d *discoverer) Close() {
+	if d.clientDiscoveryServer != nil {
+		d.clientDiscoveryServer.Close()
+	}
+}
 
 // followers gets the next two brokers according to the broker order.
 func followers(brokers []BrokerInfo, index BrokerIndex) []BrokerInfo {

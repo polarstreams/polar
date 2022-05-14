@@ -9,6 +9,9 @@ const (
 	// Url for producing messages
 	TopicMessageUrl = "/v1/topic/:topic/messages"
 
+	// Url for client discovery service
+	ClientDiscoveryUrl = "/v1/brokers"
+
 	// Consumer Urls
 
 	// Url consuming messages

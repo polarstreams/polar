@@ -34,6 +34,7 @@ const (
 	envTopologyFilePollDelayMs = "BARCO_TOPOLOGY_FILE_POLL_DELAY_MS"
 	envShutdownDelaySecs       = "BARCO_SHUTDOWN_DELAY_SECS"
 	envDevMode                 = "BARCO_DEV_MODE"
+	envServiceName             = "BARCO_SERVICE_NAME"
 )
 
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
@@ -46,7 +47,6 @@ type Config interface {
 	ProducerConfig
 	ConsumerConfig
 	DiscovererConfig
-	AdminPort() int
 	MetricsPort() int
 	CreateAllDirs() error
 }
@@ -57,6 +57,8 @@ type BasicConfig interface {
 	DevMode() bool       // Determines whether we are running a single instance in dev mode
 	ConsumerRanges() int // The number of ranges to partition any token range.
 	ShutdownDelay() time.Duration
+	ProducerPort() int
+	ConsumerPort() int
 }
 
 type LocalDbConfig interface {
@@ -79,16 +81,17 @@ type DatalogConfig interface {
 type DiscovererConfig interface {
 	BasicConfig
 	Ordinal() int
+	ClientDiscoveryPort() int // port number of the HTTP discovery service to expose to client libraries
 	// BaseHostName is name prefix that should be concatenated with the ordinal to
 	// return the host name of a replica
 	BaseHostName() string
+	ServiceName() string                       // Name of the K8S service for pod stable names
 	FixedTopologyFilePollDelay() time.Duration // The delay between attempts to read file for changes in topology
 }
 
 type ProducerConfig interface {
 	BasicConfig
 	DatalogConfig
-	ProducerPort() int
 	FlowController() FlowController
 }
 
@@ -96,7 +99,6 @@ type ConsumerConfig interface {
 	BasicConfig
 	DatalogConfig
 	ConsumerAddDelay() time.Duration
-	ConsumerPort() int
 	ConsumerReadThreshold() int // The minimum amount of bytes once reached the consumer poll is fullfilled
 }
 
@@ -161,7 +163,7 @@ func (c *config) ConsumerPort() int {
 	return 8082
 }
 
-func (c *config) AdminPort() int {
+func (c *config) ClientDiscoveryPort() int {
 	return 8083
 }
 
@@ -280,6 +282,10 @@ func (c *config) Ordinal() int {
 
 func (c *config) BaseHostName() string {
 	return c.baseHostName
+}
+
+func (c *config) ServiceName() string {
+	return env(envServiceName, "barco")
 }
 
 func (c *config) FixedTopologyFilePollDelay() time.Duration {

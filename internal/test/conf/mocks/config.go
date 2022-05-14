@@ -16,20 +16,6 @@ type Config struct {
 	mock.Mock
 }
 
-// AdminPort provides a mock function with given fields:
-func (_m *Config) AdminPort() int {
-	ret := _m.Called()
-
-	var r0 int
-	if rf, ok := ret.Get(0).(func() int); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(int)
-	}
-
-	return r0
-}
-
 // AutoCommitInterval provides a mock function with given fields:
 func (_m *Config) AutoCommitInterval() time.Duration {
 	ret := _m.Called()
@@ -53,6 +39,20 @@ func (_m *Config) BaseHostName() string {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// ClientDiscoveryPort provides a mock function with given fields:
+func (_m *Config) ClientDiscoveryPort() int {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
 	}
 
 	return r0
@@ -419,6 +419,20 @@ func (_m *Config) SegmentFlushInterval() time.Duration {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(time.Duration)
+	}
+
+	return r0
+}
+
+// ServiceName provides a mock function with given fields:
+func (_m *Config) ServiceName() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
 	}
 
 	return r0

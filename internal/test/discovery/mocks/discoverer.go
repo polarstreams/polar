@@ -32,6 +32,11 @@ func (_m *Discoverer) Brokers() []types.BrokerInfo {
 	return r0
 }
 
+// Close provides a mock function with given fields:
+func (_m *Discoverer) Close() {
+	_m.Called()
+}
+
 // CurrentOrPastBroker provides a mock function with given fields: ordinal
 func (_m *Discoverer) CurrentOrPastBroker(ordinal int) *types.BrokerInfo {
 	ret := _m.Called(ordinal)
@@ -268,11 +273,6 @@ func (_m *Discoverer) SetGenerationProposed(gen *types.Generation, gen2 *types.G
 	}
 
 	return r0
-}
-
-// Shutdown provides a mock function with given fields:
-func (_m *Discoverer) Shutdown() {
-	_m.Called()
 }
 
 // Topology provides a mock function with given fields:
