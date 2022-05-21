@@ -109,11 +109,11 @@ spec:
         env:
         - name: BARCO_SERVICE_NAME
           value: barco
-        - name: POD_NAME
+        - name: BARCO_POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        - name: POD_NAMESPACE
+        - name: BARCO_POD_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace

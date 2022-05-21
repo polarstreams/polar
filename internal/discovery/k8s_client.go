@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"os"
 	"time"
 
+	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/utils"
 	"github.com/rs/zerolog/log"
 	v1 "k8s.io/api/apps/v1"
@@ -16,18 +16,13 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-const (
-	envPodName      = "POD_NAME"
-	envPodNamespace = "POD_NAMESPACE"
-)
-
 const appNameLabel = "app.kubernetes.io/name"
 const k8sBackoffDelayMs = 200
 const k8sMaxBackoffDelayMs = 10_000
 
 // Represents a wrapper around k8s api calls
 type k8sClient interface {
-	init() error
+	init(config conf.DiscovererConfig) error
 	getDesiredReplicas() (int, error)
 	startWatching(replicas int)
 	replicasChangeChan() <-chan int
@@ -41,30 +36,32 @@ type k8sClientImpl struct {
 }
 
 func newK8sClient() k8sClient {
-	namespace := os.Getenv(envPodNamespace)
 	return &k8sClientImpl{
-		namespace:    namespace,
 		replicasChan: make(chan int),
 	}
 }
 
-func (c *k8sClientImpl) init() error {
-	config, err := rest.InClusterConfig()
+func (c *k8sClientImpl) init(config conf.DiscovererConfig) error {
+	k8sRestConfig, err := rest.InClusterConfig()
 	if err != nil {
 		return err
 	}
 	log.Debug().Msgf("Creating new k8s config")
-	client, err := kubernetes.NewForConfig(config)
+	client, err := kubernetes.NewForConfig(k8sRestConfig)
 	if err != nil {
 		return err
 	}
 
-	podName := os.Getenv(envPodName)
-	namespace := os.Getenv(envPodNamespace)
-	log.Debug().Msgf("Querying k8s api")
+	podName := config.PodName()
+	c.namespace = config.PodNamespace()
+	log.Debug().Str("pod", podName).Str("namespace", c.namespace).Msgf("Querying k8s api")
+
+	if c.namespace == "" || podName == "" {
+		return fmt.Errorf("K8s discovery requires BARCO_POD_NAME and BARCO_POD_NAMESPACE to be set")
+	}
 
 	pod, err := client.CoreV1().
-		Pods(namespace).
+		Pods(c.namespace).
 		Get(context.TODO(), podName, metav1.GetOptions{})
 
 	if err != nil {
@@ -72,7 +69,7 @@ func (c *k8sClientImpl) init() error {
 	}
 
 	if pod == nil {
-		return fmt.Errorf("Could not find pod '%s' in namespace '%s'", podName, namespace)
+		return fmt.Errorf("Could not find pod '%s' in namespace '%s'", podName, c.namespace)
 	}
 
 	c.client = client

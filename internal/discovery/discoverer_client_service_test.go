@@ -18,6 +18,7 @@ var _ = Describe("discoverer", func() {
 			config := new(mocks.Config)
 			config.On("BaseHostName").Return("barco1-")
 			config.On("ServiceName").Return("svc")
+			config.On("PodNamespace").Return("streams")
 			config.On("Ordinal").Return(1)
 			config.On("DevMode").Return(false)
 			config.On("ListenOnAllAddresses").Return(true)
@@ -53,7 +54,7 @@ var _ = Describe("discoverer", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(Equal(topologyClientMessage{
 				Length:       3,
-				BrokerNames:  []string{"barco1-0.svc", "barco1-1.svc", "barco1-2.svc"},
+				BrokerNames:  []string{"barco1-0.svc.streams", "barco1-1.svc.streams", "barco1-2.svc.streams"},
 				ProducerPort: 8901,
 				ConsumerPort: 8902,
 			}))
@@ -64,6 +65,7 @@ var _ = Describe("discoverer", func() {
 			config := new(mocks.Config)
 			config.On("BaseHostName").Return("barco2-")
 			config.On("ServiceName").Return("svc")
+			config.On("PodNamespace").Return("")
 			config.On("Ordinal").Return(1)
 			config.On("DevMode").Return(false)
 			config.On("ListenOnAllAddresses").Return(true)

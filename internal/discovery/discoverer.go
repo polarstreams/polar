@@ -106,7 +106,8 @@ func (d *discoverer) Init() error {
 
 	if fixedOrdinal, err := strconv.Atoi(os.Getenv(envOrdinal)); err != nil {
 		// Use normal discovery
-		if err := d.k8sClient.init(); err != nil {
+		if err := d.k8sClient.init(d.config); err != nil {
+			log.Err(err).Msgf("K8s client could not be initialized")
 			return err
 		}
 
@@ -211,6 +212,12 @@ func createTopology(totalBrokers int, config conf.DiscovererConfig) *TopologyInf
 	baseHostName := config.BaseHostName()
 	localOrdinal := config.Ordinal()
 	serviceName := config.ServiceName()
+	namespace := config.PodNamespace()
+
+	if namespace != "" {
+		// Include the dot to be appended to the host name
+		namespace = "." + namespace
+	}
 
 	// Ring in sorted by ordinal
 	brokers := make([]BrokerInfo, 0, totalBrokers)
@@ -219,7 +226,7 @@ func createTopology(totalBrokers int, config conf.DiscovererConfig) *TopologyInf
 		brokers = append(brokers, BrokerInfo{
 			IsSelf:   isSelf,
 			Ordinal:  i,
-			HostName: fmt.Sprintf("%s%d.%s", baseHostName, i, serviceName),
+			HostName: fmt.Sprintf("%s%d.%s%s", baseHostName, i, serviceName, namespace),
 		})
 	}
 

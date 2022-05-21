@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/test/conf/mocks"
 	dbMocks "github.com/barcostreams/barco/internal/test/localdb/mocks"
 	. "github.com/barcostreams/barco/internal/types"
@@ -134,13 +135,14 @@ var _ = Describe("discoverer", func() {
 			config := new(mocks.Config)
 			config.On("BaseHostName").Return("barco-")
 			config.On("ServiceName").Return("svc")
+			config.On("PodNamespace").Return("streams")
 			config.On("Ordinal").Return(1)
 
 			topology := createTopology(3, config)
 			Expect(topology.Brokers).To(Equal([]BrokerInfo{
-				{IsSelf: false, Ordinal: 0, HostName: "barco-0.svc"},
-				{IsSelf: true, Ordinal: 1, HostName: "barco-1.svc"},
-				{IsSelf: false, Ordinal: 2, HostName: "barco-2.svc"},
+				{IsSelf: false, Ordinal: 0, HostName: "barco-0.svc.streams"},
+				{IsSelf: true, Ordinal: 1, HostName: "barco-1.svc.streams"},
+				{IsSelf: false, Ordinal: 2, HostName: "barco-2.svc.streams"},
 			}))
 			Expect(topology.LocalIndex).To(Equal(BrokerIndex(1)))
 		})
@@ -149,6 +151,7 @@ var _ = Describe("discoverer", func() {
 			config := new(mocks.Config)
 			config.On("BaseHostName").Return("broker-")
 			config.On("ServiceName").Return("svc2")
+			config.On("PodNamespace").Return("")
 			config.On("Ordinal").Return(1)
 
 			topology := createTopology(6, config)
@@ -171,6 +174,7 @@ var _ = Describe("discoverer", func() {
 			config = new(mocks.Config)
 			config.On("BaseHostName").Return("broker-")
 			config.On("ServiceName").Return("svc2")
+			config.On("PodNamespace").Return("")
 			config.On("Ordinal").Return(2)
 			topology = createTopology(6, config)
 			Expect(topology.LocalIndex).To(Equal(BrokerIndex(4)))
@@ -180,6 +184,7 @@ var _ = Describe("discoverer", func() {
 			config := new(mocks.Config)
 			config.On("BaseHostName").Return("broker-")
 			config.On("ServiceName").Return("barco")
+			config.On("PodNamespace").Return("")
 			config.On("Ordinal").Return(4)
 
 			topology := createTopology(12, config)
@@ -293,6 +298,14 @@ func (c *configFake) ServiceName() string {
 	return "barco"
 }
 
+func (c *configFake) PodName() string {
+	return "barco-0"
+}
+
+func (c *configFake) PodNamespace() string {
+	return ""
+}
+
 func (c *configFake) HomePath() string {
 	return "/var/lib/barco"
 }
@@ -340,7 +353,7 @@ type k8sClientFake struct {
 	desiredReplicas int
 }
 
-func (c *k8sClientFake) init() error {
+func (c *k8sClientFake) init(_ conf.DiscovererConfig) error {
 	return nil
 }
 

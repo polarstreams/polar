@@ -35,6 +35,8 @@ const (
 	envShutdownDelaySecs       = "BARCO_SHUTDOWN_DELAY_SECS"
 	envDevMode                 = "BARCO_DEV_MODE"
 	envServiceName             = "BARCO_SERVICE_NAME"
+	envPodName                 = "BARCO_POD_NAME"
+	envPodNamespace            = "BARCO_POD_NAMESPACE"
 )
 
 // Port defaults
@@ -96,6 +98,8 @@ type DiscovererConfig interface {
 	// return the host name of a replica
 	BaseHostName() string
 	ServiceName() string                       // Name of the K8S service for pod stable names
+	PodName() string                           // Name of the pod barco is running
+	PodNamespace() string                      // Name of the namespace of the barco pod
 	FixedTopologyFilePollDelay() time.Duration // The delay between attempts to read file for changes in topology
 }
 
@@ -296,6 +300,14 @@ func (c *config) BaseHostName() string {
 
 func (c *config) ServiceName() string {
 	return env(envServiceName, "barco")
+}
+
+func (c *config) PodName() string {
+	return env(envPodName, "")
+}
+
+func (c *config) PodNamespace() string {
+	return env(envPodNamespace, "")
 }
 
 func (c *config) FixedTopologyFilePollDelay() time.Duration {

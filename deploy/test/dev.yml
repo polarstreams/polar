@@ -1,3 +1,4 @@
+# This probably can be replaced with kustomization
 ---
 apiVersion: v1
 kind: Service
@@ -93,13 +94,13 @@ spec:
         command: ["/bin/bash"]
         args: ["-c", "while true; do echo hello; sleep 10;done"]
         env:
-        - name: SERVICE_NAME
+        - name: BARCO_SERVICE_NAME
           value: barco
-        - name: POD_NAME
+        - name: BARCO_POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        - name: POD_NAMESPACE
+        - name: BARCO_POD_NAMESPACE
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
