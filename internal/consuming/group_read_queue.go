@@ -3,7 +3,6 @@ package consuming
 import (
 	"encoding/binary"
 	"fmt"
-	"math"
 	"net/http"
 	"os"
 	"time"
@@ -24,7 +23,6 @@ const (
 	requeueDelay  = 200 * time.Millisecond
 )
 
-const offsetCompleted = math.MaxInt64
 const offsetNoData = -1 // We should use types and flags in the future
 
 // Receives read requests per group on a single thread.
@@ -281,45 +279,59 @@ func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source 
 	if len(nextGens) == 1 && len(nextGens[0].Parents) == 2 {
 		// Scale down from 2 tokens to 1
 		log.Debug().Msgf("Setting offset for previous generation that was scaled down for %s", &topicId)
+
+		// Mark as completed
 		offset := Offset{
-			Offset:  offsetCompleted,
+			Offset:  OffsetCompleted,
 			Version: topicId.Version,
 			Source:  source,
 		}
-		q.offsetState.Set(
-			q.group, topicId.Name, topicId.Token, topicId.RangeIndex, offset, OffsetCommitAll)
+		q.offsetState.Set(q.group, topicId.Name, topicId.Token, topicId.RangeIndex, offset, OffsetCommitAll)
 
-		var otherParent GenId
-		for _, id := range nextGens[0].Parents {
-			if id.Start != topicId.Token {
-				otherParent = id
-			}
+		targetToken := nextGens[0].Start
+		var otherOffset *Offset
+		var targetRangeIndex RangeIndex
+
+		otherRangeIndex := topicId.RangeIndex-1
+		if topicId.RangeIndex % 2 == 0 {
+			otherRangeIndex = topicId.RangeIndex+1
 		}
 
-		otherParentOffset := q.offsetState.Get(
-			q.group, topicId.Name, otherParent.Start, topicId.RangeIndex)
+		// The range was joined, we need to find the indices this falls into
+		// To move the target offset to zero with next gen, we need to make sure the other range completed as well
+		if topicId.Token == targetToken {
+			// Its the token that continues to be in the cluster
+			targetRangeIndex = topicId.RangeIndex/2
+			otherOffset = q.offsetState.Get(q.group, topicId.Name, topicId.Token, otherRangeIndex)
+		} else {
+			targetRangeIndex = RangeIndex(q.config.ConsumerRanges())/2 + topicId.RangeIndex/2
+			otherOffset = q.offsetState.Get(q.group, topicId.Name, topicId.Token, otherRangeIndex)
+		}
 
-		if otherParentOffset != nil {
-			log.Debug().Msgf("Other parent: %v; offset: %v", otherParent, *otherParentOffset)
-			if otherParentOffset.Version == otherParent.Version && otherParentOffset.Offset == offsetCompleted {
-				log.Info().Msgf("Moving offset of joined generation for %s", &topicId)
-				token := nextGens[0].Start
-				version := nextGens[0].Version
+		otherIsCompleted :=
+			otherOffset != nil &&
+			// Either it was marked as completed or the other range already passed the generation
+			(otherOffset.Offset == OffsetCompleted || otherOffset.Version >= nextGens[0].Version)
 
-				offset := Offset{
-					Offset:  0,
-					Version: version,
-					Source:  source,
-				}
-				q.offsetState.Set(
-					q.group, topicId.Name, token, topicId.RangeIndex, offset, OffsetCommitAll)
-			}
+		if otherIsCompleted {
+			log.Info().Msgf("After scaling down, setting group offset '%s' for topic '%s' to %d/%d v%d",
+				q.group, topicId.Name, targetToken, targetRangeIndex, nextGens[0].Version)
+
+			q.offsetState.Set(q.group, topicId.Name, targetToken, targetRangeIndex, Offset{
+				Offset:  0,
+				Version: nextGens[0].Version,
+				Source:  source,
+			}, OffsetCommitAll)
+		} else {
+			log.Info().Msgf("After scaling down, could not move offset '%s' for topic '%s' to %d/%d v%d: other offset %s (of %d/%d)",
+				q.group, topicId.Name, targetToken, targetRangeIndex, nextGens[0].Version, otherOffset, topicId.Token, otherRangeIndex)
 		}
 
 		return true
 	}
 
-	for _, gen := range nextGens {
+	if len(nextGens) == 1 && len(nextGens[0].Parents) == 1 {
+		gen := nextGens[0]
 		offset := Offset{
 			Offset:  0,
 			Version: gen.Version,
@@ -327,8 +339,53 @@ func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source 
 		}
 		q.offsetState.Set(
 			q.group, topicId.Name, topicId.Token, topicId.RangeIndex, offset, OffsetCommitAll)
+
+		return true
 	}
-	return true
+
+	if len(nextGens) == 2 {
+		// Scale up from 1 token to two
+		rangesLength := q.config.ConsumerRanges()
+		originalGenerationIndex := utils.FindGenByToken(nextGens, topicId.Token)
+		if originalGenerationIndex == -1 {
+			log.Panic().Msgf("Original generation not found")
+		}
+		var rangeIndices []RangeIndex
+		var gen Generation
+
+		// The range was split, we need to find the token where this falls into
+		if topicId.RangeIndex < RangeIndex(rangesLength)/2 {
+			// Original token
+			gen = nextGens[originalGenerationIndex]
+			rangeIndices = []RangeIndex{topicId.RangeIndex * 2, topicId.RangeIndex*2 + 1}
+		} else {
+			genIndex := originalGenerationIndex + 1
+			if originalGenerationIndex == 1 {
+				genIndex = 0
+			}
+			gen = nextGens[genIndex]
+
+			startRangeIndex := topicId.RangeIndex*2 - RangeIndex(rangesLength)
+			rangeIndices = []RangeIndex{startRangeIndex, startRangeIndex + 1}
+		}
+
+		offset := Offset{
+			Offset:  0,
+			Version: gen.Version,
+			Source:  source,
+		}
+		for _, rangeIndex := range rangeIndices {
+			q.offsetState.Set(
+				q.group, topicId.Name, gen.Start, rangeIndex, offset, OffsetCommitAll)
+		}
+
+		return true
+	}
+
+	log.Panic().
+		Int("Next", len(nextGens)).Int("Parents", len(nextGens[0].Parents)).
+		Msgf("Unexpected number of next generations")
+	return false
 }
 
 func (q *groupReadQueue) closeReader(reader *SegmentReader) {
@@ -451,7 +508,7 @@ func (q *groupReadQueue) createReader(
 		}
 	}
 
-	if offset.Offset == offsetCompleted {
+	if offset.Offset == OffsetCompleted {
 		// Probably waiting for the reader generation to be moved
 		return nil
 	}

@@ -1,5 +1,10 @@
 package types
 
+import (
+	"fmt"
+	"math"
+)
+
 type OffsetCommitType int
 type CompareResult int
 
@@ -14,6 +19,8 @@ const (
 	CompareLessThan
 	CompareGreaterThan
 )
+
+const OffsetCompleted = math.MaxInt64
 
 // Represents a topic offset for a given token.
 type Offset struct {
@@ -40,6 +47,10 @@ func (o *Offset) Compare(other *Offset) CompareResult {
 		return CompareGreaterThan
 	}
 	return CompareEqual
+}
+
+func (o *Offset) String() string {
+	return fmt.Sprintf("v%d %d", o.Version, o.Offset)
 }
 
 // Represents an identifier of an offset to be persisted

@@ -102,10 +102,6 @@ func (s *defaultOffsetState) processCommit() {
 	for kv := range s.commitChan {
 		if err := s.localDb.SaveOffset(kv); err != nil {
 			log.Err(err).Interface("offset", *kv).Msgf("Offset could not be stored in the local db")
-		} else {
-			log.Debug().Msgf(
-				"Offset stored in the local db for group %s topic '%s' %d/%d: v%d %d",
-				kv.Key.Group, kv.Key.Topic, kv.Key.Token, kv.Key.RangeIndex, kv.Value.Version, kv.Value.Offset)
 		}
 	}
 }

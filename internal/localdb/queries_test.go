@@ -370,7 +370,7 @@ var _ = Describe("Client", func() {
 				RangeIndex: 2,
 			}
 			value := Offset{
-				Offset:  math.MaxInt64,
+				Offset:  OffsetCompleted,
 				Version: 2,
 				Source:  GenId{Start: math.MinInt64, Version: 4},
 			}

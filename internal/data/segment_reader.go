@@ -221,18 +221,19 @@ func (s *SegmentReader) handleFileGap(offsetGap *int64, reader *bytes.Reader, bu
 
 func (s *SegmentReader) storeOffset(lastCommit *time.Time) {
 	commitType := OffsetCommitLocal
+	value := Offset{
+		Offset:  s.messageOffset,
+		Version: s.Topic.Version,
+		Source:  s.SourceVersion,
+	}
+
 	if time.Since(*lastCommit) >= s.config.AutoCommitInterval() {
 		*lastCommit = time.Now()
 		commitType = OffsetCommitAll
 	} else if s.MaxProducedOffset != nil && s.messageOffset >= *s.MaxProducedOffset {
 		log.Debug().Str("group", s.group).Msgf("Consumed all messages of a previous generation %s", &s.Topic)
 		commitType = OffsetCommitAll
-	}
-
-	value := Offset{
-		Offset:  s.messageOffset,
-		Version: s.Topic.Version,
-		Source:  s.SourceVersion,
+		value.Offset = OffsetCompleted
 	}
 
 	if commitType == OffsetCommitAll {

@@ -167,6 +167,9 @@ func (c *config) Init() error {
 	if c.StreamBufferSize() < c.MaxGroupSize() {
 		return fmt.Errorf("StreamBufferSize can not be lower than MaxGroupSize")
 	}
+	if c.ConsumerRanges() < 2 && c.ConsumerRanges()%2 != 0 {
+		return fmt.Errorf("ConsumerRanges should be a positive even number")
+	}
 	return nil
 }
 
@@ -203,7 +206,7 @@ func (c *config) DevMode() bool {
 }
 
 func (c *config) ConsumerRanges() int {
-	return envInt(envConsumerRanges, 8)
+	return envInt(envConsumerRanges, 4)
 }
 
 func (c *config) MaxMessageSize() int {

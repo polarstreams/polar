@@ -213,3 +213,12 @@ func InParallel(length int, f func(int) error) []chan error {
 	}
 	return result
 }
+
+func FindGenByToken(generations []types.Generation, token types.Token) int {
+	for i, gen := range generations {
+		if gen.Start == token {
+			return i
+		}
+	}
+	return -1
+}

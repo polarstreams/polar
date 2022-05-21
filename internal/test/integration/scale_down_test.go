@@ -54,7 +54,7 @@ var _ = Describe("Scale down with a non-reusable cluster", func ()  {
 		client.RegisterAsConsumer(6, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
 
 		// Produced a message in gen v1
-		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_before_0_0"}`, ""))
+		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_before_0_0"}`, partitionKeyT0Range))
 		expectOk(client.ProduceJson(3, "abc", `{"hello": "world_before_3_0"}`, ""))
 
 		time.Sleep(1 * time.Second)
@@ -115,11 +115,11 @@ var _ = Describe("Scale down with a non-reusable cluster", func ()  {
 		b2.WaitOutput("Gossip now contains 2 clients for 2 peers")
 
 		// Produce a new message in the new generation
-		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_after_0_0"}`, ""))
+		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_after_0_0"}`, partitionKeyT0Range))
 
 		allMessages := make([]consumerResponseItem, 0)
 		// Start polling B0 to obtain data from T0 and T3
-		for i := 0; i < 6; i++ {
+		for i := 0; i < 8; i++ {
 			fmt.Println("--Sending poll", i)
 			resp := client.ConsumerPoll(0)
 			if resp.StatusCode == http.StatusNoContent {
