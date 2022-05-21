@@ -132,6 +132,7 @@ func (d *discoverer) Init() error {
 	}
 
 	go func() {
+		time.Sleep(1 * time.Minute)
 		for {
 			time.Sleep(30 * time.Second)
 			existingMap := d.generations.Load().(genMap)

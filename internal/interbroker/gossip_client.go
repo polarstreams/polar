@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net"
 	"net/http"
 	"sync"
@@ -19,11 +18,7 @@ import (
 	"golang.org/x/net/http2"
 )
 
-const (
-	baseReconnectionDelayMs = 20
-	maxReconnectionDelayMs  = 10_000
-	removeClientCheckDelay  = 5 * time.Second
-)
+const removeClientCheckDelay = 5 * time.Second
 
 func (g *gossiper) OpenConnections() {
 	topology := g.discoverer.Topology()
@@ -291,28 +286,22 @@ type clientInfo struct {
 }
 
 func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
-	i := 0
+	r := newReconnectionPolicy()
 	shouldExit := false
 	for !shouldExit || !c.isHostLeaving() {
 		dataConn, err := newDataConnection(c, config)
 		if err != nil {
-			delayMs := math.Pow(2, float64(i)) * baseReconnectionDelayMs
-			if delayMs > maxReconnectionDelayMs {
-				delayMs = maxReconnectionDelayMs
-			} else {
-				i++
-			}
-
 			log.Info().Msgf("Client gossip data connection to %s could not be opened, retrying", c.hostName)
-			delay := utils.Jitter(time.Duration(delayMs) * time.Millisecond)
+			delay := utils.Jitter(r.next())
 
 			select {
 			case shouldConnect := <-c.readyNewDataConnection:
 				if !shouldConnect {
 					shouldExit = true
-					log.Info().Msgf("Not attempting further data reconnections to %s", c.hostName)
+					log.Info().Msgf("Not attempting further data reconnection attempts to %s", c.hostName)
 				} else {
 					log.Debug().Msgf("Attempting new data connection after receiving ready message")
+					r = newReconnectionPolicy()
 				}
 			case <-time.After(delay):
 			}
@@ -321,7 +310,7 @@ func (c *clientInfo) openDataConnection(config conf.GossipConfig) {
 		}
 
 		// Reset delay
-		i = 0
+		r = newReconnectionPolicy()
 		c.dataConn.Store(dataConn)
 
 		// Wait for connection to be closed
@@ -357,17 +346,10 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *BrokerInfo) {
 	log.Info().Msgf("Start reconnecting to %s", broker.HostName)
 
 	go func() {
-		i := 0
+		r := newReconnectionPolicy()
 		succeeded := false
 		for !c.isHostLeaving() {
-			delayMs := math.Pow(2, float64(i)) * baseReconnectionDelayMs
-			if delayMs > maxReconnectionDelayMs {
-				delayMs = maxReconnectionDelayMs
-			} else {
-				i++
-			}
-
-			delay := utils.Jitter(time.Duration(delayMs) * time.Millisecond)
+			delay := utils.Jitter(r.next())
 			shouldConnect := true
 
 			select {
@@ -376,8 +358,10 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *BrokerInfo) {
 					break
 				}
 				log.Debug().Msgf("Attempting to reconnect to %s after receiving a ready message", broker)
+				// Also, reset the reconnection policy, in case it can't immediately connect
+				r = newReconnectionPolicy()
 			case <-time.After(delay):
-				log.Debug().Msgf("Attempting to reconnect to %s after %v ms", broker, delayMs)
+				log.Debug().Msgf("Attempting to reconnect to %s after %s", broker, delay)
 			}
 
 			if !shouldConnect {
@@ -389,6 +373,8 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *BrokerInfo) {
 			if err == nil {
 				succeeded = true
 				break
+			} else {
+				log.Err(err).Msgf("Reconnection attempt to %s failed", broker)
 			}
 		}
 
@@ -397,7 +383,7 @@ func (c *clientInfo) startReconnection(g *gossiper, broker *BrokerInfo) {
 			c.onHostUp(broker)
 		}
 
-		// Leave field as 0 to allow new reconnections
+		// Leave field as 0 to allow new reconnection attempts
 		atomic.StoreInt32(&c.isReconnecting, 0)
 	}()
 }

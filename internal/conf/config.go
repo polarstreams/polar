@@ -37,16 +37,17 @@ const (
 	envServiceName             = "BARCO_SERVICE_NAME"
 	envPodName                 = "BARCO_POD_NAME"
 	envPodNamespace            = "BARCO_POD_NAMESPACE"
+	EnvBarcoDebug              = "BARCO_DEBUG"
 )
 
 // Port defaults
 const (
 	DefaultClientDiscoveryPort = 9250
-	DefaultProducerPort = 9251
-	DefaultConsumerPort = 9252
-	DefaultMetricsPort = 9253
-	DefaultGossipPort = 9254
-	DefaultGossipDataPort = 9255
+	DefaultProducerPort        = 9251
+	DefaultConsumerPort        = 9252
+	DefaultMetricsPort         = 9253
+	DefaultGossipPort          = 9254
+	DefaultGossipDataPort      = 9255
 )
 
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)

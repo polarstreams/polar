@@ -30,7 +30,7 @@ func main() {
 	debug := flag.Bool("debug", false, "sets log level to debug")
 	devMode := flag.Bool("dev", false, "starts a single instance in dev mode")
 	flag.Parse()
-	if *debug {
+	if *debug || os.Getenv(conf.EnvBarcoDebug) == "true" {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
 
