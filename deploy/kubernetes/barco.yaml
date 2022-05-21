@@ -3,6 +3,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: barco
+  namespace: barco
 spec:
   selector:
     name: barco
@@ -20,11 +21,13 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: barco
+  namespace: barco
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: barco
+  namespace: barco
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
@@ -34,6 +37,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: barco
+  namespace: barco
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -41,6 +45,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: barco
+    namespace: barco
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
@@ -61,7 +66,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: barco
-  namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -69,12 +73,13 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: barco
-    namespace: default
+    namespace: barco
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: barco
+  namespace: barco
   labels:
       app.kubernetes.io/name: barco
 spec:
@@ -84,9 +89,6 @@ spec:
       name: barco
   serviceName: barco
   replicas: 3
-  # persistentVolumeClaimRetentionPolicy:
-  #   whenDeleted: Delete
-  #   whenScaled: Delete
   template:
     metadata:
       labels:
@@ -94,10 +96,10 @@ spec:
         name: barco
     spec:
       serviceAccountName: barco
-      terminationGracePeriodSeconds: 1
+      terminationGracePeriodSeconds: 60
       containers:
       - name: barco
-        image: jorgebay/barco:test1
+        image: jorgebay/barco:dev1
         imagePullPolicy: Always
         ports:
         - containerPort: 9250
