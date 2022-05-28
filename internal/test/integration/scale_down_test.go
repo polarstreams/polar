@@ -124,7 +124,7 @@ var _ = Describe("Scale down with a non-reusable cluster", func ()  {
 
 		allMessages := make([]consumerResponseItem, 0)
 		// Start polling B0 to obtain data from T0 and T3
-		for i := 0; i < 8; i++ {
+		for i := 0; i < 6; i++ {
 			fmt.Println("--Sending poll", i)
 			resp := client.ConsumerPoll(0)
 			if resp.StatusCode == http.StatusNoContent {

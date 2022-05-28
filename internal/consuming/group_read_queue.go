@@ -17,12 +17,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const (
-	fetchMaxWait  = 1 * time.Second
-	refreshPeriod = 2 * time.Second
-	requeueDelay  = 200 * time.Millisecond
-)
-
+const refreshPeriod = 2 * time.Second
 const offsetNoData = -1 // We should use types and flags in the future
 
 // Receives read requests per group on a single thread.
@@ -138,17 +133,8 @@ func (q *groupReadQueue) process() {
 		if len(responseItems) == 0 {
 			if len(errors) > 0 {
 				http.Error(item.writer, "Internal server error", 500)
-			} else if time.Since(item.timestamp) < fetchMaxWait-requeueDelay {
-				// We requeue it to await for new data and move on
-				itemCaptured := item
-				go func() {
-					time.Sleep(requeueDelay)
-					q.items <- itemCaptured
-				}()
-				continue
 			} else {
-				// Fetch can't wait any more
-				utils.NoContentResponse(item.writer, 0)
+				utils.NoContentResponse(item.writer, consumerNoDataDelay)
 			}
 
 			item.done <- true

@@ -151,11 +151,13 @@ func Jitter(t time.Duration) time.Duration {
 
 // Sets the response status as 204 (NoContent) w/ no cache and optionally setting the retry after header.
 func NoContentResponse(w http.ResponseWriter, retryAfter int) {
-	w.WriteHeader(http.StatusNoContent)
 	w.Header().Set("Cache-Control", "no-store")
 	if retryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 	}
+
+	// Finish and write the response
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func ContainsString(values []string, key string) bool {

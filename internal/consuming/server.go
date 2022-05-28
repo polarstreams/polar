@@ -21,8 +21,11 @@ import (
 )
 
 const consumerGroupsToPeersDelay = 10 * time.Second
-const consumerNoDataDelay = 5      // Seconds
-const consumerNoOwnedDataDelay = 5 // Seconds
+
+const (
+	consumerNoOwnedDataDelay = 5 // Seconds to retry after
+	consumerNoDataDelay      = 1 // Seconds to retry after
+)
 
 const contentType = "application/vnd.barco.consumermessage"
 
