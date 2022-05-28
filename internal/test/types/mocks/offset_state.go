@@ -83,3 +83,17 @@ func (_m *OffsetState) ProducerOffsetLocal(topic *types.TopicDataId) (int64, err
 func (_m *OffsetState) Set(group string, topic string, token types.Token, rangeIndex types.RangeIndex, value types.Offset, commit types.OffsetCommitType) {
 	_m.Called(group, topic, token, rangeIndex, value, commit)
 }
+
+// String provides a mock function with given fields:
+func (_m *OffsetState) String() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}

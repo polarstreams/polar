@@ -145,6 +145,9 @@ func (c *coalescer) process() {
 			close(c.writer.Items)
 			c.writer = nil
 
+			// For the new generation, we start at zero
+			c.offset = 0
+
 			// Reuse the writer setup logic, the current item will be handled in the next iteration
 			continue
 		}
@@ -202,7 +205,7 @@ func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
 	buf := c.buffers.group[i]
 	buf.Reset()
 	compressor := c.buffers.compressor[i]
-	// Compressor writter needs to be reinitialized each time
+	// Compressor writer needs to be reinitialized each time
 	compressor.Reset(buf)
 
 	for _, item := range group {

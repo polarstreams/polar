@@ -191,6 +191,11 @@ func (s *SegmentReader) handleFileGap(offsetGap *int64, reader *bytes.Reader, bu
 			segmentId := conf.SegmentIdFromName(s.fileName)
 			maxRecords := int(s.messageOffset-gap) + 1
 
+			if s.replicationReader == nil {
+				log.Panic().
+					Msgf("No replication reader found for %s for file gap in %s/%s", &s.Topic, s.basePath, s.fileName)
+			}
+
 			// Read into buffer from peer
 			n, err := s.replicationReader.StreamFile(segmentId, &s.Topic, s.messageOffset, maxRecords, buf)
 			if err != nil {

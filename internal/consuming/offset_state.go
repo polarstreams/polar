@@ -1,6 +1,7 @@
 package consuming
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/barcostreams/barco/internal/conf"
@@ -54,6 +55,12 @@ func (s *defaultOffsetState) Init() error {
 	}
 
 	return nil
+}
+
+func (s *defaultOffsetState) String() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return fmt.Sprint(s.offsetMap)
 }
 
 func (s *defaultOffsetState) Get(group string, topic string, token Token, rangeIndex RangeIndex) *Offset {

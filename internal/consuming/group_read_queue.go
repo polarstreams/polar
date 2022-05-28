@@ -292,16 +292,16 @@ func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source 
 		var otherOffset *Offset
 		var targetRangeIndex RangeIndex
 
-		otherRangeIndex := topicId.RangeIndex-1
-		if topicId.RangeIndex % 2 == 0 {
-			otherRangeIndex = topicId.RangeIndex+1
+		otherRangeIndex := topicId.RangeIndex - 1
+		if topicId.RangeIndex%2 == 0 {
+			otherRangeIndex = topicId.RangeIndex + 1
 		}
 
 		// The range was joined, we need to find the indices this falls into
 		// To move the target offset to zero with next gen, we need to make sure the other range completed as well
 		if topicId.Token == targetToken {
 			// Its the token that continues to be in the cluster
-			targetRangeIndex = topicId.RangeIndex/2
+			targetRangeIndex = topicId.RangeIndex / 2
 			otherOffset = q.offsetState.Get(q.group, topicId.Name, topicId.Token, otherRangeIndex)
 		} else {
 			targetRangeIndex = RangeIndex(q.config.ConsumerRanges())/2 + topicId.RangeIndex/2
@@ -310,8 +310,8 @@ func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source 
 
 		otherIsCompleted :=
 			otherOffset != nil &&
-			// Either it was marked as completed or the other range already passed the generation
-			(otherOffset.Offset == OffsetCompleted || otherOffset.Version >= nextGens[0].Version)
+				// Either it was marked as completed or the other range already passed the generation
+				(otherOffset.Offset == OffsetCompleted || otherOffset.Version >= nextGens[0].Version)
 
 		if otherIsCompleted {
 			log.Info().Msgf("After scaling down, setting group offset '%s' for topic '%s' to %d/%d v%d",
@@ -485,17 +485,20 @@ func (q *groupReadQueue) createReader(
 	index RangeIndex,
 	source *Generation,
 ) *SegmentReader {
-
+	// Check that previous tokens (scaled down), whether the reader can ignored because all the data has been consumed
 	if token != source.Start {
-		sourceTokenOffset := q.offsetState.Get(q.group, topic, source.Start, index)
+		// Joined tokens, calculate the index change
+		// The source index starts at the middle of the range
+		sourceIndex := RangeIndex(q.config.ConsumerRanges())/2 + index/2
+		sourceTokenOffset := q.offsetState.Get(q.group, topic, source.Start, sourceIndex)
 		if sourceTokenOffset != nil && sourceTokenOffset.Version == source.Version {
-			// Once the offset for the source token is on the last generation, we can ignore this previous token
+			// The offset for the source token is on the last generation, we can ignore this previous token
 			return nil
 		}
 	}
 
-	log.Debug().Msgf("May create for group %s, token %d/%d and topic '%s'", q.group, token, index, topic)
 	offset := q.offsetState.Get(q.group, topic, token, index)
+	log.Debug().Msgf("May create for group %s, token %d/%d and topic '%s' with offset %s", q.group, token, index, topic, offset)
 
 	if offset == nil {
 		// We have no information of this group

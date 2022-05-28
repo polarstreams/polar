@@ -117,6 +117,11 @@ var _ = Describe("Scale down with a non-reusable cluster", func ()  {
 		// Produce a new message in the new generation
 		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_after_0_0"}`, partitionKeyT0Range))
 
+		// Produce more messages with different ranges on B0
+		for i := 1; i < 8; i++ {
+			expectOk(client.ProduceJson(0, "abc", fmt.Sprintf(`{"hello": "world_after_0_%d"}`, i), ""))
+		}
+
 		allMessages := make([]consumerResponseItem, 0)
 		// Start polling B0 to obtain data from T0 and T3
 		for i := 0; i < 8; i++ {
@@ -134,6 +139,9 @@ var _ = Describe("Scale down with a non-reusable cluster", func ()  {
 
 		expectFindRecord(allMessages, `{"hello": "world_before_0_0"}`)
 		expectFindRecord(allMessages, `{"hello": "world_before_3_0"}`)
-		expectFindRecord(allMessages, `{"hello": "world_after_0_0"}`)
+
+		for i := 0; i < 8; i++ {
+			expectFindRecord(allMessages, fmt.Sprintf(`{"hello": "world_after_0_%d"}`, i))
+		}
 	})
 })

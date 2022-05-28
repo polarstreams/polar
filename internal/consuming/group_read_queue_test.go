@@ -133,7 +133,7 @@ var _ = Describe("groupReadQueue()", func() {
 			offsetState.AssertExpectations(GinkgoT())
 		})
 
-		It("should move offset in the next token range when it's 1-2 (scaling up)", func ()  {
+		It("should move offset in the next token range when it's 1-2 (scaling up)", func() {
 			parentGen := Generation{Start: 0, Version: 1}
 			nextGen := Generation{
 				Start:   1000,
@@ -182,10 +182,10 @@ var _ = Describe("groupReadQueue()", func() {
 			offsetState.AssertExpectations(GinkgoT())
 		})
 
-		It("should move offset using the different range indices when it's 2-1 (scaling down)", func ()  {
+		It("should move offset using the different range indices when it's 2-1 (scaling down)", func() {
 			parentGens := []GenId{{Start: 0, Version: 2}, {Start: 1000, Version: 1}}
 			topicId := TopicDataId{
-				Token: 0,
+				Token:      0,
 				RangeIndex: 2,
 			}
 			nextGen := Generation{
@@ -212,7 +212,7 @@ var _ = Describe("groupReadQueue()", func() {
 			// Then it should get the other
 			offsetState.
 				On("Get", mock.Anything, topicId.Name, nextGen.Start, RangeIndex(3)).
-				Return(&Offset{Offset:  OffsetCompleted,Version: topicId.Version})
+				Return(&Offset{Offset: OffsetCompleted, Version: topicId.Version})
 
 			// B0 Range 2 & 3 -> B0 Range 1
 			offsetState.
@@ -232,10 +232,10 @@ var _ = Describe("groupReadQueue()", func() {
 			offsetState.AssertExpectations(GinkgoT())
 		})
 
-		It("should move offset using the different token and range indices when it's 2-1 (scaling down)", func ()  {
+		It("should move offset using the different token and range indices when it's 2-1 (scaling down)", func() {
 			parentGens := []GenId{{Start: 0, Version: 2}, {Start: 1000, Version: 1}}
 			topicId := TopicDataId{
-				Token: 1000,
+				Token:      1000,
 				RangeIndex: 1,
 			}
 			nextGen := Generation{
@@ -262,7 +262,7 @@ var _ = Describe("groupReadQueue()", func() {
 			// Then it should get the other
 			offsetState.
 				On("Get", mock.Anything, topicId.Name, topicId.Token, RangeIndex(0)).
-				Return(&Offset{Offset:  OffsetCompleted,Version: topicId.Version})
+				Return(&Offset{Offset: OffsetCompleted, Version: topicId.Version})
 
 			// B3 Range 0 & 1 -> B0 Range 2
 			offsetState.

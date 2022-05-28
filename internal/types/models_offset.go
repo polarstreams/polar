@@ -70,6 +70,7 @@ type OffsetStoreKeyValue struct {
 // Represents a local view of the consumer group offsets
 type OffsetState interface {
 	Initializer
+	fmt.Stringer
 
 	// Gets the offset value for a given group and token.
 	// Returns nil when not found
