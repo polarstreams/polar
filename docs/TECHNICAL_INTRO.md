@@ -1,0 +1,50 @@
+# Barco Streams - Technical Introduction
+
+## Seminal papers
+
+- [Amazon Dynamo Paper](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf)
+- [Scalable Distributed Transactions across Heterogeneous Stores](https://www.researchgate.net/profile/Akon-Dey/publication/282156834_Scalable_Distributed_Transactions_across_Heterogeneous_Stores/links/56058b9608ae5e8e3f32b98d/Scalable-Distributed-Transactions-across-Heterogeneous-Stores.pdf)
+- [Raft Consensus Algorithm](https://raft.github.io/raft.pdf)
+
+## How does Barco work?
+
+Events are organized in topics. Topics in Barco are always multi-producer and multi-consumer. Events are retained at least until all consumer groups have consumed them.
+
+To achieve high availability, durability and scalability, topic events are partitioned across different Barco brokers. An event is given a partition key to determine the placement within the topic.
+
+Data is distributed across the brokers using consistent hashing (Murmur3 tokens) in a similar way as [Amazon
+DynamoDB](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) and [Apache
+Cassandra](https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html#dataset-partitioning-consistent-hashing).
+Each broker is assigned a token based on the [ordinal
+index](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#ordinal-index) within the cluster,
+which will be used to determine the data that naturally belongs to that broker.
+
+According to the event key and based on the hashing algorithm, the event will be placed in a broker and replicated to
+the following two brokers in the ring.
+
+<div>
+<img src="https://user-images.githubusercontent.com/2931196/174292608-e7c08749-cbc9-4311-b151-400185f586bf.png" style="max-width:400px;">
+</div>
+
+Broker A is the natural leader of token A. When Broker A is considered unavailable by other brokers, after a series of strong consistent operations broker B will take ownership of range (A, B). In case both A and B are considered down, C will not try to take ownership of range (A, B), as it won't be able guarantee the minimum amount of replicas of the data.
+
+Barco uses a deterministic way to assign tokens to brokers (i.e. broker with ordinal 2 will always have the same token).  New brokers added to an existing cluster will be placed in the middle of the previous token range, splitting it in half. In the same way, removing brokers causes ranges to be twice the size.
+
+![rings2](https://user-images.githubusercontent.com/2931196/174292614-4124eddc-01f1-4495-8391-93796f32083e.png)
+
+This technique provides a simple way to add/remove brokers without the need to rebalance existing data. New brokers can take ownership of their natural ranges when ready, with the help of previous brokers, without disrupting availability [additional info needed related to how the ownership decisions are taken / transactions for election of a token leader].
+
+A Producer doesn't necessarily have to understand this placement scheme to publish an event. It can target any broker or the Kubernetes Service and the event message will be routed automatically. From the client's perspective producing a message is just calling an HTTP/2 endpoint [more info needed related to tcp backpressure and estable memory usage].
+
+To consume events, a client should poll for new data to all live brokers. The broker will determine when that consumer should be served with topic events of a given partition depending on the consumer placement.
+
+Barco guarantees that any consumer of a given topic and key will always read that token's events in the same order as they were written.
+
+## Interbroker communication
+
+Barco uses a series of TCP connections to communicate between brokers for different purposes:
+
+- **Gossip**: Barco uses a protocol to exchange state information about brokers participating in the cluster, called Gossip.
+Each broker uses the Gossip protocol to agree on token range ownership and consumers view/topology with neighboring brokers.
+- **Data replication**: All data is automatically replicated to the following brokers in the ring. Compressed groups of events of a certain partition are sent periodically to the followers of the partition leader.
+- **Producer routing**: When a producer client sends a new event message to a broker that is not the leader of the partition, the broker will route the message to the correct leader in the foreground.

@@ -1,36 +1,142 @@
 # Barco Streams
 
-Barco is a lightweight, elastic, kubernetes-native event streaming software.
+Barco is a lightweight, elastic, kubernetes-native event streaming system. It acts as a safe buffer between services by
+persisting events and supports peaks by seamlessly scaling and allowing events to be consumed at a later time from
+the peak.
 
 ## Features
 
 ### Lightweight
 
-- Small binary size.
-- Limited memory footprint: Memory usage is capped at few hundreds of Mb.
-- No additional dependencies, i.e., no Zookeeper.
+- Limited memory footprint: Memory usage can be capped at a few hundreds of Mb
+- Production workloads with 0.5GiB of memory per pod
+- Small binary size, arm64 as first class citizen
+- No additional dependencies, i.e., no Zookeeper
 
 ### Elastic
 
-- New nodes can be started up in seconds, join the cluster and receive new
-data.
-- No need to assign data partitions
-- Scale down easily.
+- New brokers can be started up in seconds, join the cluster and receive new data
+- No need to operate it manually for scaling up/down cluster
+- After a period of low usage, it scales down automatically
+- Elastic in both computing and storage
 
 ### Kubernetes Native
 
-- Basic setup using StatefulSets.
-- Automatic placement based on ordinal.
-- Volume setup, scaling, rolling upgrades is managed by Kubernetes.
+- Basic setup using StatefulSets
+- Volume setup, scaling, rolling upgrades is managed from Kubernetes
+- Data distribution is K8s-aware: data placement based on the StatefulSet's pod ordinal
+- Good K8s neighbor: Direct I/O, no OS page cache for log segments
+
+_Always-on with cost control_
 
 -----
 
-## Building
+<details>
+<summary>⚠️ <strong>The project is still in early development</strong> ⚠️</summary>
+Barco Streams is not production ready, expect bugs and things that don't work.
+
+We honestly value your contribution to make this project ready for general availability. If you want to contribute,
+check out the [Issues section on GitHub](https://github.com/barcostreams/barco/issues).
+The label ["good first issue"](https://github.com/barcostreams/barco/labels/good%20first%20issue) marks tasks that are
+beginner-friendly.
+</details>
+
+-----
+
+## How does Barco work?
+
+Events are organized in topics. Topics in Barco are always multi-producer and multi-consumer. Events are retained at least until all consumer groups have consumed them.
+
+To achieve high availability, durability and scalability, topic events are partitioned across different Barco brokers. An event is given a partition key to determine the placement within the topic.
+
+Data is distributed across the brokers using consistent hashing (Murmur3 tokens) in a similar way as [Amazon
+DynamoDB](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) and [Apache
+Cassandra](https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html#dataset-partitioning-consistent-hashing).
+Each broker is assigned a token based on the [ordinal
+index](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#ordinal-index) within the cluster,
+which will be used to determine the data that naturally belongs to that broker.
+
+Read the [technical introduction](./docs/TECHNICAL_INTRO.md) in our documentation for more information.
+
+## Installing
+
+### Installing on Kubernetes
+
+You can install Barco on Kubernetes using `kubectl`.
+
+#### Define Barco's namespace
+
+We recommend running Barco in its own Kubernetes namespace. In the instructions here we’ll use `streams` as a namespace
+but you’re free to choose your own.
+
+```shell
+kubectl create namespace --dry-run=client -o yaml streams > namespace.yaml
+```
+
+#### Prepare your kustomization file
+
+This example configuration file deploys Barco as a cluster with 3 replicas.
+
+```shell
+cat <<-'KUSTOMIZATION' > kustomization.yaml
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Override the defautl namespace.
+namespace: streams
+
+bases:
+  # Include Barco Streams recommended base.
+  - github.com/barcostreams/barco/deploy/kubernetes
+
+images:
+  # Override the image tag to pin the version used.
+  - name: barcostreams/barco
+    newTag: dev1
+
+resources:
+  # The namespace previously created to keep the resources in.
+  - namespace.yaml
+KUSTOMIZATION
+```
+
+#### Verify your kustomization file
+
+```shell
+kubectl kustomize
+```
+
+#### Install Barco
+
+```shell
+kubectl apply -k .
+```
+
+The command line too should create the Namespace, StatefulSet and other resources. You can checkout Barco logs of a
+broker by using `kubectl logs -n streams statefulset/barco`.
+
+### Installing for Application Development
+
+You can use docker / docker compose to run Barco for application development and CI.
+
+Follow [this guide to run it using docker compose](./docs/DOCKER_COMPOSE.md).
+
+## Build
 
 ```bash
-go build ./...
+go build .
 
 go test -v ./...
+```
+
+Barco expects the cluster to be composed by multiple brokers. If you want to run a single-broker cluster for your
+local dev environment, you can set `BARCO_DEV_MODE` environment variable.
+
+```shell
+export BARCO_DEV_MODE=true # single-broker cluster, not for production use
+export BARCO_HOME=./barco-data # Path to the data folder
+go run .
 ```
 
 ## Design Principles
@@ -50,3 +156,31 @@ the data assignment among consumers as it's very likely that the consumer will b
 Kubernetes API can provide valuable insights to understand what is occurring and what to expect.
 
 TODO: Document Dynamo Consistent Hashing and Gossip-based membership protocol
+
+## Contribute
+
+We are always happy to have contributions to the project whether it is source code, documentation, bug reports,
+feature requests or feedback. To get started with contributing:
+
+- Have a look through GitHub issues labeled ["Good first issue"](https://github.com/barcostreams/barco/labels/good%20first%20issue).
+- Read the [contribution guide](./CONTRIBUTING.md).
+- See the [build instructions](#build), for details on building Barco.
+- [Create a fork](https://docs.github.com/en/github/getting-started-with-github/fork-a-repo) of Barco and submit a pull
+request with your proposed changes.
+
+
+## License
+
+Copyright (C) 2022 Jorge Bay
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+https://www.gnu.org/licenses/agpl-3.0.html
