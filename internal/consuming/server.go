@@ -45,6 +45,11 @@ func NewConsumer(
 	topologyGetter discovery.TopologyGetter,
 	gossiper interbroker.Gossiper,
 ) Consumer {
+	addDelay := config.ConsumerAddDelay()
+	if config.DevMode() {
+		addDelay = 20 * time.Millisecond // Don't wait for rebalancing in dev mode: faster round trips
+	}
+
 	return &consumer{
 		config:         config,
 		topologyGetter: topologyGetter,
@@ -54,7 +59,7 @@ func NewConsumer(
 		state:          NewConsumerState(config, topologyGetter),
 		offsetState:    newDefaultOffsetState(localDb, topologyGetter, gossiper, config),
 		readQueues:     NewCopyOnWriteMap(),
-		addDebouncer:   Debounce(config.ConsumerAddDelay(), 0),
+		addDebouncer:   Debounce(addDelay, 0),
 	}
 }
 
@@ -288,8 +293,8 @@ func (c *consumer) sendConsumerGroupsToPeers() {
 	const sendPeriod = 1000
 	for i := 0; ; i++ {
 		groups := c.state.GetInfoForPeers()
-		if len(groups) > 0 {
-			topology := c.topologyGetter.Topology()
+		topology := c.topologyGetter.Topology()
+		if len(groups) > 0 && len(topology.Brokers) > 1 {
 			brokers := topology.NextBrokers(topology.LocalIndex, 2)
 			logEvent := log.Debug()
 			if i%sendPeriod == 0 {

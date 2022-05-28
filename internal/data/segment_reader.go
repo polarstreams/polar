@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
@@ -39,6 +40,7 @@ type SegmentReader struct {
 	filePosition          int64
 	skipFromFile          int64 // The number of bytes to skip after reading from file (to seek with alignment)
 	readingFromReplica    bool
+	lastFullSeek          int64
 }
 
 const minSeekIntervals = 2 * time.Second
@@ -299,6 +301,7 @@ func (s *SegmentReader) open(fileName string) error {
 // It returns the file name, file offset and the error (when base path not found) with no side effect.
 func (s *SegmentReader) fullSeek(foreground bool) (string, int64, error) {
 	pattern := fmt.Sprintf("%s/*.%s", s.basePath, conf.SegmentFileExtension)
+
 	if !s.isLeader {
 		if foreground {
 			// Avoid blocking when creating a reader
@@ -312,7 +315,12 @@ func (s *SegmentReader) fullSeek(foreground bool) (string, int64, error) {
 		}
 	}
 
-	log.Info().Msgf("Looking for files matching the pattern %s", pattern)
+	// Avoid spamming logs
+	shouldLog := time.Since(time.UnixMilli(atomic.LoadInt64(&s.lastFullSeek))) > 1 * time.Minute
+	if shouldLog {
+		log.Info().Msgf("Looking for files matching the pattern %s", pattern)
+		atomic.StoreInt64(&s.lastFullSeek, time.Now().UnixMilli())
+	}
 
 	entries, err := filepath.Glob(pattern)
 	if err != nil {
@@ -321,7 +329,9 @@ func (s *SegmentReader) fullSeek(foreground bool) (string, int64, error) {
 	}
 
 	if len(entries) == 0 {
-		log.Info().Msgf("Reader could not find any files in %s", s.basePath)
+		if shouldLog {
+			log.Info().Msgf("Reader could not find any files in %s", s.basePath)
+		}
 		return "", 0, nil
 	}
 

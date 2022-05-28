@@ -239,7 +239,7 @@ func (c *config) IndexFilePeriodBytes() int {
 }
 
 func (c *config) SegmentFlushInterval() time.Duration {
-	ms := envInt(envSegmentFlushIntervalMs, 5000)
+	ms := envInt(envSegmentFlushIntervalMs, 2000)
 	return time.Duration(ms) * time.Millisecond
 }
 

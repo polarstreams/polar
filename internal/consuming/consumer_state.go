@@ -16,7 +16,7 @@ import (
 )
 
 const staleInfoThreshold = 5 * time.Minute
-const removeDelay = 5 * time.Minute
+const removeDelay = 1 * time.Minute
 const timerPrecision = 20 * time.Millisecond
 
 type consumerKey string

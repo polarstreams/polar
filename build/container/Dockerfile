@@ -8,7 +8,7 @@ ARG TARGETOS TARGETARCH
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=1 go install github.com/mattn/go-sqlite3
 
 COPY . .
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags '-s'
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal
 LABEL org.opencontainers.image.created="${BUILD_TIMESTAMP}"
