@@ -33,6 +33,12 @@ Executing `go test` command with no additional flags will run the unit tests. Un
 go test -v ./...
 ```
 
+You can run a single unit test by setting the `-args` flag and setting the focus flag for [Ginkgo][ginkgo], for example:
+
+```shell
+go test ./internal/interbroker -v -args -ginkgo.focus "should marshal"
+```
+
 ### Run integration tests
 
 Set the build tag `integration` to run the integration tests. You can expect integration tests to take less than 5
@@ -53,3 +59,4 @@ Development in Windows has not been tested yet. We recommend using the Windows S
 run Barco in your Windows development environment.
 
 [go-client]: https://github.com/barcostreams/go-client
+[ginkgo]: https://onsi.github.io/ginkgo/

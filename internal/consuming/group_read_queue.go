@@ -64,11 +64,10 @@ func newGroupReadQueue(
 }
 
 type readQueueItem struct {
-	connId    UUID
-	writer    http.ResponseWriter
-	timestamp time.Time
-	done      chan bool // Gets a single value when it's done writing the response
-	refresh   bool      // Determines whether the item was meant for the read queue to re-evaluate internal maps
+	connId  UUID
+	writer  http.ResponseWriter
+	done    chan bool // Gets a single value when it's done writing the response
+	refresh bool      // Determines whether the item was meant for the read queue to re-evaluate internal maps
 }
 
 func (q *groupReadQueue) process() {
@@ -108,7 +107,7 @@ func (q *groupReadQueue) process() {
 				// Use an incremental index to try to be fair between calls by round robin through readers
 				reader := readers[int(q.readerIndex)%len(readers)]
 				q.readerIndex++
-				segmentReadItem := newSegmentReadItem()
+				segmentReadItem := newSegmentReadItem(item.connId)
 				reader.Items <- segmentReadItem
 				err, chunk := segmentReadItem.result()
 
@@ -154,8 +153,6 @@ func (q *groupReadQueue) process() {
 			failedResponseItems = append(failedResponseItems, responseItems...)
 			// Set the status at least (unlikely it will be set but worth a try)
 			item.writer.WriteHeader(http.StatusInternalServerError)
-		} else {
-			// TODO: Store the position of the consumer group
 		}
 		item.done <- true
 	}
@@ -235,10 +232,9 @@ func marshalResponse(w http.ResponseWriter, responseItems []consumerResponseItem
 func (q *groupReadQueue) readNext(connId UUID, w http.ResponseWriter) {
 	done := make(chan bool, 1)
 	q.items <- readQueueItem{
-		connId:    connId,
-		writer:    w,
-		done:      done,
-		timestamp: time.Now(),
+		connId: connId,
+		writer: w,
+		done:   done,
 	}
 
 	<-done

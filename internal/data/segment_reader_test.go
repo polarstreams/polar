@@ -13,6 +13,7 @@ import (
 	"github.com/barcostreams/barco/internal/test/conf/mocks"
 	tMocks "github.com/barcostreams/barco/internal/test/types/mocks"
 	. "github.com/barcostreams/barco/internal/types"
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -303,6 +304,74 @@ var _ = Describe("SegmentReader", func() {
 			pollChunk(s, item, 300)
 			Expect(atomic.LoadInt64(&rr.streamCalled)).To(BeNumerically(">", int64(0)))
 		})
+
+		It("should reset when the origin changes", func() {
+			dir, err := os.MkdirTemp("", "reset_origin_*")
+			Expect(err).NotTo(HaveOccurred())
+			file1, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			Expect(err).NotTo(HaveOccurred())
+			file2, err := os.Create(filepath.Join(dir, "00050.dlog"))
+			Expect(err).NotTo(HaveOccurred())
+			defer file1.Close()
+			defer file2.Close()
+
+			// Write a chunk, followed by an alignment buffer
+			_, err = file1.Write(createAlignedChunk(100, 0, 20))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = file1.Write(createAlignedChunk(200, 20, 30))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = file2.Write(createAlignedChunk(300, 50, 50))
+			Expect(err).NotTo(HaveOccurred())
+
+			file1.Sync()
+			file2.Sync()
+
+			mockedOffset := Offset{
+				Offset:  20,
+				Version: 3,
+			}
+			setCalls := int64(0)
+			config := new(mocks.Config)
+			config.On("ReadAheadSize").Return(1 * conf.MiB)
+			config.On("AutoCommitInterval").Return(1 * time.Nanosecond) // Commit always
+			offsetState := new(tMocks.OffsetState)
+			offsetState.
+				On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				Run(func(_ mock.Arguments) {
+					atomic.AddInt64(&setCalls, 1)
+				})
+
+			offsetState.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&mockedOffset)
+
+			s := &SegmentReader{
+				config:      config,
+				Items:       make(chan ReadItem, 16),
+				offsetState: offsetState,
+				headerBuf:   make([]byte, chunkHeaderSize),
+				Topic: TopicDataId{
+					Name:       "abc",
+					Token:      0,
+					RangeIndex: 0,
+					Version:    3,
+				},
+				isLeader: true,
+				basePath: dir,
+			}
+
+			go s.read()
+			defer close(s.Items)
+
+			item1 := newTestReadItemWithOrigin(uuid.New())
+			pollChunk(s, item1, 100)
+			pollChunk(s, item1, 200)
+			pollChunk(s, item1, 300)
+
+			// New origin, it should go back to use the committed offset
+			item2 := newTestReadItemWithOrigin(uuid.New())
+			pollChunk(s, item2, 200)
+			pollChunk(s, item2, 300)
+			offsetState.AssertNumberOfCalls(GinkgoT(), "Get", 1)
+		})
 	})
 
 	Describe("pollFile()", func() {
@@ -337,6 +406,7 @@ var _ = Describe("SegmentReader", func() {
 type testReadItem struct {
 	chunkResult chan SegmentChunk
 	errorResult chan error
+	origin      uuid.UUID
 }
 
 func newTestReadItem() *testReadItem {
@@ -346,9 +416,19 @@ func newTestReadItem() *testReadItem {
 	}
 }
 
+func newTestReadItemWithOrigin(origin uuid.UUID) *testReadItem {
+	item := newTestReadItem()
+	item.origin = origin
+	return item
+}
+
 func (r *testReadItem) SetResult(err error, chunk SegmentChunk) {
 	r.chunkResult <- chunk
 	r.errorResult <- err
+}
+
+func (r *testReadItem) Origin() uuid.UUID {
+	return r.origin
 }
 
 type rrFake struct {

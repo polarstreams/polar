@@ -17,6 +17,7 @@ import (
 	"github.com/barcostreams/barco/internal/conf"
 	. "github.com/barcostreams/barco/internal/types"
 	"github.com/barcostreams/barco/internal/utils"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
@@ -107,10 +108,20 @@ func (s *SegmentReader) read() {
 	lastCommit := &time.Time{}
 	nextFileName := ""
 	offsetGap := int64(-1) // The last message offset (inclusive) of the missing messages range: [s.messageOffset, offsetGap]
+	var lastOrigin *uuid.UUID
 
 	for item := range s.Items {
-		s.storeOffset(lastCommit)
+		shouldResetLastCommitted := lastOrigin != nil && *lastOrigin != item.Origin()
+		if shouldResetLastCommitted {
+			if s.resetOffsetToLastCommitted() {
+				reader.Reset(emptyBuffer)
+			}
+		} else {
+			s.storeOffset(lastCommit)
+		}
 
+		origin := item.Origin()
+		lastOrigin = &origin
 		remainderIndex := 0
 		var chunk SegmentChunk
 
@@ -250,6 +261,36 @@ func (s *SegmentReader) storeOffset(lastCommit *time.Time) {
 	s.offsetState.Set(s.group, s.Topic.Name, s.Topic.Token, s.Topic.RangeIndex, value, commitType)
 }
 
+// Rewinds to the last known committed offset
+func (s *SegmentReader) resetOffsetToLastCommitted() bool {
+	if s.segmentFile == nil {
+		// It was not initialized yet, it's OK
+		return false
+	}
+
+	offset := s.offsetState.Get(s.group, s.Topic.Name, s.Topic.Token, s.Topic.RangeIndex)
+	if offset == nil {
+		offset = &Offset{
+			Offset:  0,
+			Version: s.Topic.Version,
+			Source:  s.SourceVersion,
+		}
+	}
+
+	if offset.Version != s.Topic.Version {
+		log.Error().Msgf("Unexpected offset version for group %s and topic %s", s.group, &s.Topic)
+		offset = &Offset{
+			Offset:  0,
+			Version: s.Topic.Version,
+			Source:  s.SourceVersion,
+		}
+	}
+
+	s.segmentFile = nil
+	s.messageOffset = offset.Offset
+	return true
+}
+
 // Tries open the initial file and seek the correct position, returning an error when there's an
 // I/O-related error
 func (s *SegmentReader) initRead(foreground bool) error {
@@ -316,7 +357,7 @@ func (s *SegmentReader) fullSeek(foreground bool) (string, int64, error) {
 	}
 
 	// Avoid spamming logs
-	shouldLog := time.Since(time.UnixMilli(atomic.LoadInt64(&s.lastFullSeek))) > 1 * time.Minute
+	shouldLog := time.Since(time.UnixMilli(atomic.LoadInt64(&s.lastFullSeek))) > 1*time.Minute
 	if shouldLog {
 		log.Info().Msgf("Looking for files matching the pattern %s", pattern)
 		atomic.StoreInt64(&s.lastFullSeek, time.Now().UnixMilli())

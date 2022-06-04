@@ -7,6 +7,7 @@ import (
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/data"
 	. "github.com/barcostreams/barco/internal/types"
+	"github.com/google/uuid"
 )
 
 // Represents a single consumer instance
@@ -26,18 +27,24 @@ type ReplicationReaderFactory interface {
 type segmentReadItem struct {
 	chunkResult chan SegmentChunk
 	errorResult chan error
+	origin      uuid.UUID
 }
 
-func newSegmentReadItem() *segmentReadItem {
+func newSegmentReadItem(origin uuid.UUID) *segmentReadItem {
 	return &segmentReadItem{
 		chunkResult: make(chan SegmentChunk, 1),
 		errorResult: make(chan error, 1),
+		origin:      origin,
 	}
 }
 
 func (r *segmentReadItem) SetResult(err error, chunk SegmentChunk) {
 	r.chunkResult <- chunk
 	r.errorResult <- err
+}
+
+func (r *segmentReadItem) Origin() uuid.UUID {
+	return r.origin
 }
 
 func (r *segmentReadItem) result() (err error, chunk SegmentChunk) {
