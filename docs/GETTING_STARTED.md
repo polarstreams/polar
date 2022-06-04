@@ -66,7 +66,46 @@ Read more in the [Go Client's Getting Started Guide][go-client-start].
 
 ## Consuming
 
-TODO: HTTP/2 only
+For reading events from Barco, you should generally need a client library as the consumer needs to subscribe to topics,
+poll for messages and commit the offsets.
+
+### Consuming events in Go
+
+Using the [Go Client][go-client], you can just poll in loop and the client will take care of the rest.
+
+```go
+import (
+	"fmt"
+
+	"github.com/barcostreams/go-client"
+)
+
+
+// ...
+
+group := "group1"
+consumer, err := barco.NewConsumer("barco://barco.streams", group, topic)
+if err != nil {
+	panic(err)
+}
+
+for {
+	pollResult := consumer.Poll()
+	if pollResult.Error != nil {
+		fmt.Printf("Found error while polling: %s", pollResult.Error)
+		continue
+	}
+
+	// New records organized by topic
+	for _, topicRecords := range pollResult.TopicRecords {
+		for _, record := range topicRecords.Records {
+			fmt.Println(string(record.Body), record.Timestamp)
+		}
+	}
+}
+```
+
+Read more in the [Go Client's Getting Started Guide][go-client-start].
 
 [http-2]: https://en.wikipedia.org/wiki/HTTP/2
 [go-client]: https://github.com/barcostreams/go-client

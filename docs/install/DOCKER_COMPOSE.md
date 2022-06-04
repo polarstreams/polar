@@ -18,3 +18,5 @@ services:
       start_period: 2s
       timeout: 1s
 ```
+
+[docker-compose]: https://github.com/docker/compose

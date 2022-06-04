@@ -218,7 +218,7 @@ func (c *config) MaxGroupSize() int {
 }
 
 func (c *config) ReadAheadSize() int {
-	return c.MaxGroupSize() * 8
+	return c.MaxGroupSize() * 4
 }
 
 func (c *config) AutoCommitInterval() time.Duration {

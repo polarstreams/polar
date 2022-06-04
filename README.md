@@ -8,10 +8,11 @@ the peak.
 
 ## Features
 
-### Lightweight
+### Lightweight & Fast
 
 - Limited memory footprint: Memory usage can be capped at a few hundreds of Mb
 - Production workloads with 0.5GiB of memory per pod
+- 20K durable writes per second with 3 [`t3.nano`][t3-nano] brokers
 - Small binary size, arm64 as first class citizen
 - No additional dependencies, i.e., no Zookeeper
 
@@ -133,7 +134,6 @@ feature requests or feedback. To get started with contributing:
 - [Create a fork](https://docs.github.com/en/github/getting-started-with-github/fork-a-repo) of Barco and submit a pull
 request with your proposed changes.
 
-
 ## License
 
 Copyright (C) 2022 Jorge Bay
@@ -149,3 +149,5 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Affero General Public License for more details.
 
 https://www.gnu.org/licenses/agpl-3.0.html
+
+[t3-nano]: https://aws.amazon.com/ec2/instance-types/t3/#Product_Details

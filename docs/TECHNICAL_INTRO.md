@@ -34,17 +34,21 @@ Barco uses a deterministic way to assign tokens to brokers (i.e. broker with ord
 
 This technique provides a simple way to add/remove brokers without the need to rebalance existing data. New brokers can take ownership of their natural ranges when ready, with the help of previous brokers, without disrupting availability [additional info needed related to how the ownership decisions are taken / transactions for election of a token leader].
 
-A Producer doesn't necessarily have to understand this placement scheme to publish an event. It can target any broker or the Kubernetes Service and the event message will be routed automatically. From the client's perspective producing a message is just calling an HTTP/2 endpoint [more info needed related to tcp backpressure and stable memory usage].
+A Producer doesn't necessarily have to understand this placement scheme to publish an event. It can target any broker
+or the Kubernetes Service and the event message will be routed automatically. From the client's perspective producing
+a message is just calling an HTTP/2 endpoint.
 
-To consume events, a client should poll for new data to all live brokers. The broker will determine when that consumer should be served with topic events of a given partition depending on the consumer placement.
+To consume events, a client should poll for new data to all live brokers. The broker will determine when that consumer
+should be served with topic events of a given partition depending on the consumer placement.
 
-Barco guarantees that any consumer of a given topic and key will always read that token's events in the same order as they were written.
+Barco guarantees that any consumer of a given topic and partition key will always read that events in the same order as
+they were written.
 
 ## I/O
 
 Barco internally uses [Direct I/O][direct-io] and bypasses the Linux page cache to read and write the log segments.
 
-Bypassing the kernelq page cache has the following benefits:
+Bypassing the kernel page cache has the following benefits:
 
 - The page cache is a shared resource in K8s. When a container is accessing data in the page cache it has to compete
 for resources with unrelated applications on the K8s node.
@@ -70,5 +74,5 @@ Each broker uses the Gossip protocol to agree on token range ownership and consu
 - **Data replication**: All data is automatically replicated to the following brokers in the ring. Compressed groups of events of a certain partition are sent periodically to the followers of the partition leader.
 - **Producer routing**: When a producer client sends a new event message to a broker that is not the leader of the partition, the broker will route the message to the correct leader in the foreground.
 
-[direct-io]: https://man7.org/linux/man-pages/man2/open.2.html#:~:text=O_DIRECT%20(since%20Linux%202.4.10)
+[direct-io]: https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/5/html/global_file_system/s1-manage-direct-io
 [io_uring]: https://en.wikipedia.org/wiki/Io_uring

@@ -1,6 +1,6 @@
 ### Installing Barco Streams on Kubernetes
 
-You can install Barco on Kubernetes using `kubectl`.
+You can use `kubectl` to install Barco on Kubernetes.
 
 #### Define Barco's namespace
 
