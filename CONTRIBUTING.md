@@ -11,6 +11,16 @@ We aim to respond to your issues soonest. If you wish to receive a faster respon
 your steps and provide information about your environment in the bug reports. And if you're proposing a new feature,
 it'll help us to evaluate the priority if you explain why you need it.
 
+## Client libraries
+
+[Barco Client in golang][go-client] is the reference implementation under Apache License 2.0 and it's currently the
+only client library we have. Barco client libraries are just thin HTTP/2 client wrappers, for example the reference
+implementation is less than 1K lines of code.
+
+If you would like to author a client library, feel free to ping us so we can link it from the repository and website.
+If you would like to author an official client library under https://github.com/barcostreams, reach out to us and we can
+create the repo. In any case, the original author(s) will be credited in the project description.
+
 ## Environment setup
 
 You need go 1.17+ to build Barco from source.
@@ -41,3 +51,5 @@ for i in {2..6}; do sudo ifconfig lo0 alias 127.0.0.$i up; done
 
 Development in Windows has not been tested yet. We recommend using the Windows Subsystem for Linux (WSL) to build and
 run Barco in your Windows development environment.
+
+[go-client]: https://github.com/barcostreams/go-client

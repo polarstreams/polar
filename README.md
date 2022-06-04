@@ -1,8 +1,10 @@
 # Barco Streams
 
 Barco is a lightweight, elastic, kubernetes-native event streaming system. It acts as a safe buffer between services by
-persisting events and supports peaks by seamlessly scaling and allowing events to be consumed at a later time from
+persisting events and supports peaks by seamlessly scaling, allowing events to be consumed at a later time from
 the peak.
+
+![go build](https://github.com/barcostreams/barco/actions/workflows/go.yml/badge.svg)
 
 ## Features
 
@@ -27,8 +29,6 @@ the peak.
 - Data distribution is K8s-aware: data placement based on the StatefulSet's pod ordinal
 - Good K8s neighbor: Direct I/O, no OS page cache for log segments
 
-_Always-on with cost control_
-
 -----
 
 <details>
@@ -49,7 +49,7 @@ Events are organized in topics. Topics in Barco are always multi-producer and mu
 
 To achieve high availability, durability and scalability, topic events are partitioned across different Barco brokers. An event is given a partition key to determine the placement within the topic.
 
-Data is distributed across the brokers using consistent hashing (Murmur3 tokens) in a similar way as [Amazon
+Data is distributed across the brokers using consistent hashing in a similar way as [Amazon
 DynamoDB](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) and [Apache
 Cassandra](https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html#dataset-partitioning-consistent-hashing).
 Each broker is assigned a token based on the [ordinal
@@ -62,65 +62,28 @@ Read the [technical introduction](./docs/TECHNICAL_INTRO.md) in our documentatio
 
 ### Installing on Kubernetes
 
-You can install Barco on Kubernetes using `kubectl`.
+You can install Barco on Kubernetes using `kubectl` by using [our kustomize base](./deploy/kubernetes/).
 
-#### Define Barco's namespace
+Follow [our guide to install on K8s](./docs/install/KUBERNETES.md).
 
-We recommend running Barco in its own Kubernetes namespace. In the instructions here we’ll use `streams` as a namespace
-but you’re free to choose your own.
-
-```shell
-kubectl create namespace --dry-run=client -o yaml streams > namespace.yaml
-```
-
-#### Prepare your kustomization file
-
-This example configuration file deploys Barco as a cluster with 3 replicas.
-
-```shell
-cat <<-'KUSTOMIZATION' > kustomization.yaml
----
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-# Override the defautl namespace.
-namespace: streams
-
-bases:
-  # Include Barco Streams recommended base.
-  - github.com/barcostreams/barco/deploy/kubernetes
-
-images:
-  # Override the image tag to pin the version used.
-  - name: barcostreams/barco
-    newTag: dev1
-
-resources:
-  # The namespace previously created to keep the resources in.
-  - namespace.yaml
-KUSTOMIZATION
-```
-
-#### Verify your kustomization file
-
-```shell
-kubectl kustomize
-```
-
-#### Install Barco
-
-```shell
-kubectl apply -k .
-```
-
-The command line too should create the Namespace, StatefulSet and other resources. You can checkout Barco logs of a
-broker by using `kubectl logs -n streams statefulset/barco`.
-
-### Installing for Application Development
+### Installing with Docker Compose for Application Development
 
 You can use docker / docker compose to run Barco for application development and CI.
 
-Follow [this guide to run it using docker compose](./docs/DOCKER_COMPOSE.md).
+Read [this guide to run it using docker compose](./docs/install/DOCKER_COMPOSE.md).
+
+### Installing locally for Application Development
+
+Barco expects the cluster to be composed by multiple brokers. To simplify application development, we introduced
+"dev mode" setting to run a single-broker cluster for application development.
+
+After [building](#build) Barco, set `BARCO_DEV_MODE` environment variable before running:
+
+```
+export BARCO_DEV_MODE=true # single-broker cluster, not for production use
+export BARCO_HOME=./barco-data # Path to the data folder
+go run .
+```
 
 ## Build
 
@@ -130,14 +93,8 @@ go build .
 go test -v ./...
 ```
 
-Barco expects the cluster to be composed by multiple brokers. If you want to run a single-broker cluster for your
-local dev environment, you can set `BARCO_DEV_MODE` environment variable.
-
-```shell
-export BARCO_DEV_MODE=true # single-broker cluster, not for production use
-export BARCO_HOME=./barco-data # Path to the data folder
-go run .
-```
+The [Contributing Guide](./CONTRIBUTING.md#environment-setup) has more information about environment setup and other
+topics that can help you to build Barco from source.
 
 ## Design Principles
 
@@ -148,14 +105,22 @@ allowing events to be consumed at a later time from the peak. Once a certain amo
 and not consumed, the following events can be stored in object storage to be pulled once the consumers catch up,
 reducing costs for storage.
 
+### Always-on with cost control
+
+Message streaming should be highly available by default and only consume the minimum required resources to run
+effectively.
+
 ### Operational simplicity
 
-Regular maintenance operations like upgrading the cluster or decomissioning Kubernetes nodes are common and should
+Regular maintenance operations like upgrading the cluster or decommissioning Kubernetes nodes are common and should
 be handled smoothly. For example, when a consumer is being restarted due to an upgrade, there's no need for re-balance
 the data assignment among consumers as it's very likely that the consumer will be ready in a few seconds. Querying the
 Kubernetes API can provide valuable insights to understand what is occurring and what to expect.
 
-TODO: Document Dynamo Consistent Hashing and Gossip-based membership protocol
+### Linearly horizontally scalable
+
+The system should elastically scale intelligently, to support the future web scale and without affecting running
+services.
 
 ## Contribute
 
