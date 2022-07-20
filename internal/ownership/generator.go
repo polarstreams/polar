@@ -20,7 +20,7 @@ import (
 const (
 	baseDelay                   = 150 * time.Millisecond
 	maxDelay                    = 300 * time.Millisecond
-	maxWaitForPrevious          = 10 * time.Second
+	maxWaitForPrevious          = 2 * time.Minute
 	waitForPreviousStep         = 500 * time.Millisecond
 	maxWaitForSplit             = 5 * time.Minute
 	waitForSplitStep            = 5 * time.Second

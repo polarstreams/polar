@@ -173,7 +173,10 @@ func (g *gossiper) OnTopologyChange(previousTopology *TopologyInfo, topology *To
 			log.Info().Msgf("Scaling down detected but I'm leaving the cluster, ignoring")
 			return
 		}
-		log.Info().Msgf("Scaling down detected")
+		log.Info().
+			Int("previous", len(previousTopology.Brokers)).
+			Int("current", len(topology.Brokers)).
+			Msgf("Scaling down detected")
 		g.markAsLeaving(previousTopology, topology)
 		g.waitForDownAndRemoveClients(previousTopology, topology)
 		g.genListener.OnJoinRange(previousTopology, topology)

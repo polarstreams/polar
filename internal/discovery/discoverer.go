@@ -123,6 +123,12 @@ func (d *discoverer) Init() error {
 
 	log.Info().Msgf("Discovered cluster with %d total brokers", len(d.Topology().Brokers))
 
+	if !d.Topology().AmIIncluded() {
+		return fmt.Errorf(
+			"The current broker is not included in the Topology. " +
+			"Barco clusters must have a size of 3*2^n for this broker to be considered.")
+	}
+
 	if err := d.loadGenerations(); err != nil {
 		return err
 	}
@@ -202,8 +208,12 @@ func (d *discoverer) loadTopology() error {
 				replicasChanged = normalizedLen
 			}
 			topology := createTopology(replicasChanged, d.config)
-			d.swapTopology(topology)
-			d.emitTopologyChangeEvent(previousTopology, topology)
+
+			// Check whether the normalized number of replicas changed
+			if len(topology.Brokers) != len(previousTopology.Brokers) {
+				d.swapTopology(topology)
+				d.emitTopologyChangeEvent(previousTopology, topology)
+			}
 		}
 	}()
 	return nil
