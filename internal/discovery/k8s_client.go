@@ -152,7 +152,7 @@ func (c *k8sClientImpl) startWatching(replicas int) {
 			}
 		}
 
-		log.Debug().Msgf("Stopping k8s watch")
+		log.Info().Msgf("k8s watcher channel closed")
 		// Can be called multiple times
 		watcher.Stop()
 	}
