@@ -1,7 +1,7 @@
 # Barco Streams
 
-Barco is a lightweight, elastic, kubernetes-native event streaming system. It acts as a safe buffer between services by
-persisting events and supports peaks by seamlessly scaling, allowing events to be consumed at a later time from
+Barco is a lightweight, elastic, kubernetes-native event streaming system. It acts as a persistent buffer between
+services, supporting peaks by seamlessly scaling and allowing events to be consumed at a later time from
 the peak.
 
 ![go build](https://github.com/barcostreams/barco/actions/workflows/go.yml/badge.svg)
@@ -46,14 +46,12 @@ beginner-friendly.
 
 ## How does Barco work?
 
-Events are organized in topics. Topics in Barco are always multi-producer and multi-consumer. Events are retained at least until all consumer groups have consumed them.
+Events are organized in topics. Topics in Barco are always multi-producer and multi-consumer. To achieve high
+availability and durability, topic events are persisted on disk on multiple Barco brokers.
 
-To achieve high availability, durability and scalability, topic events are partitioned across different Barco brokers. An event is given a partition key to determine the placement within the topic.
-
-Data is distributed across the brokers using consistent hashing in a similar way as [Amazon
+Data is automatically distributed across brokers using consistent hashing in a similar way as [Amazon
 DynamoDB](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) and [Apache
-Cassandra](https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html#dataset-partitioning-consistent-hashing).
-Each broker is assigned a token based on the [ordinal
+Cassandra](https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html#dataset-partitioning-consistent-hashing). Each broker is assigned a token based on the [ordinal
 index](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#ordinal-index) within the cluster,
 which will be used to determine the data that naturally belongs to that broker.
 
@@ -80,10 +78,8 @@ Barco expects the cluster to be composed by multiple brokers. To simplify applic
 
 After [building](#build) Barco, set `BARCO_DEV_MODE` environment variable before running:
 
-```
-export BARCO_DEV_MODE=true # single-broker cluster, not for production use
-export BARCO_HOME=./barco-data # Path to the data folder
-go run .
+```bash
+BARCO_DEV_MODE=true BARCO_HOME=./barco-data go run .
 ```
 
 ## Build

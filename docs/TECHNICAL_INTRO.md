@@ -8,19 +8,17 @@
 
 ## How does Barco work?
 
-Events are organized in topics. Topics in Barco are always multi-producer and multi-consumer. Events are retained at least until all consumer groups have consumed them.
+Events are organized in topics. Topics in Barco are always multi-producer and multi-consumer. To achieve high
+availability and durability, topic events are persisted on disk on multiple Barco brokers.
 
-To achieve high availability, durability and scalability, topic events are partitioned across different Barco brokers. An event is given a partition key to determine the placement within the topic.
-
-Data is distributed across the brokers using consistent hashing (Murmur3 tokens) in a similar way as [Amazon
+Data is automatically distributed across brokers using consistent hashing (Murmur3 tokens) in a similar way as [Amazon
 DynamoDB](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) and [Apache
-Cassandra](https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html#dataset-partitioning-consistent-hashing).
-Each broker is assigned a token based on the [ordinal
+Cassandra](https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html#dataset-partitioning-consistent-hashing). Each broker is assigned a token based on the [ordinal
 index](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#ordinal-index) within the cluster,
 which will be used to determine the data that naturally belongs to that broker.
 
-According to the event key and based on the hashing algorithm, the event will be placed in a broker and replicated to
-the following two brokers in the ring.
+According to the event partition key and the hashing algorithm, the event will be placed in a broker and replicated to
+the following two brokers in the cluster.
 
 <div>
 <img alt="1 ring with 6 nodes" src="https://user-images.githubusercontent.com/2931196/174292608-e7c08749-cbc9-4311-b151-400185f586bf.png" style="max-width:400px;">
@@ -38,7 +36,7 @@ A Producer doesn't necessarily have to understand this placement scheme to publi
 or the Kubernetes Service and the event message will be routed automatically. From the client's perspective producing
 a message is just calling an HTTP/2 endpoint.
 
-To consume events, a client should poll for new data to all live brokers. The broker will determine when that consumer
+To consume events, a client should poll for new data to all live brokers. The brokers will determine when that consumer
 should be served with topic events of a given partition depending on the consumer placement.
 
 Barco guarantees that any consumer of a given topic and partition key will always read that events in the same order as
