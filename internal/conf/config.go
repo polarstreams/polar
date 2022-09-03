@@ -28,6 +28,7 @@ const (
 	envGossipPort              = "BARCO_GOSSIP_PORT"
 	envGossipDataPort          = "BARCO_GOSSIP_DATA_PORT"
 	envSegmentFlushIntervalMs  = "BARCO_SEGMENT_FLUSH_INTERVAL_MS"
+	envLogRetentionDuration    = "BARCO_LOG_RETENTION_DURATION"
 	envMaxSegmentSize          = "BARCO_MAX_SEGMENT_FILE_SIZE"
 	envConsumerAddDelay        = "BARCO_CONSUMER_ADD_DELAY_MS"
 	envConsumerRanges          = "BARCO_CONSUMER_RANGES"
@@ -49,6 +50,8 @@ const (
 	DefaultGossipPort          = 9254
 	DefaultGossipDataPort      = 9255
 )
+
+const defaultLogRetention = "168h" // 7 days
 
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
 
@@ -80,6 +83,7 @@ type LocalDbConfig interface {
 
 type DatalogConfig interface {
 	DatalogPath(topicDataId *TopicDataId) string
+	DatalogSegmentsPath() string
 	MaxSegmentSize() int    // Maximum file size in bytes
 	SegmentBufferSize() int // The amount of bytes that the segment buffer can hold
 	MaxMessageSize() int
@@ -88,7 +92,8 @@ type DatalogConfig interface {
 	AutoCommitInterval() time.Duration
 	IndexFilePeriodBytes() int // How frequently write to the index file based on the segment size.
 	SegmentFlushInterval() time.Duration
-	StreamBufferSize() int // Max size of the file stream buffers (2 of them atm)
+	LogRetentionDuration() *time.Duration // The amount of time to keep a log file before deleting it (default = 7d)
+	StreamBufferSize() int                // Max size of the file stream buffers (2 of them atm)
 }
 
 type DiscovererConfig interface {
@@ -170,6 +175,11 @@ func (c *config) Init() error {
 	if c.ConsumerRanges() < 2 && c.ConsumerRanges()%2 != 0 {
 		return fmt.Errorf("ConsumerRanges should be a positive even number")
 	}
+	value := env(envLogRetentionDuration, defaultLogRetention)
+	if _, err := time.ParseDuration(value); err != nil && value != "null" {
+		return fmt.Errorf("Log retention duration '%s' is not a valid value", value)
+	}
+
 	return nil
 }
 
@@ -243,6 +253,19 @@ func (c *config) SegmentFlushInterval() time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
+func (c *config) LogRetentionDuration() *time.Duration {
+	value := env(envLogRetentionDuration, defaultLogRetention)
+	if value == "null" {
+		return nil
+	}
+	t, err := time.ParseDuration(value)
+	if err != nil {
+		panic(err)
+	}
+
+	return &t
+}
+
 func (c *config) ShutdownDelay() time.Duration {
 	if c.DevMode() {
 		return 0
@@ -287,7 +310,12 @@ func (c *config) LocalDbPath() string {
 
 func (c *config) DatalogPath(t *TopicDataId) string {
 	// Pattern: /var/lib/barco/data/datalog/{topic}/{token}/{rangeIndex}/{genVersion}
-	return filepath.Join(c.dataPath(), "datalog", t.Name, t.Token.String(), t.RangeIndex.String(), t.Version.String())
+	return filepath.Join(c.DatalogSegmentsPath(), t.Name, t.Token.String(), t.RangeIndex.String(), t.Version.String())
+}
+
+func (c *config) DatalogSegmentsPath() string {
+	// Example: /var/lib/barco/data/datalog/
+	return filepath.Join(c.dataPath(), "datalog")
 }
 
 func (c *config) CreateAllDirs() error {

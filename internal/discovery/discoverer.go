@@ -126,7 +126,7 @@ func (d *discoverer) Init() error {
 	if !d.Topology().AmIIncluded() {
 		return fmt.Errorf(
 			"The current broker is not included in the Topology. " +
-			"Barco clusters must have a size of 3*2^n for this broker to be considered.")
+				"Barco clusters must have a size of 3*2^n for this broker to be considered.")
 	}
 
 	if err := d.loadGenerations(); err != nil {

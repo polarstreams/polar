@@ -15,6 +15,7 @@ import (
 const (
 	DirectoryPermissions os.FileMode = 0755
 	FilePermissions      os.FileMode = 0644
+	RetentionCheckMs     int         = 5 * 60 * 1000
 )
 
 const streamBufferLength = 2 // Amount of buffers for file streaming
@@ -48,10 +49,16 @@ func NewDatalog(config conf.DatalogConfig) Datalog {
 		streamBufferChan <- make([]byte, config.StreamBufferSize())
 	}
 
-	return &datalog{
+	d := &datalog{
 		config:           config,
 		streamBufferChan: streamBufferChan,
 	}
+
+	if t := config.LogRetentionDuration(); t != nil {
+		go d.cleanUp(*t)
+	}
+
+	return d
 }
 
 type datalog struct {

@@ -142,6 +142,20 @@ func (_m *Config) DatalogPath(topicDataId *types.TopicDataId) string {
 	return r0
 }
 
+// DatalogSegmentsPath provides a mock function with given fields:
+func (_m *Config) DatalogSegmentsPath() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // DevMode provides a mock function with given fields:
 func (_m *Config) DevMode() bool {
 	ret := _m.Called()
@@ -279,6 +293,22 @@ func (_m *Config) LocalDbPath() string {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// LogRetentionDuration provides a mock function with given fields:
+func (_m *Config) LogRetentionDuration() *time.Duration {
+	ret := _m.Called()
+
+	var r0 *time.Duration
+	if rf, ok := ret.Get(0).(func() *time.Duration); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*time.Duration)
+		}
 	}
 
 	return r0
