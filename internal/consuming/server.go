@@ -134,6 +134,9 @@ func (c *consumer) AcceptConnections() error {
 			router.POST(conf.ConsumerPollUrl, func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 				c.postPoll(trackedConn, w)
 			})
+			router.POST(conf.ConsumerManualCommitUrl, func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+				c.postManualCommit(trackedConn, w)
+			})
 
 			// server.ServeConn() will block until the connection is not readable anymore
 			// start it in the background to accept further connections
@@ -220,13 +223,30 @@ func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter) {
 	}
 
 	log.Debug().Msgf("Received consumer client poll from connection '%s'", conn.Id())
+	groupReadQueue := c.getOrCreateReadQueue(group)
+	groupReadQueue.readNext(conn.Id(), w)
+}
 
+func (c *consumer) postManualCommit(conn *TrackedConnection, w http.ResponseWriter) {
+	group, tokens, _ := logsToServe(c.state, c.topologyGetter, conn.Id())
+	if len(tokens) == 0 {
+		log.Debug().
+			Msgf("Received consumer client manual commit from connection '%s' with no assigned tokens", conn.Id())
+		NoContentResponse(w, consumerNoOwnedDataDelay)
+		return
+	}
+
+	log.Debug().Msgf("Received consumer client manual commit from connection '%s'", conn.Id())
+	groupReadQueue := c.getOrCreateReadQueue(group)
+	groupReadQueue.manualCommit(conn.Id(), w)
+}
+
+func (c *consumer) getOrCreateReadQueue(group string) *groupReadQueue {
 	grq, _, _ := c.readQueues.LoadOrStore(group, func() (interface{}, error) {
 		return newGroupReadQueue(group, c.state, c.offsetState, c.topologyGetter, c.gossiper, c.rrFactory, c.config), nil
 	})
 
-	groupReadQueue := grq.(*groupReadQueue)
-	groupReadQueue.readNext(conn.Id(), w)
+	return grq.(*groupReadQueue)
 }
 
 type ConnAwareHandle func(*TrackedConnection, http.ResponseWriter, *http.Request, httprouter.Params) error

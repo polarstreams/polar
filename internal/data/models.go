@@ -50,6 +50,7 @@ var chunkHeaderSize = utils.BinarySize(chunkHeader{})
 // When the read is completed, `SetResult()` is invoked.
 type ReadItem interface {
 	Origin() uuid.UUID // An identifier of the source of the poll used to determine whether the reader should use the last stored offset and not auto commit
+	CommitOnly() bool  // Determines whether it should only commit and not read as part of this request
 	SetResult(error, SegmentChunk)
 }
 

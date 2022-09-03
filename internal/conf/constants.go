@@ -15,8 +15,9 @@ const (
 	// Consumer Urls
 
 	// Url consuming messages
-	ConsumerRegisterUrl = "/v1/consumer/register"
-	ConsumerPollUrl     = "/v1/consumer/poll"
+	ConsumerRegisterUrl     = "/v1/consumer/register"
+	ConsumerPollUrl         = "/v1/consumer/poll"
+	ConsumerManualCommitUrl = "/v1/consumer/commit"
 
 	// Gossip Urls
 

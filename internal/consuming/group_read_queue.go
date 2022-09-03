@@ -64,10 +64,11 @@ func newGroupReadQueue(
 }
 
 type readQueueItem struct {
-	connId  UUID
-	writer  http.ResponseWriter
-	done    chan bool // Gets a single value when it's done writing the response
-	refresh bool      // Determines whether the item was meant for the read queue to re-evaluate internal maps
+	connId     UUID
+	writer     http.ResponseWriter
+	done       chan bool // Gets a single value when it's done writing the response
+	commitOnly bool
+	refresh    bool // Determines whether the item was meant for the read queue to re-evaluate internal maps
 }
 
 func (q *groupReadQueue) process() {
@@ -107,7 +108,7 @@ func (q *groupReadQueue) process() {
 				// Use an incremental index to try to be fair between calls by round robin through readers
 				reader := readers[int(q.readerIndex)%len(readers)]
 				q.readerIndex++
-				segmentReadItem := newSegmentReadItem(item.connId)
+				segmentReadItem := newSegmentReadItem(item.connId, item.commitOnly)
 				reader.Items <- segmentReadItem
 				err, chunk := segmentReadItem.result()
 
@@ -122,7 +123,7 @@ func (q *groupReadQueue) process() {
 					// A non-empty data block
 					responseItems = append(responseItems, consumerResponseItem{chunk: chunk, topic: reader.Topic})
 					totalSize += size
-				} else {
+				} else if !item.commitOnly {
 					// No data from this reader since we last read
 					q.maybeCloseReader(reader, chunk)
 				}
@@ -131,7 +132,11 @@ func (q *groupReadQueue) process() {
 
 		if len(responseItems) == 0 {
 			if len(errors) > 0 {
-				http.Error(item.writer, "Internal server error", 500)
+				if !item.commitOnly {
+					http.Error(item.writer, "Unexpected error while reading", http.StatusInternalServerError)
+				} else {
+					http.Error(item.writer, "Manual commit ignored: another origin reading", http.StatusConflict)
+				}
 			} else {
 				utils.NoContentResponse(item.writer, consumerNoDataDelay)
 			}
@@ -235,6 +240,18 @@ func (q *groupReadQueue) readNext(connId UUID, w http.ResponseWriter) {
 		connId: connId,
 		writer: w,
 		done:   done,
+	}
+
+	<-done
+}
+
+func (q *groupReadQueue) manualCommit(connId UUID, w http.ResponseWriter) {
+	done := make(chan bool, 1)
+	q.items <- readQueueItem{
+		connId:     connId,
+		writer:     w,
+		done:       done,
+		commitOnly: true,
 	}
 
 	<-done

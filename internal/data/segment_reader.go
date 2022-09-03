@@ -113,11 +113,20 @@ func (s *SegmentReader) read() {
 	for item := range s.Items {
 		shouldResetLastCommitted := lastOrigin != nil && *lastOrigin != item.Origin()
 		if shouldResetLastCommitted {
+			if item.CommitOnly() {
+				// Wants to commit but it wasn't the last reader
+				item.SetResult(fmt.Errorf("Manual commit was ignored"), nil)
+				continue
+			}
 			if s.resetOffsetToLastCommitted() {
 				reader.Reset(emptyBuffer)
 			}
 		} else {
-			s.storeOffset(lastCommit)
+			s.storeOffset(lastCommit, item.CommitOnly())
+			if item.CommitOnly() {
+				item.SetResult(nil, NewEmptyChunk(s.messageOffset))
+				continue
+			}
 		}
 
 		origin := item.Origin()
@@ -237,7 +246,7 @@ func (s *SegmentReader) handleFileGap(offsetGap *int64, reader *bytes.Reader, bu
 	return false
 }
 
-func (s *SegmentReader) storeOffset(lastCommit *time.Time) {
+func (s *SegmentReader) storeOffset(lastCommit *time.Time, manual bool) {
 	commitType := OffsetCommitLocal
 	value := Offset{
 		Offset:  s.messageOffset,
@@ -245,7 +254,7 @@ func (s *SegmentReader) storeOffset(lastCommit *time.Time) {
 		Source:  s.SourceVersion,
 	}
 
-	if time.Since(*lastCommit) >= s.config.AutoCommitInterval() {
+	if time.Since(*lastCommit) >= s.config.AutoCommitInterval() || manual {
 		*lastCommit = time.Now()
 		commitType = OffsetCommitAll
 	} else if s.MaxProducedOffset != nil && s.messageOffset >= *s.MaxProducedOffset {

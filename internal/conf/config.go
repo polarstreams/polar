@@ -119,7 +119,7 @@ type ConsumerConfig interface {
 	BasicConfig
 	DatalogConfig
 	ConsumerAddDelay() time.Duration
-	ConsumerReadThreshold() int // The minimum amount of bytes once reached the consumer poll is fullfilled
+	ConsumerReadThreshold() int // The minimum amount of bytes once reached the consumer poll is fulfilled
 }
 
 type GossipConfig interface {

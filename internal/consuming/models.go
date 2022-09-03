@@ -28,13 +28,15 @@ type segmentReadItem struct {
 	chunkResult chan SegmentChunk
 	errorResult chan error
 	origin      uuid.UUID
+	commitOnly  bool
 }
 
-func newSegmentReadItem(origin uuid.UUID) *segmentReadItem {
+func newSegmentReadItem(origin uuid.UUID, commitOnly bool) *segmentReadItem {
 	return &segmentReadItem{
 		chunkResult: make(chan SegmentChunk, 1),
 		errorResult: make(chan error, 1),
 		origin:      origin,
+		commitOnly:  commitOnly,
 	}
 }
 
@@ -45,6 +47,10 @@ func (r *segmentReadItem) SetResult(err error, chunk SegmentChunk) {
 
 func (r *segmentReadItem) Origin() uuid.UUID {
 	return r.origin
+}
+
+func (r *segmentReadItem) CommitOnly() bool {
+	return r.commitOnly
 }
 
 func (r *segmentReadItem) result() (err error, chunk SegmentChunk) {

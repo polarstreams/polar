@@ -431,6 +431,10 @@ func (r *testReadItem) Origin() uuid.UUID {
 	return r.origin
 }
 
+func (r *testReadItem) CommitOnly() bool {
+	return false
+}
+
 type rrFake struct {
 	streamBuf    []byte
 	streamCalled int64
