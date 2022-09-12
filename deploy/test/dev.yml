@@ -90,7 +90,7 @@ spec:
       terminationGracePeriodSeconds: 1
       containers:
       - name: barco
-        image: golang:1.17-buster
+        image: golang:1.19-buster
         command: ["/bin/bash"]
         args: ["-c", "while true; do echo hello; sleep 10;done"]
         env:

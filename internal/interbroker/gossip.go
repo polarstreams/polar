@@ -94,7 +94,7 @@ type Gossiper interface {
 	IsHostUp(ordinal int) bool
 }
 
-//  GenerationGossiper is responsible for communicating actions related to generations.
+// GenerationGossiper is responsible for communicating actions related to generations.
 type GenerationGossiper interface {
 	// GetGenerations gets the generations for a given token on a peer
 	GetGenerations(ordinal int, token Token) GenReadResult

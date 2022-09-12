@@ -23,7 +23,7 @@ create the repo. In any case, the original author(s) will be credited in the pro
 
 ## Environment setup
 
-You need go 1.17+ to build Barco from source.
+You need go 1.19+ to build Barco from source.
 
 ### Run unit tests
 

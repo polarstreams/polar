@@ -207,7 +207,7 @@ func (s *SegmentWriter) flush(reason string) {
 	buf := s.buffer.Bytes()
 	log.Debug().
 		Str("reason", reason).
-		Msgf("Writing %d bytes segment file %s/%s", len(buf), s.basePath, conf.SegmentFileName(s.segmentId))
+		Msgf("Writing %d bytes to segment file %s/%s", len(buf), s.basePath, conf.SegmentFileName(s.segmentId))
 
 	// Sync copy the buffer to the file
 	if _, err := s.segmentFile.Write(buf); err != nil {

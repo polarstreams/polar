@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.18-buster as builder
+FROM --platform=$BUILDPLATFORM golang:1.19-buster as builder
 WORKDIR /build
 
 COPY go.mod go.sum ./

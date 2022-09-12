@@ -215,19 +215,45 @@ var _ = Describe("A 3 node cluster", func() {
 			client.Close()
 		})
 
-		It("should create multiple segments", func ()  {
+		It("should create and expose multiple segments", func ()  {
 			b0.WaitForStart().WaitForVersion1()
 			b1.WaitForStart().WaitForVersion1()
 			b2.WaitForStart().WaitForVersion1()
 
 			client := NewTestClient(nil)
-			for i := 0; i < 50; i++ {
+			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
+			const totalMessages = 50
+			for i := 0; i < totalMessages; i++ {
 				// Generate a message each time to make it harder to compress
-				message := fmt.Sprintf(`{"long_message": "%s"}`, generateString(500 * 1024))
+				message := fmt.Sprintf(`{"long_message": "%s", "id": %d}`, generateString(500 * 1024), i)
 				resp := client.ProduceJson(0, "abc", message, partitionKeyT0Range)
 				expectOk(resp)
 			}
-			time.Sleep(1 * time.Second)
+
+			// Sleep for a while to be accounted for as consumer
+			time.Sleep(200 * time.Millisecond)
+
+			records := make([]string, 0, totalMessages)
+			for {
+				resp := client.ConsumerPoll(0);
+				if resp.StatusCode == http.StatusOK {
+					messages := readConsumerResponse(resp)
+					for _, m := range messages {
+						for _, r := range m.records {
+							// Store only the last characters to avoid blowing up memory in the test
+							records = append(records, r.body[len(r.body) - 10:])
+						}
+					}
+				}
+				if resp.StatusCode == http.StatusNoContent {
+					break
+				}
+			}
+
+			Expect(records).To(HaveLen(totalMessages))
+			for n, r := range records {
+				Expect(r).To(ContainSubstring(fmt.Sprintf(`"id": %d`, n)))
+			}
 		})
 
 		It("should get topology changes and resize the ring", func () {
@@ -311,9 +337,9 @@ func unmarshalConsumerResponseItem(r io.Reader) consumerResponseItem {
 	payloadLength := int32(0)
 	binary.Read(r, conf.Endianness, &payloadLength)
 	payload := make([]byte, payloadLength)
-	n, err := r.Read(payload)
-	Expect(err).NotTo(HaveOccurred())
+	n, err := io.ReadFull(r, payload)
 	Expect(n).To(Equal(int(payloadLength)))
+	Expect(err).NotTo(HaveOccurred())
 
 	payloadReader, err := zstd.NewReader(bytes.NewReader(payload))
 	Expect(err).NotTo(HaveOccurred())

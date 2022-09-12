@@ -168,6 +168,7 @@ func (s *SegmentReader) read() {
 		if err != nil {
 			// TODO: Determine what to do in case of error
 			closeError = err
+			log.Err(err).Msgf("Error while reading file %s/%s", s.basePath, s.fileName)
 		}
 
 		if len(readBuffer)-remainderIndex <= 0 {
@@ -264,7 +265,7 @@ func (s *SegmentReader) storeOffset(lastCommit *time.Time, manual bool) {
 	}
 
 	if commitType == OffsetCommitAll {
-		log.Debug().Str("group", s.group).Msgf("Setting offset for %s on all replicas", &s.Topic)
+		log.Debug().Str("group", s.group).Msgf("Setting offset for %s on all replicas: %s", &s.Topic, &value)
 	}
 
 	s.offsetState.Set(s.group, s.Topic.Name, s.Topic.Token, s.Topic.RangeIndex, value, commitType)

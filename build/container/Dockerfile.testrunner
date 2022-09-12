@@ -1,4 +1,4 @@
-FROM golang:1.17-buster as BUILD
+FROM golang:1.19-buster as BUILD
 WORKDIR /testdir
 RUN go get github.com/mattn/go-sqlite3@v1.14.7
 RUN go get github.com/onsi/ginkgo@v1.15.1

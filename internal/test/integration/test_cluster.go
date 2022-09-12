@@ -106,7 +106,10 @@ func (b *TestBroker) Start() {
 		for scanner.Scan() {
 			value := scanner.Text()
 			if log.Debug().Enabled() {
-				fmt.Printf("%s > %s\n", b.brokerName, value)
+				focus := os.Getenv("BARCO_TEST_OUTPUT_FOCUS")
+				if focus == "" || b.brokerName == focus {
+					fmt.Printf("%s > %s\n", b.brokerName, value)
+				}
 			}
 			if !started && strings.Contains(value, "Barco started") {
 				started = true
@@ -211,6 +214,7 @@ func (b *TestBroker) match(output []string, r *regexp.Regexp) (bool, string) {
 	return false, ""
 }
 
+// Waits for generation version 1
 func (b *TestBroker) WaitForVersion1() {
 	b.WaitOutput("Committing \\[.*\\] v1 with B%d as leader", b.ordinal)
 }
