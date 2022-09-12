@@ -10,7 +10,7 @@ require (
 	github.com/onsi/ginkgo v1.15.1
 	github.com/onsi/gomega v1.11.0
 	github.com/prometheus/client_golang v1.10.0
-	github.com/rs/zerolog v1.20.0
+	github.com/rs/zerolog v1.28.0
 	github.com/stretchr/testify v1.8.0
 	golang.org/x/net v0.0.0-20211209124913-491a49abca63
 	k8s.io/api v0.23.1
