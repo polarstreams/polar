@@ -11,6 +11,9 @@ We aim to respond to your issues soonest. If you wish to receive a faster respon
 your steps and provide information about your environment in the bug reports. And if you're proposing a new feature,
 it'll help us to evaluate the priority if you explain why you need it.
 
+The label ["good first issue"](https://github.com/barcostreams/barco/labels/good%20first%20issue) marks tasks that are
+beginner-friendly.
+
 ## Client libraries
 
 [Barco Client in golang][go-client] is the reference implementation under Apache License 2.0 and it's currently the

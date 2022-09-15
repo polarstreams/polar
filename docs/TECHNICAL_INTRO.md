@@ -52,7 +52,7 @@ Bypassing the kernel page cache has the following benefits:
 for resources with unrelated applications on the K8s node.
 - No copies between the kernel cache and the internal read/write buffers.
 - We can use read ahead strategies tuned to the workload when reading.
-- We can use buffering and flush strategies tuned to the workload when reading.
+- We can use buffering and flush strategies tuned to the workload when writing.
 - We can control exactly the amount of memory dedicated for buffers and caching (K8s working set).
 
 Additionally, when writing, Barco brokers [compresses and checksums chunks](./developer/FILE_FORMATS.md) of data once

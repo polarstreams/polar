@@ -1,8 +1,9 @@
 # Barco Streams
 
-Barco is a lightweight, elastic, kubernetes-native event streaming system. It acts as a persistent buffer between
-services, supporting peaks by seamlessly scaling and allowing events to be consumed at a later time from
-the peak.
+Barco is a lightweight, elastic, Kubernetes-native event streaming system. It acts as a persistent buffer between
+services providing at least once delivery guarantees.
+
+Barco Streams is optimized to be resource efficient, have minimal operational overhead and be a good K8s neighbor.
 
 ![go build](https://github.com/barcostreams/barco/actions/workflows/go.yml/badge.svg)
 
@@ -37,9 +38,7 @@ the peak.
 Barco Streams is not production ready, expect bugs and things that don't work.
 
 We honestly value your contribution to make this project ready for general availability. If you want to contribute,
-check out the [Issues section on GitHub](https://github.com/barcostreams/barco/issues).
-The label ["good first issue"](https://github.com/barcostreams/barco/labels/good%20first%20issue) marks tasks that are
-beginner-friendly.
+check out the [Contributing Guide](./CONTRIBUTING.md).
 </details>
 
 -----
