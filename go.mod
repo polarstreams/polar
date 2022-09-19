@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/google/uuid v1.3.0
 	github.com/julienschmidt/httprouter v1.3.0
-	github.com/klauspost/compress v1.12.1
+	github.com/klauspost/compress v1.15.10
 	github.com/mattn/go-sqlite3 v1.14.7
 	github.com/onsi/ginkgo v1.15.1
 	github.com/onsi/gomega v1.11.0
@@ -26,7 +26,6 @@ require (
 	github.com/go-logr/logr v1.2.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/go-cmp v0.5.5 // indirect
 	github.com/google/gofuzz v1.1.0 // indirect
 	github.com/googleapis/gnostic v0.5.5 // indirect
