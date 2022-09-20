@@ -15,6 +15,8 @@ import (
 	"golang.org/x/net/http2/h2c"
 )
 
+const noGenerationsStatusMessage = "Broker is unavailable to handle producer/consumer requests"
+
 type topologyClientMessage struct {
 	BaseName     string   `json:"baseName,omitempty"`    // When defined, base name to build the broker names, e.g. "barco-"
 	ServiceName  string   `json:"serviceName,omitempty"` // The name of the service to build the broker names: "<baseName><ordinal>.<service>"
@@ -33,7 +35,7 @@ func (d *discoverer) startClientDiscoveryServer() error {
 		if len(generations) == 0 {
 			w.Header().Set("Retry-After", "1")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			fmt.Fprintf(w, "Broker is unavailable to handle producer/consumer requests")
+			fmt.Fprintf(w, noGenerationsStatusMessage)
 			return
 		}
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/barcostreams/barco/internal/test/conf/mocks"
+	"github.com/barcostreams/barco/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -42,8 +43,8 @@ var _ = Describe("discoverer", func() {
 			client := &http.Client{}
 			r, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/status", port))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(r.StatusCode).To(Equal(http.StatusOK))
-			r.Body.Close()
+			body, _ := utils.ReadBodyClose(r)
+			Expect(body).To(Equal(noGenerationsStatusMessage))
 
 			r, err = client.Get(fmt.Sprintf("http://127.0.0.1:%d/v1/brokers", port))
 			Expect(err).NotTo(HaveOccurred())
@@ -89,8 +90,8 @@ var _ = Describe("discoverer", func() {
 			client := &http.Client{}
 			r, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/status", port))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(r.StatusCode).To(Equal(http.StatusOK))
-			r.Body.Close()
+			body, _ := utils.ReadBodyClose(r)
+			Expect(body).To(Equal(noGenerationsStatusMessage))
 
 			r, err = client.Get(fmt.Sprintf("http://127.0.0.1:%d/v1/brokers", port))
 			Expect(err).NotTo(HaveOccurred())
