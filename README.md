@@ -27,8 +27,8 @@ Barco Streams is optimized to be resource efficient, have minimal operational ov
 ### Kubernetes Native
 
 - Basic setup using StatefulSets
-- Volume setup, scaling, rolling upgrades is managed from Kubernetes
 - Data distribution is K8s-aware: data placement based on the StatefulSet's pod ordinal
+- No need for an operator
 - Good K8s neighbor: Direct I/O, no OS page cache for log segments
 
 -----
