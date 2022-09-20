@@ -1,6 +1,7 @@
 package data
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -18,12 +19,24 @@ func (d *datalog) cleanUp(retention time.Duration) {
 		time.Sleep(delay)
 		log.Info().Msgf("Start looking for log files to clean up pass the retention time")
 
+		_, err := os.Open(d.config.DatalogSegmentsPath())
+		if err != nil {
+			// Likely that we are starting cleaning before the first message arrived
+			log.Info().AnErr("open", err).Msgf("Segment path does not exist yet")
+			continue
+		}
+
 		start := time.Now()
 		read, removed := d.cleanUpDir(d.config.DatalogSegmentsPath(), retention)
 		diff := time.Since(start)
+		spent := fmt.Sprintf("%dms", diff.Milliseconds())
+
+		if diff.Milliseconds() == 0 {
+			spent = "less than a ms"
+		}
+
 		log.Info().Msgf(
-			"Log clean up took %dms to visit %d files and folders and removed %d segment files",
-			diff.Milliseconds(), read, removed)
+			"Log clean up took %s to visit %d files/folders. Removed %d segment files", spent, read, removed)
 	}
 }
 
@@ -42,11 +55,12 @@ func (d *datalog) cleanUpDir(dirPath string, retention time.Duration) (read int,
 			log.Err(err).Msgf("Log clean up could not read the dir %s", dirPath)
 			return
 		}
+
 		if len(stats) == 0 {
-			// Finished clean up
-			log.Info().Msgf("Finishing cleaning up %s", dirPath)
+			log.Debug().Msgf("Finishing cleaning up %s", dirPath)
 			return
 		}
+
 		for _, file := range stats {
 			read++
 			if file.IsDir() {
