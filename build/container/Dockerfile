@@ -22,4 +22,13 @@ LABEL org.opencontainers.image.description="Lightweight, elastic, kubernetes-nat
 
 WORKDIR /work/
 COPY --from=builder /build/barco .
+
+RUN mkdir /var/lib/barco
+
+RUN chgrp -R 0 /var/lib/barco && \
+    chmod -R g=u /var/lib/barco && \
+    chown -R 1001:0 /var/lib/barco
+
+USER 1001
+
 CMD ["/work/barco"]
