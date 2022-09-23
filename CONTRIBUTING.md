@@ -67,7 +67,7 @@ run Barco in your Windows development environment.
 
 ## Building the documentation
 
-The documentation is built using [MKDoc](https://www.mkdocs.org/) and it stored in the `docs` directory
+The documentation is built using [MKDocs](https://www.mkdocs.org/) and it stored in the `docs` directory
 
 ### Prerequisites
 
