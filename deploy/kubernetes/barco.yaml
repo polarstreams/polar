@@ -30,8 +30,11 @@ metadata:
   namespace: barco
 rules:
   - apiGroups: [""]
-    resources: ["configmaps"]
-    verbs: ["get","list", "create", "watch"]
+    resources: ["pods", "events"]
+    verbs: ["get","list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get","list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -41,34 +44,6 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: barco
-subjects:
-  - kind: ServiceAccount
-    name: barco
-    namespace: barco
----
-kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: barco
-rules:
-  - apiGroups: [""]
-    resources: ["events"]
-    verbs: ["get","list", "create", "watch"]
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get","list", "watch"]
-  - apiGroups: ["apps"]
-    resources: ["statefulsets"]
-    verbs: ["get","list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: barco
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
   name: barco
 subjects:
   - kind: ServiceAccount
