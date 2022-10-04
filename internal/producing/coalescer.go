@@ -28,7 +28,7 @@ var lengthBuffer []byte = []byte{0, 0, 0, 0}
 // generation).
 // The coalescer is responsible for managing the lifetime of the segment writers.
 type coalescer struct {
-	items           chan *record
+	items           chan *recordItem
 	topicName       string
 	token           types.Token
 	rangeIndex      types.RangeIndex
@@ -36,16 +36,17 @@ type coalescer struct {
 	replicator      types.Replicator
 	config          conf.ProducerConfig
 	offset          int64
-	buffers         buffers
+	buffers         coalescerBuffers
 	writer          *data.SegmentWriter
 }
 
-func newBuffers(config conf.ProducerConfig) buffers {
+func newBuffers(config conf.ProducerConfig) coalescerBuffers {
 	// We pre-allocate the compression buffers
 	initCapacity := config.MaxGroupSize() / 32
-	result := buffers{
+	result := coalescerBuffers{
 		group:      [writeConcurrencyLevel]*bytes.Buffer{},
 		compressor: [writeConcurrencyLevel]*zstd.Encoder{},
+		bodyReader: make([]byte, 1024),
 	}
 	for i := 0; i < writeConcurrencyLevel; i++ {
 		b := utils.NewBufferCap(initCapacity)
@@ -65,7 +66,7 @@ func newCoalescer(
 	config conf.ProducerConfig,
 ) *coalescer {
 	c := &coalescer{
-		items:           make(chan *record, 0),
+		items:           make(chan *recordItem, 0),
 		topicName:       topicName,
 		token:           token,
 		rangeIndex:      rangeIndex,
@@ -81,7 +82,7 @@ func newCoalescer(
 	return c
 }
 
-func (c *coalescer) add(group []record, item *record, length *int64) ([]record, *record) {
+func (c *coalescer) add(group []recordItem, item *recordItem, length *int64) ([]recordItem, *recordItem) {
 	itemLength := int64(item.length)
 	if *length+itemLength > int64(c.config.MaxGroupSize()) {
 		// Return a non-nil record as a signal that it was not appended
@@ -96,10 +97,10 @@ func (c *coalescer) add(group []record, item *record, length *int64) ([]record, 
 }
 
 func (c *coalescer) process() {
-	var item *record = nil
+	var item *recordItem = nil
 	var index uint8
 	for {
-		group := make([]record, 0)
+		group := make([]recordItem, 0)
 		length := int64(0)
 		var err error
 
@@ -193,13 +194,13 @@ func (c *coalescer) process() {
 	}
 }
 
-func sendResponse(group []record, err error) {
+func sendResponse(group []recordItem, err error) {
 	for _, r := range group {
 		r.response <- err
 	}
 }
 
-func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
+func (c *coalescer) compress(index *uint8, group []recordItem) ([]byte, error) {
 	i := *index % 2
 	*index = *index + 1
 	buf := c.buffers.group[i]
@@ -209,7 +210,7 @@ func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
 	compressor.Reset(buf)
 
 	for _, item := range group {
-		if err := item.marshal(compressor); err != nil {
+		if err := item.marshal(compressor, c.buffers.bodyReader); err != nil {
 			return nil, err
 		}
 	}
@@ -227,7 +228,7 @@ func (c *coalescer) append(
 	timestampMicros int64,
 	body io.ReadCloser,
 ) error {
-	record := &record{
+	record := &recordItem{
 		replication: replication,
 		length:      length,
 		timestamp:   timestampMicros,
@@ -239,8 +240,8 @@ func (c *coalescer) append(
 }
 
 type localDataItem struct {
-	data  []byte   // compressed payload of the chunk
-	group []record // records associated with this chunk
+	data  []byte       // compressed payload of the chunk
+	group []recordItem // records associated with this chunk
 }
 
 // DataBlock() gets the compressed payload of the chunk
