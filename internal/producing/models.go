@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/metrics"
 	. "github.com/barcostreams/barco/internal/types"
 	"github.com/klauspost/compress/zstd"
 	"github.com/rs/zerolog/log"
@@ -26,19 +27,18 @@ type recordItem struct {
 	timestamp   int64  // Timestamp in micros
 	contentType string // The content type detailing the format of the
 	body        io.Reader
-	offset      int64 // TODO: Remove
 	response    chan error
 }
 
-func (r *recordItem) marshal(w io.Writer, readerBuffer []byte) error {
+func (r *recordItem) marshal(w io.Writer, readerBuffer []byte) (totalRecords int, err error) {
 	if r.contentType == ContentTypeNDJSON {
 		return r.marshalRecordsByLine(w, readerBuffer)
 	}
 
-	return marshalRecord(r.timestamp, r.length, r.body, w)
+	return 1, marshalRecord(r.timestamp, r.length, r.body, w)
 }
 
-func (r *recordItem) marshalRecordsByLine(w io.Writer, readerBuffer []byte) error {
+func (r *recordItem) marshalRecordsByLine(w io.Writer, readerBuffer []byte) (totalRecords int, err error) {
 	scanner := bufio.NewScanner(r.body)
 	// Write chunks by chunks
 	scanner.Buffer(readerBuffer, len(readerBuffer))
@@ -50,17 +50,18 @@ func (r *recordItem) marshalRecordsByLine(w io.Writer, readerBuffer []byte) erro
 		}
 		err := marshalRecord(r.timestamp, uint32(length), bytes.NewReader(scanner.Bytes()), w)
 		if err != nil {
-			return err
+			return 0, err
 		}
+		totalRecords++
 	}
 
 	if err := scanner.Err(); err != nil {
 		if err == bufio.ErrTooLong {
 			log.Info().Msgf("Message size is greater than %d bytes", len(readerBuffer))
 		}
-		return err
+		return 0, err
 	}
-	return nil
+	return
 }
 
 func marshalRecord(timestamp int64, length uint32, body io.Reader, w io.Writer) error {
@@ -73,5 +74,41 @@ func marshalRecord(timestamp int64, length uint32, body io.Reader, w io.Writer) 
 	if _, err := io.Copy(w, body); err != nil {
 		return err
 	}
+	return nil
+}
+
+// Represents a group of `recordItem` that get compressed and written into a single chunk
+type coalescerGroup struct {
+	items        []recordItem
+	offset       int64 // The start offset of the group
+	byteSize     int64 // The total size in bytes of the group
+	maxGroupSize int
+}
+
+func newCoalescerGroup(offset int64, maxGroupSize int) *coalescerGroup {
+	return &coalescerGroup{
+		items:        make([]recordItem, 0, 4),
+		offset:       offset,
+		byteSize:     0,
+		maxGroupSize: maxGroupSize,
+	}
+}
+
+func (g *coalescerGroup) sendResponse(err error) {
+	for _, r := range g.items {
+		r.response <- err
+	}
+}
+
+// Attempts to add a new item to the group and returns nil when it was appended.
+func (g *coalescerGroup) tryAdd(item *recordItem) *recordItem {
+	itemSize := int64(item.length)
+	if g.byteSize+itemSize > int64(g.maxGroupSize) {
+		// Return a non-nil record as a signal that it was not appended
+		return item
+	}
+	g.byteSize += itemSize
+	g.items = append(g.items, *item)
+	metrics.CoalescerMessagesProcessed.Inc()
 	return nil
 }

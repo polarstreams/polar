@@ -28,8 +28,9 @@ var _ = Describe("recordItem", func() {
 
 			readBuffer := make([]byte, 64)
 			writer := new(bytes.Buffer)
-			err := item.marshal(writer, readBuffer)
+			totalRecords, err := item.marshal(writer, readBuffer)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(totalRecords).To(Equal(8))
 
 			written := writer.Bytes()
 			messages := strings.Split(data, "\n")
@@ -57,8 +58,9 @@ var _ = Describe("recordItem", func() {
 
 			readBuffer := make([]byte, 64)
 			writer := new(bytes.Buffer)
-			err := item.marshal(writer, readBuffer)
+			totalRecords, err := item.marshal(writer, readBuffer)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(totalRecords).To(Equal(1))
 
 			written := writer.Bytes()
 			resultReader := bytes.NewReader(written)
@@ -77,8 +79,9 @@ var _ = Describe("recordItem", func() {
 
 			readBuffer := make([]byte, 64)
 			writer := new(bytes.Buffer)
-			err := item.marshal(writer, readBuffer)
+			totalRecords, err := item.marshal(writer, readBuffer)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(totalRecords).To(Equal(1))
 
 			written := writer.Bytes()
 			resultReader := bytes.NewReader(written)
@@ -96,7 +99,7 @@ var _ = Describe("recordItem", func() {
 			}
 
 			readBuffer := make([]byte, 4)
-			err := item.marshalRecordsByLine(new(bytes.Buffer), readBuffer)
+			_, err := item.marshalRecordsByLine(new(bytes.Buffer), readBuffer)
 			Expect(err).To(Equal(bufio.ErrTooLong))
 		})
 	})
