@@ -171,10 +171,7 @@ func (c *coalescer) process() {
 		c.offset = group.offset + int64(recordLength)
 
 		// Send in the background while the next block is generated in the foreground
-		c.writer.Items <- &localDataItem{
-			data:  data,
-			group: group,
-		}
+		c.writer.Items <- newLocalDataItem(data, group, recordLength)
 	}
 }
 
@@ -214,12 +211,14 @@ func (c *coalescer) append(
 	replication types.ReplicationInfo,
 	length uint32,
 	timestampMicros int64,
+	contentType string,
 	body io.ReadCloser,
 ) error {
 	record := &recordItem{
 		replication: replication,
 		length:      length,
 		timestamp:   timestampMicros,
+		contentType: contentType,
 		body:        body,
 		response:    make(chan error, 1),
 	}
@@ -228,13 +227,22 @@ func (c *coalescer) append(
 }
 
 type localDataItem struct {
-	data  []byte          // compressed payload of the chunk
-	group *coalescerGroup // records associated with this chunk
+	payload         []byte       // compressed payload of the chunk
+	group 	     *coalescerGroup // records associated with this chunk
+	recordLength int             // the number of records contained in this group
+}
+
+func newLocalDataItem(payload []byte, group *coalescerGroup, recordLength int) *localDataItem {
+	return &localDataItem{
+		payload:      payload,
+		group:        group,
+		recordLength: recordLength,
+	}
 }
 
 // DataBlock() gets the compressed payload of the chunk
 func (d *localDataItem) DataBlock() []byte {
-	return d.data
+	return d.payload
 }
 
 func (d *localDataItem) Replication() types.ReplicationInfo {
@@ -247,7 +255,10 @@ func (d *localDataItem) StartOffset() int64 {
 }
 
 func (d *localDataItem) RecordLength() uint32 {
-	return uint32(len(d.group.items))
+	if d.recordLength == 0 {
+		log.Panic().Msgf("Invalid localDataItem with zero records")
+	}
+	return uint32(d.recordLength)
 }
 
 func (d *localDataItem) SetResult(err error) {

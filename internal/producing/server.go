@@ -113,16 +113,29 @@ func (p *producer) Close() {
 	}
 }
 
-func (p *producer) OnReroutedMessage(topic string, querystring url.Values, contentLength int64, body io.ReadCloser) error {
-	return p.handleMessage(topic, querystring, contentLength, body)
+func (p *producer) OnReroutedMessage(
+	topic string,
+	querystring url.Values,
+	contentLength int64,
+	contentType string,
+	body io.ReadCloser,
+) error {
+	return p.handleMessage(topic, querystring, contentLength, contentType, body)
 }
 
 func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
-	return p.handleMessage(ps.ByName("topic"), r.URL.Query(), r.ContentLength, r.Body)
+	return p.handleMessage(
+		ps.ByName("topic"), r.URL.Query(), r.ContentLength, r.Header.Get(types.ContentTypeHeaderKey), r.Body)
 }
 
 // Produces or re-routes the message request
-func (p *producer) handleMessage(topic string, querystring url.Values, contentLength int64, body io.ReadCloser) error {
+func (p *producer) handleMessage(
+	topic string,
+	querystring url.Values,
+	contentLength int64,
+	contentType string,
+	body io.ReadCloser,
+) error {
 	if topic == "" || !p.topicGetter.Exists(topic) {
 		return types.NewHttpError(http.StatusBadRequest, "Invalid topic")
 	}
@@ -150,7 +163,7 @@ func (p *producer) handleMessage(topic string, querystring url.Values, contentLe
 
 	if !leader.IsSelf {
 		// Route the message as-is
-		return p.gossiper.SendToLeader(replication, topic, querystring, contentLength, body)
+		return p.gossiper.SendToLeader(replication, topic, querystring, contentLength, contentType, body)
 	}
 
 	timestampMicros := time.Now().UnixMicro()
@@ -161,7 +174,7 @@ func (p *producer) handleMessage(topic string, querystring url.Values, contentLe
 	}
 
 	coalescer := p.getCoalescer(topic, replication.Token, replication.RangeIndex)
-	if err := coalescer.append(replication, uint32(contentLength), timestampMicros, body); err != nil {
+	if err := coalescer.append(replication, uint32(contentLength), timestampMicros, contentType, body); err != nil {
 		return p.adaptCoalescerError(err)
 	}
 	return nil

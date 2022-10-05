@@ -20,6 +20,11 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const (
+	SegmentFlushInterval = 500 * time.Millisecond
+	ConsumerAddDelay     = 200 * time.Millisecond
+)
+
 // Represents a broker process
 type TestBroker struct {
 	ordinal int
@@ -76,8 +81,8 @@ func (b *TestBroker) Start() {
 	// Basic test env variables
 	envs := append(os.Environ(),
 		fmt.Sprintf("BARCO_HOME=home%d", b.ordinal),
-		"BARCO_SEGMENT_FLUSH_INTERVAL_MS=1000",
-		"BARCO_CONSUMER_ADD_DELAY_MS=200",
+		fmt.Sprintf("BARCO_SEGMENT_FLUSH_INTERVAL_MS=%d", SegmentFlushInterval.Milliseconds()),
+		fmt.Sprintf("BARCO_CONSUMER_ADD_DELAY_MS=%d", ConsumerAddDelay.Milliseconds()),
 		"BARCO_CONSUMER_RANGES=4",
 		"BARCO_TOPOLOGY_FILE_POLL_DELAY_MS=400",
 		"BARCO_MAX_SEGMENT_FILE_SIZE=16777216", // 16MiB

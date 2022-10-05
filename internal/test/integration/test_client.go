@@ -67,8 +67,16 @@ func NewTestClient(options *TestClientOptions) *TestClient {
 }
 
 func (c *TestClient) ProduceJson(ordinal int, topic string, message string, partitionKey string) *http.Response {
+	return c.produce(ordinal, topic, message, partitionKey, "application/json")
+}
+
+func (c *TestClient) ProduceNDJson(ordinal int, topic string, message string, partitionKey string) *http.Response {
+	return c.produce(ordinal, topic, message, partitionKey, "application/x-ndjson")
+}
+
+func (c *TestClient) produce(ordinal int, topic string, message string, partitionKey string, contentType string) *http.Response {
 	url := c.ProducerUrl(ordinal, topic, partitionKey)
-	resp, err := c.client.Post(url, "application/json", strings.NewReader(message))
+	resp, err := c.client.Post(url, contentType, strings.NewReader(message))
 	Expect(err).NotTo(HaveOccurred())
 	return resp
 }

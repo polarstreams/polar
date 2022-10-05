@@ -27,7 +27,12 @@ type ConsumerInfoListener interface {
 }
 
 type ReroutingListener interface {
-	OnReroutedMessage(topic string, querystring url.Values, contentLength int64, body io.ReadCloser) error
+	OnReroutedMessage(
+		topic string,
+		querystring url.Values,
+		contentLength int64,
+		contentType string,
+		body io.ReadCloser) error
 }
 
 type PeerStateListener interface {

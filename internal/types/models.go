@@ -9,8 +9,9 @@ import (
 const notFoundIndex BrokerIndex = -1
 
 const (
-	ContentTypeJSON   = "application/json"
-	ContentTypeNDJSON = "application/x-ndjson"
+	ContentTypeJSON      = "application/json"
+	ContentTypeNDJSON    = "application/x-ndjson"
+	ContentTypeHeaderKey = "Content-Type"
 )
 
 // BrokerInfo contains information about a broker

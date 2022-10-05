@@ -126,7 +126,7 @@ func (g *gossiper) getGenHandler(w http.ResponseWriter, r *http.Request, ps http
 	}
 
 	committed, proposed := g.discoverer.GenerationProposed(Token(token))
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(ContentTypeHeaderKey, contentType)
 
 	// Return an array of generations w/ committed in the first position
 	result := make([]Generation, 2)
@@ -213,7 +213,7 @@ func (g *gossiper) getBrokerIsUpHandler(w http.ResponseWriter, r *http.Request, 
 		return err
 	}
 
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(ContentTypeHeaderKey, contentType)
 	// Encode can't fail for a bool
 	_ = json.NewEncoder(w).Encode(g.IsHostUp(int(broker)))
 	return nil
@@ -225,7 +225,7 @@ func (g *gossiper) getTokenInRangeHandler(w http.ResponseWriter, r *http.Request
 		return err
 	}
 
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(ContentTypeHeaderKey, contentType)
 	// Encode can't fail for a bool
 	_ = json.NewEncoder(w).Encode(g.discoverer.IsTokenInRange(Token(token)))
 	return nil
@@ -242,7 +242,7 @@ func (g *gossiper) getTokenHasHistoryUrl(w http.ResponseWriter, r *http.Request,
 		return err
 	}
 
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(ContentTypeHeaderKey, contentType)
 	// Encode can't fail for a bool
 	_ = json.NewEncoder(w).Encode(result)
 	return nil
@@ -259,7 +259,7 @@ func (g *gossiper) getTokenHistoryUrl(w http.ResponseWriter, r *http.Request, ps
 		return err
 	}
 
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(ContentTypeHeaderKey, contentType)
 	PanicIfErr(json.NewEncoder(w).Encode(gen), "Unexpected error when serializing generation")
 	return nil
 }
@@ -296,7 +296,7 @@ func (g *gossiper) getProducerOffset(w http.ResponseWriter, r *http.Request, ps 
 		}
 		return err
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(ContentTypeHeaderKey, contentType)
 	// Encode can't fail for a bool
 	_ = json.NewEncoder(w).Encode(value)
 	return nil
@@ -334,7 +334,7 @@ func (g *gossiper) getFileStructure(w http.ResponseWriter, r *http.Request, ps h
 	if err != nil {
 		return err
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set(ContentTypeHeaderKey, contentType)
 	message := TopicFileStructureMessage{
 		FileNames: fileNames,
 	}
@@ -365,5 +365,6 @@ func (g *gossiper) postConsumerOffsetHandler(w http.ResponseWriter, r *http.Requ
 func (g *gossiper) postReroutingHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
 	metrics.ReroutedReceived.Inc()
 	topic := ps.ByName("topic")
-	return g.reroutingListener.OnReroutedMessage(topic, r.URL.Query(), r.ContentLength, r.Body)
+	return g.reroutingListener.OnReroutedMessage(
+		topic, r.URL.Query(), r.ContentLength, r.Header.Get(ContentTypeHeaderKey), r.Body)
 }
