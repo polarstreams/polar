@@ -80,6 +80,9 @@ func (i *consumerResponseItem) Marshal(w io.Writer) error {
 	if _, err := w.Write([]byte(i.topic.Name)); err != nil {
 		return err
 	}
+	if err := binary.Write(w, conf.Endianness, i.chunk.StartOffset()); err != nil {
+		return err
+	}
 	payload := i.chunk.DataBlock()
 	if err := binary.Write(w, conf.Endianness, int32(len(payload))); err != nil {
 		return err

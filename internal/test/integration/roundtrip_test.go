@@ -233,15 +233,19 @@ var _ = Describe("A 3 node cluster", func() {
 			time.Sleep(ConsumerAddDelay)
 
 			records := make([]string, 0, totalMessages)
+			expectedOffset := int64(0)
 			for {
 				resp := client.ConsumerPoll(0);
 				if resp.StatusCode == http.StatusOK {
-					messages := readConsumerResponse(resp)
-					for _, m := range messages {
-						for _, r := range m.records {
+					consumerResponses := readConsumerResponse(resp)
+					for _, c := range consumerResponses {
+						Expect(c.startOffset).To(Equal(expectedOffset))
+						for _, r := range c.records {
 							// Store only the last characters to avoid blowing up memory in the test
 							records = append(records, r.body[len(r.body) - 10:])
 						}
+						// Increase the next one
+						expectedOffset += int64(len(c.records))
 					}
 				}
 				if resp.StatusCode == http.StatusNoContent {
@@ -351,8 +355,9 @@ func expectOkOrMessage(resp *http.Response, message string, description... inter
 }
 
 type consumerResponseItem struct {
-	topic *TopicDataId
-	records []record
+	topic       *TopicDataId
+	startOffset int64
+	records     []record
 }
 
 type record struct {
@@ -378,8 +383,11 @@ func generateString(length int) string {
 func unmarshalConsumerResponseItem(r io.Reader) consumerResponseItem {
 	item := consumerResponseItem{}
 	item.topic = unmarshalTopicId(r)
+	err := binary.Read(r, conf.Endianness, &item.startOffset)
+	Expect(err).NotTo(HaveOccurred())
 	payloadLength := int32(0)
-	binary.Read(r, conf.Endianness, &payloadLength)
+	err = binary.Read(r, conf.Endianness, &payloadLength)
+	Expect(err).NotTo(HaveOccurred())
 	payload := make([]byte, payloadLength)
 	n, err := io.ReadFull(r, payload)
 	Expect(n).To(Equal(int(payloadLength)))
