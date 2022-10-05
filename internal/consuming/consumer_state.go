@@ -66,7 +66,8 @@ func NewConsumerState(config conf.BasicConfig, topologyGetter discovery.Topology
 	}
 }
 
-func (m *ConsumerState) AddConnection(conn *TrackedConnection, consumer ConsumerInfo) bool {
+// Add the new connection and returns the new number of connections
+func (m *ConsumerState) AddConnection(conn *TrackedConnection, consumer ConsumerInfo) (bool, int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -76,10 +77,11 @@ func (m *ConsumerState) AddConnection(conn *TrackedConnection, consumer Consumer
 	m.connections[id] = consumer
 	m.trackedConnections[id] = conn
 
-	return !found
+	return !found, len(m.connections)
 }
 
-func (m *ConsumerState) RemoveConnection(id UUID) bool {
+// Removes the connection when found and returns the new number of connections.
+func (m *ConsumerState) RemoveConnection(id UUID) (bool, int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -94,7 +96,7 @@ func (m *ConsumerState) RemoveConnection(id UUID) bool {
 			timestamp: time.Now(),
 		}
 	}
-	return found
+	return found, len(m.connections)
 }
 
 // Gets a copy of the current open connections

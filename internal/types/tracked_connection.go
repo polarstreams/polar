@@ -20,6 +20,7 @@ type TrackedConnection struct {
 	closeHandlerOnce sync.Once
 	closeHandler     func(*TrackedConnection)
 	id               uuid.UUID
+	lastRead         int64 // Optionally used to follow last access to a resource
 }
 
 // Creates a new TrackedConnection using the provided tcp conn.
@@ -32,6 +33,7 @@ func NewTrackedConnection(conn net.Conn, closeHandler func(*TrackedConnection)) 
 		isOpen:       isOpen,
 		closeHandler: closeHandler,
 		id:           uuid.New(),
+		lastRead:     time.Now().UnixMilli(),
 	}
 }
 
@@ -58,6 +60,16 @@ func (c *TrackedConnection) IsOpen() bool {
 
 func (c *TrackedConnection) Id() uuid.UUID {
 	return c.id
+}
+
+// Sets the last tracked read for deadlines
+func (c *TrackedConnection) SetAsRead() {
+	atomic.StoreInt64(&c.lastRead, time.Now().UnixMilli())
+}
+
+// Gets the last tracked read for read timeouts
+func (c *TrackedConnection) LastRead() time.Time {
+	return time.UnixMilli(atomic.LoadInt64(&c.lastRead))
 }
 
 func (c *TrackedConnection) Read(b []byte) (n int, err error) {
