@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -41,6 +42,8 @@ func main() {
 	} else {
 		log.Info().Msg("Starting Barco in dev mode")
 	}
+
+	log.Info().Msgf("With architecture target %s", runtime.GOARCH)
 
 	if conf.StartProfiling() {
 		log.Info().Msgf("Profiling enabled")
