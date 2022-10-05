@@ -26,8 +26,15 @@ var _ = Describe("fileStreamRequest", func() {
 			}
 
 			buf := new(bytes.Buffer)
+			header := header{Version: 1, StreamId: 3, Op: fileStreamOp}
 			// Marshal the header and body
-			r.Marshal(buf, &header{})
+			r.Marshal(buf, &header)
+
+			// Unmarshal the header
+			obtainedHeader, err := readHeader(buf.Bytes())
+			Expect(err).NotTo(HaveOccurred())
+			obtainedHeader.Crc = 0 // Set for comparison
+			Expect(*obtainedHeader).To(Equal(header))
 
 			// Unmarshal the body
 			obtained, err := unmarshalFileStreamRequest(buf.Bytes()[headerSize:])

@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
+	"hash/crc32"
 	"io"
 
 	"github.com/barcostreams/barco/internal/conf"
@@ -31,13 +33,13 @@ const messageVersion = 1
 
 type dataRequest interface {
 	Ctxt() context.Context
-	Marshal(w types.StringWriter, header *header)
+	Marshal(w types.BufferBackedWriter, header *header)
 	SetResponse(res dataResponse) error
 	BodyLength() uint32
 }
 
 type dataResponse interface {
-	Marshal(w io.Writer) error
+	Marshal(w types.BufferBackedWriter) error
 	BodyLength() uint32
 	BodyBuffer() []byte // When set, it hints that the body will not be marshalled and the buffer should be used instead
 	ReleaseBuffer()     // For buffered responses, it marks the body buffer for reuse
@@ -50,13 +52,10 @@ type header struct {
 	StreamId   streamId
 	Op         opcode
 	BodyLength uint32
-	// TODO: Add CRC to header
+	Crc        uint32
 }
 
-const headerSize = 1 + // version
-	2 + // stream id
-	1 + // op
-	4 // length
+var headerSize = utils.BinarySize(header{})
 
 type dataRequestMeta struct {
 	// Strict ordering, exported fields
@@ -113,7 +112,7 @@ func (r *chunkReplicationRequest) SetResponse(res dataResponse) error {
 	return nil
 }
 
-func (r *chunkReplicationRequest) Marshal(w types.StringWriter, header *header) {
+func (r *chunkReplicationRequest) Marshal(w types.BufferBackedWriter, header *header) {
 	header.Op = chunkReplicationOp
 
 	writeHeader(w, header)
@@ -144,7 +143,7 @@ type fileStreamRequest struct {
 	ctxt        context.Context
 }
 
-func (r *fileStreamRequest) Marshal(w types.StringWriter, header *header) {
+func (r *fileStreamRequest) Marshal(w types.BufferBackedWriter, header *header) {
 	header.Op = fileStreamOp
 	writeHeader(w, header)
 	binary.Write(w, conf.Endianness, r.meta)
@@ -201,7 +200,7 @@ func newErrorResponse(message string, requestHeader *header) *errorResponse {
 }
 
 // Deserializes an error response into a buffer
-func (r *errorResponse) Marshal(w io.Writer) error {
+func (r *errorResponse) Marshal(w types.BufferBackedWriter) error {
 	message := []byte(r.message)
 	if err := writeHeader(w, &header{
 		Version:    messageVersion,
@@ -226,14 +225,30 @@ func (r *errorResponse) BodyBuffer() []byte {
 
 func (r *errorResponse) ReleaseBuffer() {}
 
-func writeHeader(w io.Writer, header *header) error {
-	return binary.Write(w, conf.Endianness, header)
+func writeHeader(w types.BufferBackedWriter, header *header) error {
+	if err := binary.Write(w, conf.Endianness, header); err != nil {
+		return err
+	}
+
+	const crcByteSize = 4
+	buf := w.Bytes()
+	headerBuf := buf[len(buf)-headerSize:]
+	crc := crc32.ChecksumIEEE(headerBuf[:len(headerBuf)-crcByteSize])
+	conf.Endianness.PutUint32(headerBuf[len(headerBuf)-crcByteSize:], crc)
+	return nil
 }
 
 func readHeader(buffer []byte) (*header, error) {
 	header := &header{}
-	err := binary.Read(bytes.NewReader(buffer), conf.Endianness, header)
-	return header, err
+	if err := binary.Read(bytes.NewReader(buffer), conf.Endianness, header); err != nil {
+		return nil, err
+	}
+	const crcByteSize = 4
+	expectedCrc := crc32.ChecksumIEEE(buffer[:headerSize-crcByteSize])
+	if header.Crc != expectedCrc {
+		return nil, fmt.Errorf("Checksum mismatch")
+	}
+	return header, nil
 }
 
 type emptyResponse struct {
@@ -241,7 +256,7 @@ type emptyResponse struct {
 	op       opcode
 }
 
-func (r *emptyResponse) Marshal(w io.Writer) error {
+func (r *emptyResponse) Marshal(w types.BufferBackedWriter) error {
 	return writeHeader(w, &header{
 		Version:    messageVersion,
 		StreamId:   r.streamId,
@@ -285,7 +300,7 @@ type fileStreamResponse struct {
 	releaseHandler func()
 }
 
-func (r *fileStreamResponse) Marshal(w io.Writer) error {
+func (r *fileStreamResponse) Marshal(w types.BufferBackedWriter) error {
 	return writeHeader(w, &header{
 		Version:    messageVersion,
 		StreamId:   r.streamId,
