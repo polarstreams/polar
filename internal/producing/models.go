@@ -71,7 +71,7 @@ func marshalRecord(w io.Writer, timestamp int64, length uint32, body io.Reader, 
 	if err := marshalRecordProps(timestamp, length, w); err != nil {
 		return err
 	}
-	// Avoid using io.CopyBuffer() to avoid zstd.Encoder's ReadFrom() implementation
+	// Don't io.CopyBuffer() to avoid zstd.Encoder's ReadFrom() implementation
 	for {
 		n, err := body.Read(readBuffer)
 		if n > 0 {

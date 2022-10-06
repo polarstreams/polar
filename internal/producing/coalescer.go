@@ -46,7 +46,7 @@ func newBuffers(config conf.ProducerConfig) coalescerBuffers {
 	result := coalescerBuffers{
 		group:      [writeConcurrencyLevel]*bytes.Buffer{},
 		compressor: [writeConcurrencyLevel]*zstd.Encoder{},
-		bodyReader: make([]byte, 1024),
+		bodyReader: make([]byte, config.MaxMessageSize()),
 	}
 	for i := 0; i < writeConcurrencyLevel; i++ {
 		b := utils.NewBufferCap(initCapacity)
