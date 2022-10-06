@@ -9,6 +9,7 @@ import (
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/metrics"
 	. "github.com/barcostreams/barco/internal/types"
+	"github.com/barcostreams/barco/internal/utils"
 	"github.com/klauspost/compress/zstd"
 	"github.com/rs/zerolog/log"
 )
@@ -35,7 +36,7 @@ func (r *recordItem) marshal(w io.Writer, readerBuffer []byte) (totalRecords int
 		return r.marshalRecordsByLine(w, readerBuffer)
 	}
 
-	return 1, marshalRecord(r.timestamp, r.length, r.body, w)
+	return 1, marshalRecord(w, r.timestamp, r.length, r.body, readerBuffer)
 }
 
 func (r *recordItem) marshalRecordsByLine(w io.Writer, readerBuffer []byte) (totalRecords int, err error) {
@@ -48,8 +49,10 @@ func (r *recordItem) marshalRecordsByLine(w io.Writer, readerBuffer []byte) (tot
 		if length == 0 {
 			continue
 		}
-		err := marshalRecord(r.timestamp, uint32(length), bytes.NewReader(scanner.Bytes()), w)
-		if err != nil {
+		if err := marshalRecordProps(r.timestamp, uint32(length), w); err != nil {
+			return 0, err
+		}
+		if err := utils.WriteBytes(w, scanner.Bytes()); err != nil {
 			return 0, err
 		}
 		totalRecords++
@@ -64,14 +67,33 @@ func (r *recordItem) marshalRecordsByLine(w io.Writer, readerBuffer []byte) (tot
 	return
 }
 
-func marshalRecord(timestamp int64, length uint32, body io.Reader, w io.Writer) error {
+func marshalRecord(w io.Writer, timestamp int64, length uint32, body io.Reader, readBuffer []byte) error {
+	if err := marshalRecordProps(timestamp, length, w); err != nil {
+		return err
+	}
+	// Avoid using io.CopyBuffer() to avoid zstd.Encoder's ReadFrom() implementation
+	for {
+		n, err := body.Read(readBuffer)
+		if n > 0 {
+			if err = utils.WriteBytes(w, readBuffer[0:n]); err != nil {
+				return err
+			}
+		}
+		if err != nil {
+			if err != io.EOF {
+				return err
+			}
+			break
+		}
+	}
+	return nil
+}
+
+func marshalRecordProps(timestamp int64, length uint32, w io.Writer) error {
 	if err := binary.Write(w, conf.Endianness, timestamp); err != nil {
 		return err
 	}
 	if err := binary.Write(w, conf.Endianness, length); err != nil {
-		return err
-	}
-	if _, err := io.Copy(w, body); err != nil {
 		return err
 	}
 	return nil

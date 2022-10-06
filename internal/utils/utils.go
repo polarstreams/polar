@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"math/rand"
@@ -223,4 +224,16 @@ func FindGenByToken(generations []types.Generation, token types.Token) int {
 		}
 	}
 	return -1
+}
+
+// Writes the buffer, validating for "short writes"
+func WriteBytes(w io.Writer, buf []byte) error {
+	n, err := w.Write(buf)
+	if err != nil {
+		return err
+	}
+	if n < len(buf) {
+		return io.ErrShortWrite
+	}
+	return nil
 }

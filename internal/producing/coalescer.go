@@ -227,8 +227,8 @@ func (c *coalescer) append(
 }
 
 type localDataItem struct {
-	payload         []byte       // compressed payload of the chunk
-	group 	     *coalescerGroup // records associated with this chunk
+	payload      []byte          // compressed payload of the chunk
+	group        *coalescerGroup // records associated with this chunk
 	recordLength int             // the number of records contained in this group
 }
 
