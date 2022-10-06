@@ -28,7 +28,7 @@ var lengthBuffer []byte = []byte{0, 0, 0, 0}
 // generation).
 // The coalescer is responsible for managing the lifetime of the segment writers.
 type coalescer struct {
-	items           chan *record
+	items           chan *recordItem
 	topicName       string
 	token           types.Token
 	rangeIndex      types.RangeIndex
@@ -36,16 +36,17 @@ type coalescer struct {
 	replicator      types.Replicator
 	config          conf.ProducerConfig
 	offset          int64
-	buffers         buffers
+	buffers         coalescerBuffers
 	writer          *data.SegmentWriter
 }
 
-func newBuffers(config conf.ProducerConfig) buffers {
+func newBuffers(config conf.ProducerConfig) coalescerBuffers {
 	// We pre-allocate the compression buffers
 	initCapacity := config.MaxGroupSize() / 32
-	result := buffers{
+	result := coalescerBuffers{
 		group:      [writeConcurrencyLevel]*bytes.Buffer{},
 		compressor: [writeConcurrencyLevel]*zstd.Encoder{},
+		bodyReader: make([]byte, config.MaxMessageSize()),
 	}
 	for i := 0; i < writeConcurrencyLevel; i++ {
 		b := utils.NewBufferCap(initCapacity)
@@ -65,7 +66,7 @@ func newCoalescer(
 	config conf.ProducerConfig,
 ) *coalescer {
 	c := &coalescer{
-		items:           make(chan *record, 0),
+		items:           make(chan *recordItem, 0),
 		topicName:       topicName,
 		token:           token,
 		rangeIndex:      rangeIndex,
@@ -81,26 +82,11 @@ func newCoalescer(
 	return c
 }
 
-func (c *coalescer) add(group []record, item *record, length *int64) ([]record, *record) {
-	itemLength := int64(item.length)
-	if *length+itemLength > int64(c.config.MaxGroupSize()) {
-		// Return a non-nil record as a signal that it was not appended
-		return group, item
-	}
-	*length += itemLength
-	item.offset = c.offset
-	c.offset++
-	metrics.CoalescerMessagesProcessed.Inc()
-	group = append(group, *item)
-	return group, nil
-}
-
 func (c *coalescer) process() {
-	var item *record = nil
-	var index uint8
+	var item *recordItem = nil
+	var bufferIndex uint8
 	for {
-		group := make([]record, 0)
-		length := int64(0)
+		group := newCoalescerGroup(c.offset, c.config.MaxGroupSize())
 		var err error
 
 		// Block receiving the first item or when there isn't a buffered item
@@ -153,8 +139,7 @@ func (c *coalescer) process() {
 		}
 
 		// Either there was a buffered item or we just received it
-		group, _ = c.add(group, item, &length)
-		item = nil
+		item = group.tryAdd(item)
 
 		canAddNext := true
 		timeout := time.After(100 * time.Microsecond)
@@ -163,7 +148,7 @@ func (c *coalescer) process() {
 			// or the max length for a group was reached
 			select {
 			case item = <-c.items:
-				group, item = c.add(group, item, &length)
+				item = group.tryAdd(item)
 				if item != nil {
 					// The group can't contain the new item
 					canAddNext = false
@@ -173,33 +158,31 @@ func (c *coalescer) process() {
 			}
 		}
 
-		data, err := c.compress(&index, group)
-
+		data, recordLength, err := c.compress(&bufferIndex, group)
 		if err != nil {
-			log.Err(err).Msg("Unexpected compression error")
-			sendResponse(group, err)
-			// The group will not be persisted, reset the offset
-			c.offset = group[0].offset
+			log.Err(err).Msg("Error while compressing group in coalescer")
+			group.sendResponse(err)
 			continue
 		}
 
-		metrics.CoalescerMessagesPerGroup.Observe(float64(len(group)))
+		metrics.CoalescerMessagesPerGroup.Observe(float64(len(group.items)))
+
+		// The group will be persisted, move the offset
+		c.offset = group.offset + int64(recordLength)
 
 		// Send in the background while the next block is generated in the foreground
-		c.writer.Items <- &localDataItem{
-			data:  data,
-			group: group,
-		}
+		c.writer.Items <- newLocalDataItem(data, group, recordLength)
 	}
 }
 
-func sendResponse(group []record, err error) {
+func sendResponse(group []recordItem, err error) {
 	for _, r := range group {
 		r.response <- err
 	}
 }
 
-func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
+// Compresses the group of record items and returns the compressed buffer along with the total number of records
+func (c *coalescer) compress(index *uint8, group *coalescerGroup) ([]byte, int, error) {
 	i := *index % 2
 	*index = *index + 1
 	buf := c.buffers.group[i]
@@ -207,30 +190,35 @@ func (c *coalescer) compress(index *uint8, group []record) ([]byte, error) {
 	compressor := c.buffers.compressor[i]
 	// Compressor writer needs to be reinitialized each time
 	compressor.Reset(buf)
+	totalRecordLength := 0
 
-	for _, item := range group {
-		if err := item.marshal(compressor); err != nil {
-			return nil, err
+	for _, item := range group.items {
+		recordLength, err := item.marshal(compressor, c.buffers.bodyReader)
+		if err != nil {
+			return nil, 0, err
 		}
+		totalRecordLength += recordLength
 	}
 
 	if err := compressor.Close(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return buf.Bytes(), nil
+	return buf.Bytes(), totalRecordLength, nil
 }
 
 func (c *coalescer) append(
 	replication types.ReplicationInfo,
 	length uint32,
 	timestampMicros int64,
+	contentType string,
 	body io.ReadCloser,
 ) error {
-	record := &record{
+	record := &recordItem{
 		replication: replication,
 		length:      length,
 		timestamp:   timestampMicros,
+		contentType: contentType,
 		body:        body,
 		response:    make(chan error, 1),
 	}
@@ -239,30 +227,40 @@ func (c *coalescer) append(
 }
 
 type localDataItem struct {
-	data  []byte   // compressed payload of the chunk
-	group []record // records associated with this chunk
+	payload      []byte          // compressed payload of the chunk
+	group        *coalescerGroup // records associated with this chunk
+	recordLength int             // the number of records contained in this group
+}
+
+func newLocalDataItem(payload []byte, group *coalescerGroup, recordLength int) *localDataItem {
+	return &localDataItem{
+		payload:      payload,
+		group:        group,
+		recordLength: recordLength,
+	}
 }
 
 // DataBlock() gets the compressed payload of the chunk
 func (d *localDataItem) DataBlock() []byte {
-	return d.data
+	return d.payload
 }
 
 func (d *localDataItem) Replication() types.ReplicationInfo {
 	// TODO: Maybe simplify, 1 replication info per generation
-	return d.group[0].replication
+	return d.group.items[0].replication
 }
 
 func (d *localDataItem) StartOffset() int64 {
-	return d.group[0].offset
+	return d.group.offset
 }
 
 func (d *localDataItem) RecordLength() uint32 {
-	return uint32(len(d.group))
+	if d.recordLength == 0 {
+		log.Panic().Msgf("Invalid localDataItem with zero records")
+	}
+	return uint32(d.recordLength)
 }
 
 func (d *localDataItem) SetResult(err error) {
-	for _, r := range d.group {
-		r.response <- err
-	}
+	d.group.sendResponse(err)
 }

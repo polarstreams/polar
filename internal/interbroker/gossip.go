@@ -52,6 +52,7 @@ type Gossiper interface {
 		topic string,
 		querystring url.Values,
 		contentLength int64,
+		contentType string,
 		body io.Reader) error
 
 	// Sends a request to get file part to one or more peers
@@ -249,6 +250,7 @@ func (g *gossiper) SendToLeader(
 	topic string,
 	querystring url.Values,
 	contentLength int64,
+	contentType string,
 	body io.Reader,
 ) error {
 	c := g.getClientInfo(replicationInfo.Leader.Ordinal)
@@ -274,6 +276,7 @@ func (g *gossiper) SendToLeader(
 		return err
 	}
 	req.ContentLength = contentLength
+	req.Header.Set(ContentTypeHeaderKey, contentType)
 	resp, err := c.routingClient.Do(req)
 
 	if err != nil {

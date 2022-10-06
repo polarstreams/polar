@@ -8,6 +8,12 @@ import (
 
 const notFoundIndex BrokerIndex = -1
 
+const (
+	ContentTypeJSON      = "application/json"
+	ContentTypeNDJSON    = "application/x-ndjson"
+	ContentTypeHeaderKey = "Content-Type"
+)
+
 // BrokerInfo contains information about a broker
 type BrokerInfo struct {
 	// IsSelf determines whether the broker refers to this instance
