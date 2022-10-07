@@ -30,9 +30,13 @@ func main() {
 
 	debug := flag.Bool("debug", false, "sets log level to debug")
 	devMode := flag.Bool("dev", false, "starts a single instance in dev mode")
+	logPretty := flag.Bool("pretty", false, "logs a human-friendly, colorized output")
 	flag.Parse()
 	if *debug || os.Getenv(conf.EnvBarcoDebug) == "true" {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+	if *logPretty {
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	}
 
 	config := conf.NewConfig(*devMode)
