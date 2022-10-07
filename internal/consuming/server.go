@@ -124,6 +124,7 @@ func (c *consumer) AcceptConnections() error {
 			router := httprouter.New()
 			router.GET(conf.StatusUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 				fmt.Fprintf(w, "Consumer server listening on %d\n", port)
+				trackedConn.SetAsRead()
 			})
 			router.GET("/test/delay", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 				time.Sleep(10 * time.Second)

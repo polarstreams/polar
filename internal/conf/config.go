@@ -243,7 +243,7 @@ func (c *config) ConsumerAddDelay() time.Duration {
 }
 
 func (c *config) ConsumerReadTimeout() time.Duration {
-	ms := envInt(envConsumerReadTimeout, 60000)
+	ms := envInt(envConsumerReadTimeout, 120000)
 	return time.Duration(ms) * time.Millisecond
 }
 
