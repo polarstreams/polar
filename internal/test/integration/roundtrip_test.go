@@ -221,7 +221,6 @@ var _ = Describe("A 3 node cluster", func() {
 			b2.WaitForStart().WaitForVersion1()
 
 			client := NewTestClient(nil)
-			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
 			const totalMessages = 50
 			for i := 0; i < totalMessages; i++ {
 				// Generate a message each time to make it harder to compress
@@ -230,7 +229,7 @@ var _ = Describe("A 3 node cluster", func() {
 				expectOk(resp)
 			}
 
-			// Sleep for a while to be accounted for as consumer
+			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
 			time.Sleep(ConsumerAddDelay)
 
 			records := make([]string, 0, totalMessages)

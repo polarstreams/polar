@@ -11,7 +11,9 @@ import (
 	"github.com/barcostreams/barco/internal/discovery"
 	"github.com/barcostreams/barco/internal/interbroker"
 	"github.com/barcostreams/barco/internal/localdb"
+	"github.com/barcostreams/barco/internal/metrics"
 	. "github.com/barcostreams/barco/internal/types"
+	"github.com/barcostreams/barco/internal/utils"
 	. "github.com/barcostreams/barco/internal/utils"
 	. "github.com/google/uuid"
 	"github.com/julienschmidt/httprouter"
@@ -25,6 +27,7 @@ const consumerGroupsToPeersDelay = 10 * time.Second
 const (
 	consumerNoOwnedDataDelay = 5 // Seconds to retry after
 	consumerNoDataDelay      = 1 // Seconds to retry after
+	halfOpenTimerResolution  = 1 * time.Second
 )
 
 const contentType = "application/vnd.barco.consumermessage"
@@ -110,33 +113,43 @@ func (c *consumer) AcceptConnections() error {
 				break
 			}
 
-			log.Debug().Msgf("Accepted new consumer http connection on %s", conn.LocalAddr().String())
+			trackedConn := NewTrackedConnection(conn, func(trackedConn *TrackedConnection) {
+				c.unRegister(trackedConn)
+			})
+			log.Debug().Msgf(
+				"Accepted new consumer http connection on %s with assigned id '%s'",
+				conn.LocalAddr().String(),
+				trackedConn.Id())
 
 			router := httprouter.New()
 			router.GET(conf.StatusUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 				fmt.Fprintf(w, "Consumer server listening on %d\n", port)
+				trackedConn.SetAsRead()
 			})
-
 			router.GET("/test/delay", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 				time.Sleep(10 * time.Second)
 				fmt.Fprintln(w, "Delayed response after 10s")
+				trackedConn.SetAsRead()
 			})
-
-			trackedConn := NewTrackedConnection(conn, func(trackedConn *TrackedConnection) {
-				log.Info().Msgf("Connection from consumer client")
-				c.unRegister(trackedConn)
-			})
-
-			log.Debug().Msgf("Consumer client connection open with assigned id '%s'", trackedConn.Id())
-
 			router.POST(conf.ConsumerRegisterUrl, toPostHandler(trackedConn, c.postRegister))
-
 			router.POST(conf.ConsumerPollUrl, func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 				c.postPoll(trackedConn, w)
 			})
 			router.POST(conf.ConsumerManualCommitUrl, func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 				c.postManualCommit(trackedConn, w)
 			})
+
+			// Detect half-open TCP connections from consumers by getting the last read in loop
+			go func() {
+				for trackedConn.IsOpen() {
+					if time.Since(trackedConn.LastRead()) > c.config.ConsumerReadTimeout() {
+						log.Debug().Msgf("Closing consumer connection '%s' due to inactivity", trackedConn.Id())
+						trackedConn.Close()
+						break
+					}
+					time.Sleep(utils.Jitter(halfOpenTimerResolution))
+				}
+			}()
 
 			// server.ServeConn() will block until the connection is not readable anymore
 			// start it in the background to accept further connections
@@ -175,26 +188,27 @@ func (c *consumer) postRegister(
 	r *http.Request,
 	ps httprouter.Params,
 ) error {
+	conn.SetAsRead()
 	var consumerInfo ConsumerInfo
 	if err := json.NewDecoder(r.Body).Decode(&consumerInfo); err != nil {
 		return err
 	}
-	added := c.state.AddConnection(conn, consumerInfo)
-
+	added, length := c.state.AddConnection(conn, consumerInfo)
 	if !added {
 		return nil
 	}
 
-	log.Info().
+	metrics.ConsumerConnections.Set(float64(length))
+	log.Debug().
 		Stringer("connId", conn.Id()).
+		Int("connections", length).
 		Msgf("Registering new connection to consumer '%s' of group '%s' for topics %v",
 			consumerInfo.Id, consumerInfo.Group, consumerInfo.Topics)
 
 	c.addDebouncer(func() {
 		if c.state.Rebalance() {
 			log.Info().Msg("Consumer topology was rebalanced after adding a new consumer connection registered")
-			log.Debug().Msgf("Consumer topology contains consumer groups %v and consumers by connection: %v)",
-				c.state.groups, c.state.consumers)
+			log.Debug().Msgf("Consumer topology contains consumer groups %v", c.state.groups)
 		}
 	})
 
@@ -204,7 +218,13 @@ func (c *consumer) postRegister(
 }
 
 func (c *consumer) unRegister(conn *TrackedConnection) {
-	c.state.RemoveConnection(conn.Id())
+	removed, length := c.state.RemoveConnection(conn.Id())
+	if !removed {
+		return
+	}
+
+	metrics.ConsumerConnections.Set(float64(length))
+	log.Debug().Int("connections", length).Msgf("Connection from consumer client closed")
 
 	// We shouldn't rush to rebalance
 	removeDebouncer(func() {
@@ -215,6 +235,7 @@ func (c *consumer) unRegister(conn *TrackedConnection) {
 }
 
 func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter) {
+	conn.SetAsRead()
 	group, tokens, _ := logsToServe(c.state, c.topologyGetter, conn.Id())
 	if len(tokens) == 0 {
 		log.Debug().Msgf("Received consumer client poll from connection '%s' with no assigned tokens", conn.Id())
@@ -228,6 +249,7 @@ func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter) {
 }
 
 func (c *consumer) postManualCommit(conn *TrackedConnection, w http.ResponseWriter) {
+	conn.SetAsRead()
 	group, tokens, _ := logsToServe(c.state, c.topologyGetter, conn.Id())
 	if len(tokens) == 0 {
 		log.Debug().

@@ -31,6 +31,7 @@ const (
 	envLogRetentionDuration    = "BARCO_LOG_RETENTION_DURATION"
 	envMaxSegmentSize          = "BARCO_MAX_SEGMENT_FILE_SIZE"
 	envConsumerAddDelay        = "BARCO_CONSUMER_ADD_DELAY_MS"
+	envConsumerReadTimeout     = "BARCO_CONSUMER_READ_TIMEOUT_MS"
 	envConsumerRanges          = "BARCO_CONSUMER_RANGES"
 	envTopologyFilePollDelayMs = "BARCO_TOPOLOGY_FILE_POLL_DELAY_MS"
 	envShutdownDelaySecs       = "BARCO_SHUTDOWN_DELAY_SECS"
@@ -119,7 +120,8 @@ type ConsumerConfig interface {
 	BasicConfig
 	DatalogConfig
 	ConsumerAddDelay() time.Duration
-	ConsumerReadThreshold() int // The minimum amount of bytes once reached the consumer poll is fulfilled
+	ConsumerReadTimeout() time.Duration // The interval to set the deadline in the consumer connection
+	ConsumerReadThreshold() int         // The minimum amount of bytes once reached the consumer poll is fulfilled
 }
 
 type GossipConfig interface {
@@ -237,6 +239,11 @@ func (c *config) AutoCommitInterval() time.Duration {
 
 func (c *config) ConsumerAddDelay() time.Duration {
 	ms := envInt(envConsumerAddDelay, 10000)
+	return time.Duration(ms) * time.Millisecond
+}
+
+func (c *config) ConsumerReadTimeout() time.Duration {
+	ms := envInt(envConsumerReadTimeout, 120000)
 	return time.Duration(ms) * time.Millisecond
 }
 

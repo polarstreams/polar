@@ -44,6 +44,11 @@ var (
 		Help:    "Number of Kibibytes flushed to disk",
 		Buckets: prometheus.ExponentialBuckets(2, 4, 8), // buckets from 2Kib to 32Mib
 	})
+
+	ConsumerConnections = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "barco_consumer_connections",
+		Help: "The number of open connections from consumers",
+	})
 )
 
 // Serve starts the metrics endpoint
