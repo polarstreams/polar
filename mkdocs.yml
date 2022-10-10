@@ -1,0 +1,52 @@
+site_name: Barco Streams
+repo_url: https://github.com/barcostreams/barco
+edit_uri: edit/main/docs/
+docs_dir: docs
+
+nav:
+  - Overview: 'README .md'
+  - Concepts: 'TECHNICAL_INTRO.md'
+  - Getting started: 'GETTING_STARTED.md'
+  - Install:
+      - Docker Compose: 'install/DOCKER_COMPOSE.md'
+      - Kubernetes: 'install/KUBERNETES.md'
+  - Features:
+      - FAQ: FAQ.md
+
+
+copyright: >-
+ 
+
+theme:
+  name: material
+  palette:
+    primary: indigo
+    accent: red
+  font:
+    text: Lato
+    code: Ubuntu Mono
+  logo: images/barco-dark.jpg
+  favicon: images/barco-dark.jpg
+  features:
+    - navigation.sections
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.snippets
+  - admonition
+
+plugins:
+  - search
+  - build_plantuml:
+      render: "server"
+      server: "http://www.plantuml.com/plantuml"
+      output_format: "png"
+      diagram_root: "docs"
+      output_folder: "target"
+      input_folder: "diagrams"
+      input_extensions: "puml"
+  - macros
