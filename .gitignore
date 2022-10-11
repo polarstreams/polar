@@ -24,3 +24,5 @@ site/
 .vscode
 .project
 .settings
+/Pipfile
+/Pipfile.lock
