@@ -38,7 +38,7 @@ Barco Streams is optimized to be resource efficient, have minimal operational ov
 Barco Streams is not production ready, expect bugs and things that don't work.
 
 We honestly value your contribution to make this project ready for general availability. If you want to contribute,
-check out the [Contributing Guide](./CONTRIBUTING.md).
+check out the [Contributing Guide](docs/CONTRIBUTING.md).
 </details>
 
 -----
@@ -89,7 +89,7 @@ go build .
 go test -v ./...
 ```
 
-The [Contributing Guide](./CONTRIBUTING.md#environment-setup) has more information about environment setup and other
+The [Contributing Guide](docs/CONTRIBUTING.md#environment-setup) has more information about environment setup and other
 topics that can help you to build Barco from source.
 
 ## Design Principles
@@ -124,7 +124,7 @@ We are always happy to have contributions to the project whether it is source co
 feature requests or feedback. To get started with contributing:
 
 - Have a look through GitHub issues labeled ["Good first issue"](https://github.com/barcostreams/barco/labels/good%20first%20issue).
-- Read the [contribution guide](./CONTRIBUTING.md).
+- Read the [contribution guide](docs/CONTRIBUTING.md).
 - See the [build instructions](#build), for details on building Barco.
 - [Create a fork](https://docs.github.com/en/github/getting-started-with-github/fork-a-repo) of Barco and submit a pull
 request with your proposed changes.
