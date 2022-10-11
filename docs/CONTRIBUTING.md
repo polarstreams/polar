@@ -81,15 +81,24 @@ pipenv install
 
 ### Structure
 
-The website configuration is in the `docs/mkdocs.yml` file.
+The website configuration is in the `mkdocs.yml` file.
 The content is in the `docs` module.
 
 ### Build
 
-You can build the web site using, from the `docs` module:
+You can build the web site using:
 
 ```shell
 pipenv run mkdocs build
+```
+
+The first time you may need to install the mkdocs plugins:
+
+```shell
+pipenv run pip install mkdocs-macros-plugin
+pipenv run pip install fontawesome_markdown
+pipenv run pip install mkdocs-build-plantuml-plugin
+pipenv run pip install mkdocs-macros-plugin
 ```
 
 The website is generated in the `site` directory.

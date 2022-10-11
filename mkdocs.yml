@@ -4,7 +4,7 @@ edit_uri: edit/main/docs/
 docs_dir: docs
 
 nav:
-  - Overview: 'README .md'
+  - Overview: 'README.md'
   - Concepts: 'TECHNICAL_INTRO.md'
   - Getting started: 'GETTING_STARTED.md'
   - Install:
@@ -15,7 +15,7 @@ nav:
 
 
 copyright: >-
- 
+
 
 theme:
   name: material
