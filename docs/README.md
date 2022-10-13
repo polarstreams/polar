@@ -10,5 +10,5 @@ technology with "at least once" message delivery guarantees.
 - [Getting started](./GETTING_STARTED.md)
 - [Contributing](./CONTRIBUTING.md)
 - Features
-    - [FAQ](./FAQ.md)
-
+- [Benchmarks](./BENCHMARKS.md)
+- [FAQ](./FAQ.md)

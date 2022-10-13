@@ -11,9 +11,9 @@ Barco Streams is optimized to be resource efficient, have minimal operational ov
 
 ### Lightweight & Fast
 
-- Limited memory footprint: Memory usage can be capped at a few hundreds of Mb
+- Limited memory footprint
 - Production workloads with 0.5GiB of memory per pod
-- 20K durable writes per second with 3 [`t3.nano`][t3-nano] brokers
+- [1+ million durable writes per second on commodity hardware](./docs/BENCHMARKS.md)
 - Small binary size, arm64 as first class citizen
 - No additional dependencies, i.e., no Zookeeper
 
