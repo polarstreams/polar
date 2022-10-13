@@ -19,8 +19,6 @@ import (
 // at any time (in an orderly manner)
 const writeConcurrencyLevel = 2
 
-var lengthBuffer []byte = []byte{0, 0, 0, 0}
-
 // Groups records into compressed chunks and dispatches them in order
 // to the segment writers.
 //
@@ -165,19 +163,13 @@ func (c *coalescer) process() {
 			continue
 		}
 
-		metrics.CoalescerMessagesPerGroup.Observe(float64(len(group.items)))
+		metrics.CoalescerMessagesPerGroup.Observe(float64(recordLength))
 
 		// The group will be persisted, move the offset
 		c.offset = group.offset + int64(recordLength)
 
 		// Send in the background while the next block is generated in the foreground
 		c.writer.Items <- newLocalDataItem(data, group, recordLength)
-	}
-}
-
-func sendResponse(group []recordItem, err error) {
-	for _, r := range group {
-		r.response <- err
 	}
 }
 

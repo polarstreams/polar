@@ -293,7 +293,6 @@ func (s *peerDataServer) writeResponses() {
 		if w.Len() > 0 {
 			if _, err := s.conn.Write(w.Bytes()); err != nil {
 				log.Warn().Err(err).Msg("There was an error while writing to peer, closing connection")
-				shouldExit = true
 				break
 			}
 		}

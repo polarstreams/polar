@@ -35,7 +35,7 @@ func (d *discoverer) startClientDiscoveryServer() error {
 		if len(generations) == 0 {
 			w.Header().Set("Retry-After", "1")
 			w.WriteHeader(http.StatusServiceUnavailable)
-			fmt.Fprintf(w, noGenerationsStatusMessage)
+			fmt.Fprint(w, noGenerationsStatusMessage)
 			return
 		}
 

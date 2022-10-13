@@ -14,7 +14,6 @@ import (
 
 const (
 	MiB                    = 1024 * 1024
-	allocationPoolSize     = 32 * MiB
 	filePermissions        = 0755
 	SegmentFileExtension   = "dlog"
 	IndexFileExtension     = "index"
@@ -30,6 +29,7 @@ const (
 	envSegmentFlushIntervalMs  = "BARCO_SEGMENT_FLUSH_INTERVAL_MS"
 	envLogRetentionDuration    = "BARCO_LOG_RETENTION_DURATION"
 	envMaxSegmentSize          = "BARCO_MAX_SEGMENT_FILE_SIZE"
+	envAllocationPoolSize      = "BARCO_ALLOCATION_POOL_SIZE"
 	envConsumerAddDelay        = "BARCO_CONSUMER_ADD_DELAY_MS"
 	envConsumerReadTimeout     = "BARCO_CONSUMER_READ_TIMEOUT_MS"
 	envConsumerRanges          = "BARCO_CONSUMER_RANGES"
@@ -52,7 +52,10 @@ const (
 	DefaultGossipDataPort      = 9255
 )
 
-const defaultLogRetention = "168h" // 7 days
+const (
+	defaultLogRetention       = "168h" // 7 days
+	defaultAllocationPoolSize = 32 * MiB
+)
 
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
 
@@ -113,7 +116,7 @@ type DiscovererConfig interface {
 type ProducerConfig interface {
 	BasicConfig
 	DatalogConfig
-	FlowController() FlowController
+	AllocationPoolSize() int //  The number of bytes in the shared producer allocation pool
 }
 
 type ConsumerConfig interface {
@@ -136,16 +139,15 @@ type GossipConfig interface {
 func NewConfig(devMode bool) Config {
 	hostName, _ := os.Hostname()
 	baseHostName, ordinal := parseHostName(hostName)
-	return &config{
-		flowControl:  newFlowControl(allocationPoolSize),
+	c := &config{
 		baseHostName: baseHostName,
 		devModeFlag:  devMode,
 		ordinal:      ordinal,
 	}
+	return c
 }
 
 type config struct {
-	flowControl  *flowControl
 	baseHostName string
 	ordinal      int
 	devModeFlag  bool
@@ -285,6 +287,10 @@ func (c *config) MaxSegmentSize() int {
 	return envInt(envMaxSegmentSize, 1024*MiB)
 }
 
+func (c *config) AllocationPoolSize() int {
+	return envInt(envAllocationPoolSize, defaultAllocationPoolSize)
+}
+
 func (c *config) SegmentBufferSize() int {
 	return 8 * MiB
 }
@@ -297,10 +303,6 @@ func (c *config) MaxDataBodyLength() int {
 	// It's a different setting but points to the same value
 	// The amount of the data sent in a single message is the size of a group of records
 	return c.MaxGroupSize()
-}
-
-func (c *config) FlowController() FlowController {
-	return c.flowControl
 }
 
 func (c *config) HomePath() string {

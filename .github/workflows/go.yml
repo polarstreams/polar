@@ -9,14 +9,13 @@ on:
       - "*"
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
-    - uses: actions/cache@v2
+    - uses: actions/cache@v3
       with:
         path: |
           ~/.cache/go-build
@@ -26,12 +25,9 @@ jobs:
           ${{ runner.os }}-go-
 
     - name: Set up Go
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v3
       with:
         go-version: 1.19
-
-    - name: Check ports in use
-      run: sudo lsof -i -P -n | grep LISTEN
 
     - name: Build
       run: go build -v ./...
@@ -41,3 +37,15 @@ jobs:
 
     - name: Integration tests
       run: go test -v -tags=integration -p=1 ./internal/test/integration
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
+      - uses: actions/checkout@v3
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          args: -D gosimple -D errcheck --tests=false --timeout=3m

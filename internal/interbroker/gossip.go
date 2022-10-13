@@ -213,7 +213,7 @@ func (g *gossiper) ReadTokenHistory(ordinal int, token Token) (*Generation, erro
 	}
 	defer r.Body.Close()
 	var result Generation
-	err = json.NewDecoder(r.Body).Decode(&result)
+	_ = json.NewDecoder(r.Body).Decode(&result)
 	if result.Version == 0 {
 		return nil, nil
 	}

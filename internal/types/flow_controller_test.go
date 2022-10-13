@@ -1,4 +1,4 @@
-package conf
+package types
 
 import (
 	"sync/atomic"
@@ -11,7 +11,7 @@ import (
 var _ = Describe("flowControl", func() {
 	Describe("allocate()", func() {
 		It("should decrease the remaining length", func() {
-			f := newFlowControl(100)
+			f := NewFlowControl(100).(*flowControl)
 			f.Allocate(10)
 			Expect(f.remaining).To(Equal(90))
 			f.Allocate(20)
@@ -22,7 +22,7 @@ var _ = Describe("flowControl", func() {
 		})
 
 		It("should block until there's enough space", func() {
-			f := newFlowControl(100)
+			f := NewFlowControl(100).(*flowControl)
 			f.Allocate(40)
 			f.Allocate(35)
 			Expect(f.remaining).To(Equal(25))

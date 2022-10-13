@@ -20,6 +20,7 @@ import (
 	"github.com/barcostreams/barco/internal/ownership"
 	"github.com/barcostreams/barco/internal/producing"
 	"github.com/barcostreams/barco/internal/types"
+	"github.com/barcostreams/barco/internal/utils"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -79,7 +80,7 @@ func main() {
 	}
 
 	// Basic initialization phase ended
-	metrics.Serve(discoverer, config)
+	metrics.Serve(utils.GetServiceAddress(config.MetricsPort(), discoverer.LocalInfo(), config), config.MetricsPort())
 
 	log.Info().Msg("Start accepting connections from other brokers")
 	if err := gossiper.AcceptConnections(); err != nil {

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
@@ -57,7 +56,7 @@ func adaptHttpErr(err error, w http.ResponseWriter) {
 
 	w.WriteHeader(httpErr.StatusCode())
 	// The message is supposed to be user friendly
-	fmt.Fprintf(w, err.Error())
+	fmt.Fprint(w, err.Error())
 }
 
 // ToPostHandle wraps a handle func with error, returns plain text "OK" and converts it to a `httprouter.Handle`
@@ -181,7 +180,7 @@ func ContainsToken(values []types.TokenRanges, key types.Token) bool {
 
 // Reads the body as a string and closes it
 func ReadBodyClose(resp *http.Response) (string, error) {
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}

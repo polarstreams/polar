@@ -450,16 +450,3 @@ func (d *discoverer) Close() {
 		d.clientDiscoveryServer.Close()
 	}
 }
-
-// followers gets the next two brokers according to the broker order.
-func followers(brokers []BrokerInfo, index BrokerIndex) []BrokerInfo {
-	brokersLength := len(brokers)
-	if brokersLength < 3 {
-		return []BrokerInfo{}
-	}
-	result := make([]BrokerInfo, 2, 2)
-	for i := 0; i < 2; i++ {
-		result[i] = brokers[(int(index)+i+1)%brokersLength]
-	}
-	return result
-}
