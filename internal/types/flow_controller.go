@@ -1,4 +1,6 @@
-package conf
+package types
+
+import "github.com/barcostreams/barco/internal/metrics"
 
 type FlowController interface {
 	// Allocate makes sure that buffer memory usage remains within the predefined boundaries.
@@ -20,13 +22,15 @@ type allocRequest struct {
 	sender chan<- bool
 }
 
-func newFlowControl(maxLength int) *flowControl {
+func NewFlowControl(maxLength int) FlowController {
 	f := &flowControl{
 		requestChannel: make(chan allocRequest),
 		freeChannel:    make(chan int, 1024),
 		maxLength:      maxLength,
 		remaining:      maxLength,
 	}
+
+	metrics.AllocationPoolAvailableBytes.Set(float64(f.remaining))
 
 	go f.startReceiving()
 
@@ -40,10 +44,14 @@ func (f *flowControl) startReceiving() {
 		// Receive all pending without blocking
 		f.receiveFreed()
 
+		metrics.AllocationPoolAvailableBytes.Set(float64(f.remaining))
+
 		// Wait until we get enough space
 		f.ensureLength(r.length)
 
 		f.remaining -= r.length
+		metrics.AllocationPoolAvailableBytes.Set(float64(f.remaining))
+
 		r.sender <- true
 
 		// Continue receiving before possibly blocking

@@ -13,8 +13,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-const envReplicas = "BARCO_REPLICAS"
-
 func Test(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Discovery Suite")

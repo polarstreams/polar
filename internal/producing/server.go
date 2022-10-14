@@ -14,6 +14,7 @@ import (
 	"github.com/barcostreams/barco/internal/data/topics"
 	"github.com/barcostreams/barco/internal/discovery"
 	"github.com/barcostreams/barco/internal/interbroker"
+	"github.com/barcostreams/barco/internal/metrics"
 	"github.com/barcostreams/barco/internal/types"
 	"github.com/barcostreams/barco/internal/utils"
 	"github.com/julienschmidt/httprouter"
@@ -39,24 +40,25 @@ func NewProducer(
 	coalescerMap := utils.NewCopyOnWriteMap()
 
 	return &producer{
-		config:       config,
-		topicGetter:  topicGetter,
-		datalog:      datalog,
-		gossiper:     gossiper,
-		leaderGetter: leaderGetter,
-		coalescerMap: coalescerMap,
+		config:         config,
+		topicGetter:    topicGetter,
+		datalog:        datalog,
+		gossiper:       gossiper,
+		leaderGetter:   leaderGetter,
+		coalescerMap:   coalescerMap,
+		flowController: types.NewFlowControl(config.AllocationPoolSize()),
 	}
 }
 
 type producer struct {
-	config       conf.ProducerConfig
-	topicGetter  topics.TopicGetter
-	datalog      data.Datalog
-	gossiper     interbroker.Gossiper
-	leaderGetter discovery.TopologyGetter
-	// We use a single coalescer per topics
-	coalescerMap *utils.CopyOnWriteMap
-	server       *http.Server
+	config         conf.ProducerConfig
+	topicGetter    topics.TopicGetter
+	datalog        data.Datalog
+	gossiper       interbroker.Gossiper
+	leaderGetter   discovery.TopologyGetter
+	coalescerMap   *utils.CopyOnWriteMap
+	server         *http.Server
+	flowController types.FlowController
 }
 
 func (p *producer) Init() error {
@@ -124,6 +126,8 @@ func (p *producer) OnReroutedMessage(
 }
 
 func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	metrics.ProducerMessagesReceived.Inc()
+	metrics.ProducerMessagesBodyBytes.Add(float64(r.ContentLength))
 	return p.handleMessage(
 		ps.ByName("topic"), r.URL.Query(), r.ContentLength, r.Header.Get(types.ContentTypeHeaderKey), r.Body)
 }
@@ -158,8 +162,8 @@ func (p *producer) handleMessage(
 			fmt.Sprintf("Leader for token %d could not be found", replication.Token))
 	}
 
-	p.config.FlowController().Allocate(int(contentLength))
-	defer p.config.FlowController().Free(int(contentLength))
+	p.flowController.Allocate(int(contentLength))
+	defer p.flowController.Free(int(contentLength))
 
 	if !leader.IsSelf {
 		// Route the message as-is

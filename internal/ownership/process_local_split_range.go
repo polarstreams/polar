@@ -10,7 +10,6 @@ import (
 )
 
 func (o *generator) processLocalSplitRange(m *localSplitRangeGenMessage) creationError {
-	const reason = "split range"
 	topology := m.topology
 	newBrokerOrdinal := m.origin
 	newBrokerIndex := topology.GetIndex(newBrokerOrdinal)

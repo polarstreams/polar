@@ -316,7 +316,7 @@ func adaptHttpErr(err error, w http.ResponseWriter) {
 
 	w.WriteHeader(httpErr.StatusCode())
 	// The message is supposed to be user friendly
-	fmt.Fprintf(w, err.Error())
+	fmt.Fprint(w, err.Error())
 }
 
 func (c *consumer) OnConsumerInfoFromPeer(ordinal int, groups []ConsumerGroup) {
@@ -359,9 +359,4 @@ func (c *consumer) sendConsumerGroupsToPeers() {
 		}
 		time.Sleep(Jitter(consumerGroupsToPeersDelay))
 	}
-}
-
-type readQueueKey struct {
-	group string
-	topic string
 }

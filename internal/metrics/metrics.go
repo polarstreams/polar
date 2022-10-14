@@ -3,9 +3,6 @@ package metrics
 import (
 	"net/http"
 
-	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/discovery"
-	"github.com/barcostreams/barco/internal/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -13,6 +10,16 @@ import (
 )
 
 var (
+	ProducerMessagesReceived = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "barco_producer_requests_total",
+		Help: "The total number of requests received by the producer server",
+	})
+
+	ProducerMessagesBodyBytes = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "barco_producer_requests_body_bytes_total",
+		Help: "The total number of bytes for all the request bodies received by the producer server",
+	})
+
 	CoalescerMessagesProcessed = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "barco_coalescer_messages_total",
 		Help: "The total number of processed messages by the coalescer (producer)",
@@ -39,10 +46,15 @@ var (
 		Help: "The total number of re-routed messages received by the broker",
 	})
 
-	SegmentFlushKib = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "barco_segment_flushed_kib",
-		Help:    "Number of Kibibytes flushed to disk",
-		Buckets: prometheus.ExponentialBuckets(2, 4, 8), // buckets from 2Kib to 32Mib
+	SegmentFlushBytes = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "barco_segment_flushed_bytes",
+		Help:    "The amount of bytes flushed to disk",
+		Buckets: prometheus.ExponentialBuckets(2, 7, 10), // buckets from 2 to 80MiB
+	})
+
+	AllocationPoolAvailableBytes = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "barco_producing_allocation_pool_available_bytes",
+		Help: "The number of bytes available to allocate",
 	})
 
 	ConsumerConnections = promauto.NewGauge(prometheus.GaugeOpts{
@@ -52,9 +64,7 @@ var (
 )
 
 // Serve starts the metrics endpoint
-func Serve(discoverer discovery.Discoverer, config conf.Config) {
-	port := config.MetricsPort()
-	address := utils.GetServiceAddress(port, discoverer.LocalInfo(), config)
+func Serve(address string, port int) {
 	log.Info().Msgf("Starting metrics endpoint on port %d", port)
 	c := make(chan bool, 1)
 	go func() {

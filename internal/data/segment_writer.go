@@ -222,7 +222,7 @@ func (s *SegmentWriter) flush(reason string) {
 	s.segmentLength += length
 	s.buffer.Reset()
 	s.lastFlush = time.Now()
-	metrics.SegmentFlushKib.Observe(float64(length) / 1024)
+	metrics.SegmentFlushBytes.Observe(float64(length))
 }
 
 // maybeCloseSegment determines whether the segment file should be closed.

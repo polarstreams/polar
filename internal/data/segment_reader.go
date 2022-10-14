@@ -36,15 +36,12 @@ type SegmentReader struct {
 	messageOffset         int64  // The expected next message offset, e.g. "0" when no message was read; "10" when 0-9 were read
 	fileName              string
 	segmentFile           *os.File
-	lastSeek              time.Time
 	lastChunkFilePosition int64 // The file offset where the last chunk starts
 	filePosition          int64
 	skipFromFile          int64 // The number of bytes to skip after reading from file (to seek with alignment)
 	readingFromReplica    bool
 	lastFullSeek          int64
 }
-
-const minSeekIntervals = 2 * time.Second
 
 // Returns a log file reader.
 //

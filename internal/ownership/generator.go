@@ -273,6 +273,7 @@ func (o *generator) startNew() {
 
 	reason := o.determineStartReason()
 
+	//nolint:staticcheck
 	if reason == scalingUp || reason == restarted {
 		// TODO: Retrieve current generations from Bn-1 & Bn+1
 	}
@@ -484,21 +485,6 @@ func (o *generator) createDevGeneration() {
 		Parents:   []GenId{},
 	}
 	o.discoverer.RepairCommitted(gen)
-}
-
-func checkState(gens []Generation, accepted, proposed *Generation) (*Generation, *Generation) {
-	for _, gen := range gens {
-		if gen.Status == StatusAccepted {
-			if gen.Version > accepted.Version {
-				accepted = &gen
-			}
-		} else if gen.Status == StatusProposed {
-			if gen.Version > proposed.Version {
-				proposed = &gen
-			}
-		}
-	}
-	return accepted, proposed
 }
 
 // Gets a value between base delay and max delay
