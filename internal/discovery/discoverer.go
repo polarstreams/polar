@@ -101,6 +101,9 @@ func (d *discoverer) Init() error {
 		if err := d.loadFixedTopology(0); err != nil {
 			return err
 		}
+		if err := d.loadGenerations(); err != nil {
+			return err
+		}
 		return d.startClientDiscoveryServer()
 	}
 
