@@ -64,27 +64,27 @@ type indexFileItem struct {
 }
 
 type ReadSegmentChunk struct {
-	buffer []byte
-	start  int64  // The offset of the first message
-	length uint32 // The amount of messages in the chunk
+	Buffer []byte
+	Start  int64  // The offset of the first message
+	Length uint32 // The amount of messages in the chunk
 }
 
 func NewEmptyChunk(start int64) SegmentChunk {
 	return &ReadSegmentChunk{
-		buffer: emptyBuffer,
-		start:  start,
-		length: 0,
+		Buffer: emptyBuffer,
+		Start:  start,
+		Length: 0,
 	}
 }
 
 func (s *ReadSegmentChunk) DataBlock() []byte {
-	return s.buffer
+	return s.Buffer
 }
 
 func (s *ReadSegmentChunk) StartOffset() int64 {
-	return s.start
+	return s.Start
 }
 
 func (s *ReadSegmentChunk) RecordLength() uint32 {
-	return s.length
+	return s.Length
 }

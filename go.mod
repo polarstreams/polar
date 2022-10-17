@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/google/uuid v1.3.0
 	github.com/julienschmidt/httprouter v1.3.0
+	github.com/karlseguin/jsonwriter v1.0.3
 	github.com/klauspost/compress v1.15.11
 	github.com/mattn/go-sqlite3 v1.14.7
 	github.com/onsi/ginkgo v1.15.1
@@ -30,6 +31,7 @@ require (
 	github.com/google/gofuzz v1.1.0 // indirect
 	github.com/googleapis/gnostic v0.5.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/karlseguin/expect v1.0.8 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect

@@ -605,9 +605,9 @@ func (s *SegmentReader) readSingleChunk(reader *bytes.Reader) (int, SegmentChunk
 	n += nBody
 
 	chunk := &ReadSegmentChunk{
-		buffer: readBuffer,
-		start:  header.Start,
-		length: header.RecordLength,
+		Buffer: readBuffer,
+		Start:  header.Start,
+		Length: header.RecordLength,
 	}
 	return n, chunk
 }

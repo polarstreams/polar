@@ -30,7 +30,10 @@ const (
 	halfOpenTimerResolution  = 1 * time.Second
 )
 
-const contentType = "application/vnd.barco.consumermessage"
+const (
+	defaultContentType = "application/vnd.barco.consumermessage"
+	jsonContentType    = "application/json"
+)
 
 var removeDebouncer = Debounce(removeDelay, 0.4) // Debounce events that occurred in the following 2 minutes
 

@@ -1,13 +1,18 @@
 package consuming
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
+	"strconv"
 
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/data"
 	. "github.com/barcostreams/barco/internal/types"
+	"github.com/barcostreams/barco/internal/utils"
 	"github.com/google/uuid"
+	"github.com/karlseguin/jsonwriter"
+	"github.com/klauspost/compress/zstd"
 )
 
 // Represents a single consumer instance
@@ -23,6 +28,17 @@ type ConsumerInfo struct {
 type ReplicationReaderFactory interface {
 	GetOrCreate(topic *TopicDataId, topology *TopologyInfo, topicGen *Generation, offsetState OffsetState) data.ReplicationReader
 }
+
+// Consumer response responseFormat
+type responseFormat int
+
+const (
+	// Default poll response as described in `docs/developer/NETWORK_FORMATS.md`
+	compressedBinaryFormat responseFormat = iota
+
+	// A JSON formatted response
+	jsonFormat
+)
 
 type segmentReadItem struct {
 	chunkResult chan SegmentChunk
@@ -93,8 +109,76 @@ func (i *consumerResponseItem) Marshal(w io.Writer) error {
 	return nil
 }
 
+func (i *consumerResponseItem) MarshalJson(
+	writer *jsonwriter.Writer,
+	decoder *zstd.Decoder,
+	decoderBuffer []byte,
+) error {
+	decoder.Reset(bytes.NewReader(i.chunk.DataBlock()))
+	writer.ArrayObject(func() {
+		writer.KeyString("topic", i.topic.Name)
+		// Use strings for int64 values
+		writer.KeyString("token", i.topic.Token.String())
+		writer.KeyInt("rangeIndex", int(i.topic.RangeIndex))
+		writer.KeyInt("version", int(i.topic.Version))
+
+		// Use strings for int64 values
+		writer.KeyString("startOffset", strconv.FormatInt(i.chunk.StartOffset(), 10))
+		writer.Array("values", func() {
+			writeJsonRecords(writer, decoder, decoderBuffer)
+		})
+	})
+
+	return nil
+}
+
+// Writes records as JSON array items
+func writeJsonRecords(
+	writer *jsonwriter.Writer,
+	reader *zstd.Decoder,
+	readBuffer []byte,
+) error {
+	var header recordHeader
+	for {
+		if err := binary.Read(reader, conf.Endianness, &header); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		writer.Separator()
+		writeRecordBody(int(header.Length), writer, reader, readBuffer)
+	}
+}
+
+func writeRecordBody(bodyLength int, writer *jsonwriter.Writer, reader *zstd.Decoder, readBuffer []byte) error {
+	read := 0
+	buf := readBuffer[0:utils.Min(bodyLength, len(readBuffer))]
+	for read < bodyLength {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			if err = utils.WriteBytes(writer.W, buf[0:n]); err != nil {
+				return err
+			}
+		}
+		read += n
+		if err != nil {
+			if err != io.EOF {
+				return err
+			}
+			break
+		}
+	}
+	return nil
+}
+
 // Presents a map key for readers by token range
 type readerKey struct {
 	token      Token
 	rangeIndex RangeIndex
+}
+
+type recordHeader struct {
+	Timestamp int64
+	Length    uint32
 }
