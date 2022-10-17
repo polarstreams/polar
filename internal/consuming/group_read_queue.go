@@ -270,11 +270,12 @@ func (q *groupReadQueue) marshalJsonResponse(w http.ResponseWriter, responseItem
 	return err
 }
 
-func (q *groupReadQueue) readNext(connId UUID, w http.ResponseWriter) {
+func (q *groupReadQueue) readNext(connId UUID, format responseFormat, w http.ResponseWriter) {
 	done := make(chan bool, 1)
 	q.items <- readQueueItem{
 		connId: connId,
 		writer: w,
+		format: format,
 		done:   done,
 	}
 

@@ -135,8 +135,8 @@ func (c *consumer) AcceptConnections() error {
 				trackedConn.SetAsRead()
 			})
 			router.POST(conf.ConsumerRegisterUrl, toPostHandler(trackedConn, c.postRegister))
-			router.POST(conf.ConsumerPollUrl, func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-				c.postPoll(trackedConn, w)
+			router.POST(conf.ConsumerPollUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+				c.postPoll(trackedConn, w, r)
 			})
 			router.POST(conf.ConsumerManualCommitUrl, func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 				c.postManualCommit(trackedConn, w)
@@ -237,7 +237,7 @@ func (c *consumer) unRegister(conn *TrackedConnection) {
 	})
 }
 
-func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter) {
+func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter, r *http.Request) {
 	conn.SetAsRead()
 	group, tokens, _ := logsToServe(c.state, c.topologyGetter, conn.Id())
 	if len(tokens) == 0 {
@@ -248,7 +248,13 @@ func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter) {
 
 	log.Debug().Msgf("Received consumer client poll from connection '%s'", conn.Id())
 	groupReadQueue := c.getOrCreateReadQueue(group)
-	groupReadQueue.readNext(conn.Id(), w)
+
+	format := compressedBinaryFormat
+	if w.Header().Get(ContentTypeHeaderKey) == ContentTypeJSON {
+		format = jsonFormat
+	}
+
+	groupReadQueue.readNext(conn.Id(), format, w)
 }
 
 func (c *consumer) postManualCommit(conn *TrackedConnection, w http.ResponseWriter) {
