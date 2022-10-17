@@ -472,6 +472,17 @@ func (o *generator) processGeneration(message genMessage) creationError {
 }
 
 func (o *generator) createDevGeneration() {
+	if existing := o.discoverer.Generation(StartToken); existing != nil {
+		if existing.End != StartToken || existing.Version != 1 {
+			log.Panic().Msgf(
+				"There's existing token data in local db store but it's not in dev mode." +
+					" Consider cleaning the data directory before starting in dev mode.s")
+		}
+
+		log.Info().Msgf("Dev generation restored")
+		return
+	}
+
 	gen := &Generation{
 		Start:     StartToken,
 		End:       StartToken,
@@ -484,7 +495,9 @@ func (o *generator) createDevGeneration() {
 		Status:    StatusCommitted,
 		Parents:   []GenId{},
 	}
-	o.discoverer.RepairCommitted(gen)
+
+	err := o.discoverer.RepairCommitted(gen)
+	utils.PanicIfErr(err, "Could not create dev generation")
 }
 
 // Gets a value between base delay and max delay
