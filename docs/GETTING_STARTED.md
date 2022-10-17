@@ -1,23 +1,18 @@
 # Getting Started with Barco
 
-Barco supports producing and consuming events using [HTTP/2][http-2] APIs. HTTP/2 provides solid low level features
-that are required in a client-server protocol like framing, request pipelining, ping, compression, etc. without
-the performance pitfalls of HTTP 1.
+Barco supports producing and consuming events using HTTP APIs.
 
 ## Producing
 
 Sending events to Barco is as simple as sending a HTTP request. Use your favorite HTTP client in your technology stack
 to produce events.
 
-Barco Producer Server supports both HTTP 1.1 and HTTP/2 to support clients of all technology stacks but we recommend
-using HTTP/2 whenever possible.
-
 ### Producing an event using curl
 
 ```shell
 TOPIC="my-topic"
 curl -X POST -i -d '{"hello":"world"}' \
-    -H "Content-Type: application/json" --http2-prior-knowledge \
+    -H "Content-Type: application/json" \
     "http://barco.streams:9251/v1/topic/${TOPIC}/messages"
 ```
 
@@ -30,7 +25,7 @@ If you want to specify the partition key, you can set it in the querystring.
 PARTITION_KEY="key1"
 TOPIC="my-topic"
 curl -X POST -i -d '{"hello":"world"}' \
-    -H "Content-Type: application/json" --http2-prior-knowledge \
+    -H "Content-Type: application/json" \
     "http://barco.streams:9251/v1/topic/${TOPIC}/messages?partitionKey=${PARTITION_KEY}"
 ```
 
@@ -107,6 +102,5 @@ for {
 
 Read more in the [Go Client's Getting Started Guide][go-client-start].
 
-[http-2]: https://en.wikipedia.org/wiki/HTTP/2
 [go-client]: https://github.com/barcostreams/go-client
 [go-client-start]: https://github.com/barcostreams/go-client#getting-started

@@ -34,7 +34,7 @@ This technique provides a simple way to add/remove brokers without the need to r
 
 A Producer doesn't necessarily have to understand this placement scheme to publish an event. It can target any broker
 or the Kubernetes Service and the event message will be routed automatically. From the client's perspective producing
-a message is just calling an HTTP/2 endpoint.
+a message is just calling an HTTP endpoint.
 
 To consume events, a client should poll for new data to all live brokers. The brokers will determine when that consumer
 should be served with topic events of a given partition depending on the consumer placement.

@@ -144,5 +144,3 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Affero General Public License for more details.
 
 https://www.gnu.org/licenses/agpl-3.0.html
-
-[t3-nano]: https://aws.amazon.com/ec2/instance-types/t3/#Product_Details

@@ -17,7 +17,7 @@ beginner-friendly.
 ## Client libraries
 
 [Barco Client in golang][go-client] is the reference implementation under Apache License 2.0 and it's currently the
-only client library we have. Barco client libraries are just thin HTTP/2 client wrappers, for example the reference
+only client library we have. Barco client libraries are just thin HTTP client wrappers, for example the reference
 implementation is less than 1K lines of code.
 
 If you would like to author a client library, feel free to ping us so we can link it from the repository and website.

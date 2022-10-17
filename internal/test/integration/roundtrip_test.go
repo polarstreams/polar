@@ -77,7 +77,7 @@ var _ = Describe("A 3 node cluster", func() {
 
 			message := `{"hello": "world"}`
 
-			// Test with HTTP/2
+			// Test with HTTP
 			client := NewTestClient(nil)
 			resp := client.ProduceJson(0, "abc", message, "")
 			expectOk(resp)
@@ -127,7 +127,6 @@ var _ = Describe("A 3 node cluster", func() {
 			b1.WaitForVersion1()
 			b2.WaitForVersion1()
 
-			// Test with HTTP/2
 			client := NewTestClient(nil)
 			// Send messages to all brokers
 			expectOk(client.ProduceJson(0, "abc", `{"hello": "world0"}`, ""))
