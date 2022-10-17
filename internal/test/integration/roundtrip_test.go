@@ -113,9 +113,6 @@ var _ = Describe("A 3 node cluster", func() {
 			Expect(item.records[0].timestamp.UnixMilli()).To(BeNumerically("<=", time.Now().UnixMilli()))
 			Expect(item.records[0].body).To(Equal(message))
 
-			// Test with HTTP/1
-			expectOk(NewTestClient(&TestClientOptions{HttpVersion: 1}).ProduceJson(0, "abc", message, ""))
-
 			client.Close()
 		})
 

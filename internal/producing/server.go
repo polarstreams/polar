@@ -19,8 +19,6 @@ import (
 	"github.com/barcostreams/barco/internal/utils"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 )
 
 type Producer interface {
@@ -81,14 +79,9 @@ func (p *producer) AcceptConnections() error {
 		fmt.Fprint(w, "Producer server doesn't allow getting topic messages\n")
 	})
 
-	h2s := &http2.Server{}
 	server := &http.Server{
 		Addr:    address,
-		Handler: h2c.NewHandler(router, h2s),
-	}
-
-	if err := http2.ConfigureServer(server, h2s); err != nil {
-		return err
+		Handler: router,
 	}
 
 	c := make(chan bool, 1)
@@ -128,6 +121,7 @@ func (p *producer) OnReroutedMessage(
 func (p *producer) postMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
 	metrics.ProducerMessagesReceived.Inc()
 	metrics.ProducerMessagesBodyBytes.Add(float64(r.ContentLength))
+
 	return p.handleMessage(
 		ps.ByName("topic"), r.URL.Query(), r.ContentLength, r.Header.Get(types.ContentTypeHeaderKey), r.Body)
 }
