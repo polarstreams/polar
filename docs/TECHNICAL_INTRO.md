@@ -8,7 +8,7 @@
 
 ## How does Barco work?
 
-Events are organized in topics. Topics in Barco are always multi-producer and multi-consumer. To achieve high
+Events are organized in topics. In Barco, topics are always multi-producer and multi-consumer. To achieve high
 availability and durability, topic events are persisted on disk on multiple Barco brokers.
 
 Data is automatically distributed across brokers using consistent hashing (Murmur3 tokens) in a similar way as [Amazon
@@ -24,9 +24,9 @@ the following two brokers in the cluster.
 <img alt="1 ring with 6 nodes" src="https://user-images.githubusercontent.com/2931196/174292608-e7c08749-cbc9-4311-b151-400185f586bf.png" style="max-width:400px;">
 </div>
 
-Broker A is the natural leader of token A. When Broker A is considered unavailable by other brokers, after a series of strong consistent operations broker B will take ownership of range (A, B). In case both A and B are considered down, C will not try to take ownership of range (A, B), as it won't be able guarantee the minimum amount of replicas of the data.
+In the preceding diagram, Broker A is the natural leader of token A. When Broker A is considered unavailable by other brokers, after a series of strong consistent operations broker B will take ownership of range (A, B). In case both A and B are considered down, C will not try to take ownership of range (A, B), as it won't be able guarantee the minimum amount of replicas of the data.
 
-Barco uses a deterministic way to assign tokens to brokers (i.e. broker with ordinal 2 will always have the same token).  New brokers added to an existing cluster will be placed in the middle of the previous token range, splitting it in half. In the same way, removing brokers causes ranges to be twice the size.
+Barco uses a deterministic way to assign tokens to brokers (i.e. broker with ordinal 2 will always have the same token). New brokers added to an existing cluster will be placed in the middle of the previous token range, splitting it in half. In the same way, removing brokers causes ranges to be twice the size.
 
 ![2 rings with 3 and 6 nodes respectively](https://user-images.githubusercontent.com/2931196/174292614-4124eddc-01f1-4495-8391-93796f32083e.png)
 
@@ -44,13 +44,13 @@ they were written.
 
 ## I/O
 
-Barco internally uses [Direct I/O][direct-io] and bypasses the Linux page cache to read and write the log segments.
+Internally, Barco uses [Direct I/O][direct-io] and bypasses the Linux page cache to read and write the log segments.
 
 Bypassing the kernel page cache has the following benefits:
 
 - The page cache is a shared resource in K8s. When a container is accessing data in the page cache it has to compete
 for resources with unrelated applications on the K8s node.
-- No copies between the kernel cache and the internal read/write buffers.
+- No copies exist between the kernel cache and the internal read/write buffers.
 - We can use read ahead strategies tuned to the workload when reading.
 - We can use buffering and flush strategies tuned to the workload when writing.
 - We can control exactly the amount of memory dedicated for buffers and caching (K8s working set).
@@ -60,8 +60,8 @@ and replicates the compressed payload, reducing network and CPU usage for replic
 
 These techniques translates into better overall performance compared to traditional I/O.
 
-We are looking forward to use the new [io_uring] interfaces, once its adoption increases, to simplify the buffer logic
-within Barco but we don't expect a performance gain from it.
+We are looking forward to use the new [io_uring] interfaces once its adoption increases.
+This will allow us to simplify the buffer logic within Barco, but we don't expect a performance gain from it.
 
 ## Interbroker communication
 
