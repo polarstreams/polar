@@ -25,9 +25,10 @@ import (
 const consumerGroupsToPeersDelay = 10 * time.Second
 
 const (
-	consumerNoOwnedDataDelay = 5 // Seconds to retry after
-	consumerNoDataDelay      = 1 // Seconds to retry after
-	halfOpenTimerResolution  = 1 * time.Second
+	consumerNoOwnedDataDelay    = 5 // Seconds to retry after
+	consumerNoDataDelay         = 1 // Seconds to retry after
+	halfOpenTimerResolution     = 1 * time.Second
+	consumerNotRegisteredStatus = http.StatusConflict
 )
 
 const (
@@ -121,44 +122,25 @@ func (c *consumer) AcceptConnections() error {
 				break
 			}
 
-			// trackedConn := NewTrackedConnection(conn, func(trackedConn *TrackedConnection) {
-			// 	c.unRegister(trackedConn.Id())
-			// })
-
-			tc := newTrackedConsumer(conn, func(id string) {
-				c.unRegister(id)
-			})
-
-			// TODO: Move to register
-			// log.Debug().Msgf(
-			// 	"Accepted new consumer http connection on %s with assigned id '%s'",
-			// 	conn.LocalAddr().String(),
-			// 	trackedConn.Id())
+			tc := newTrackedConsumer(conn)
 
 			router := httprouter.New()
 			router.GET(conf.StatusUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+				tc.SetAsRead()
 				fmt.Fprintf(w, "Consumer server listening on %d\n", port)
-				tc.SetAsRead()
 			})
-			router.GET("/test/delay", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-				time.Sleep(10 * time.Second)
-				fmt.Fprintln(w, "Delayed response after 10s")
-				tc.SetAsRead()
-			})
-			router.POST(conf.ConsumerRegisterUrl, toPostHandler(tc, c.postRegister))
-			router.POST(conf.ConsumerPollUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-				c.postPoll(tc, w, r)
-			})
-			router.POST(conf.ConsumerManualCommitUrl, func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-				c.postManualCommit(tc, w)
-			})
+			router.PUT(conf.ConsumerRegisterUrl, toTrackedHandler(tc, c.postRegister))
+			router.POST(conf.ConsumerRegisterUrl, toTrackedHandler(tc, c.postRegister)) // Backwards compatibility
+			router.POST(conf.ConsumerPollUrl, toTrackedHandler(tc, c.postPoll))
+			router.POST(conf.ConsumerManualCommitUrl, toTrackedHandler(tc, c.postManualCommit))
 
 			// Detect half-open TCP connections from consumers by getting the last read in loop
 			go func() {
 				for {
 					if time.Since(tc.LastRead()) > c.config.ConsumerReadTimeout() {
-						log.Debug().Msgf("Stop tracking consumer '%s' due to inactivity", tc.id)
-						tc.Close()
+						log.Debug().Msgf("Stop tracking consumer '%s' due to inactivity", tc.Id())
+						tc.CloseConnection()
+						c.unRegister(tc.Id())
 						break
 					}
 					time.Sleep(utils.Jitter(halfOpenTimerResolution))
@@ -166,7 +148,6 @@ func (c *consumer) AcceptConnections() error {
 			}()
 
 			// server.ServeConn() will block until the connection is not readable anymore
-			// start it in the background to accept further connections
 			go func() {
 				server.ServeConn(conn, &http2.ServeConnOpts{
 					Handler: h2c.NewHandler(router, server),
@@ -174,7 +155,7 @@ func (c *consumer) AcceptConnections() error {
 				if c.localDb.IsShuttingDown() {
 					return
 				}
-				if tc.CloseWhenConnectionBound() {
+				if tc.CloseConnection() {
 					log.Debug().Msgf(
 						"Connection from consumer client with id '%s' is not readable anymore", tc.Id())
 				}
@@ -193,9 +174,10 @@ func (c *consumer) Close() {
 	// Stop listening
 	err := c.listener.Close()
 	log.Err(err).Msgf("Consumer connection listener closed")
-	connections := c.state.GetConnections()
-	for _, conn := range connections {
-		conn.Close()
+
+	connBoundConsumers := c.state.GetConnectionBoundConsumers()
+	for _, conn := range connBoundConsumers {
+		conn.CloseConnection()
 	}
 }
 
@@ -212,7 +194,7 @@ func (c *consumer) postRegister(
 		tc.RegisterAsConnectionLess(consumerId)
 		consumerInfo.Id = consumerId
 		consumerInfo.Group = r.URL.Query().Get("group")
-		consumerInfo.Topics = r.URL.Query()["topics"]
+		consumerInfo.Topics = r.URL.Query()["topic"]
 
 		// Default to "no rebalance delay" for connection-less
 		if r.URL.Query().Get("delay") != "true" {
@@ -280,10 +262,14 @@ func (c *consumer) unRegister(id string) {
 	})
 }
 
-func (c *consumer) postPoll(tc *trackedConsumer, w http.ResponseWriter, r *http.Request) {
+func (c *consumer) postPoll(
+	tc *trackedConsumer,
+	w http.ResponseWriter,
+	r *http.Request,
+	_ httprouter.Params,
+) error {
 	if !tc.Registered() {
-		// TODO: Send error
-		return
+		return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
 	}
 	tc.SetAsRead()
 	id := tc.Id()
@@ -291,7 +277,7 @@ func (c *consumer) postPoll(tc *trackedConsumer, w http.ResponseWriter, r *http.
 	if len(tokens) == 0 {
 		log.Debug().Msgf("Received consumer client poll from connection '%s' with no assigned tokens", id)
 		NoContentResponse(w, consumerNoOwnedDataDelay)
-		return
+		return nil
 	}
 
 	log.Debug().Msgf("Received consumer client poll from '%s'", id)
@@ -303,12 +289,17 @@ func (c *consumer) postPoll(tc *trackedConsumer, w http.ResponseWriter, r *http.
 	}
 
 	groupReadQueue.readNext(id, format, w)
+	return nil
 }
 
-func (c *consumer) postManualCommit(tc *trackedConsumer, w http.ResponseWriter) {
+func (c *consumer) postManualCommit(
+	tc *trackedConsumer,
+	w http.ResponseWriter,
+	r *http.Request,
+	_ httprouter.Params,
+) error {
 	if !tc.Registered() {
-		// TODO: Send error
-		return
+		return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
 	}
 	tc.SetAsRead()
 	id := tc.Id()
@@ -317,12 +308,13 @@ func (c *consumer) postManualCommit(tc *trackedConsumer, w http.ResponseWriter) 
 		log.Debug().
 			Msgf("Received consumer client manual commit from connection '%s' with no assigned tokens", id)
 		NoContentResponse(w, consumerNoOwnedDataDelay)
-		return
+		return nil
 	}
 
 	log.Debug().Msgf("Received consumer client manual commit from connection '%s'", id)
 	groupReadQueue := c.getOrCreateReadQueue(group)
 	groupReadQueue.manualCommit(id, w)
+	return nil
 }
 
 func (c *consumer) getOrCreateReadQueue(group string) *groupReadQueue {
@@ -359,7 +351,7 @@ func logsToServe(
 	return group, leaderTokens, topics
 }
 
-func toPostHandler(tc *trackedConsumer, h ConsumerAwareHandle) httprouter.Handle {
+func toTrackedHandler(tc *trackedConsumer, h ConsumerAwareHandle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		if err := h(tc, w, r, ps); err != nil {
 			adaptHttpErr(err, w)

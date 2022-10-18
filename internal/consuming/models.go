@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -190,26 +189,18 @@ type recordHeader struct {
 
 // Handles state to support both connection based consumers and connection-less ones.
 type trackedConsumer struct {
-	conn             atomic.Value // Tracked connection, used for connection bound consumers
+	conn             atomic.Value // For connection bound consumers
 	initialConn      net.Conn
 	lastRead         int64        // Used to follow last read from consumer
 	id               atomic.Value // The id representing the connection
-	closeHandlerOnce sync.Once
-	closeHandler     func(string) // The function that is called when the connection is closed or the consumer timed out
 }
 
-func newTrackedConsumer(initialConn net.Conn, closeHandler func(string)) *trackedConsumer {
-	if closeHandler == nil {
-		panic("Close handler can not be nil")
-	}
-
+func newTrackedConsumer(initialConn net.Conn) *trackedConsumer {
 	return &trackedConsumer{
 		conn:             atomic.Value{},
 		id:               atomic.Value{},
 		initialConn:      initialConn,
 		lastRead:         time.Now().UnixMilli(),
-		closeHandlerOnce: sync.Once{},
-		closeHandler:     closeHandler,
 	}
 }
 
@@ -231,7 +222,7 @@ func (c *trackedConsumer) Registered() bool {
 
 func (c *trackedConsumer) RegisterAsConnectionLess(id string) {
 	c.id.Store(id)
-	c.initialConn = nil // Allow it to be GC'ed
+	c.initialConn = nil // Allow to be GC'ed
 }
 
 func (c *trackedConsumer) RegisterAsConnectionBound() {
@@ -249,24 +240,15 @@ func (c *trackedConsumer) LastRead() time.Time {
 	return time.UnixMilli(atomic.LoadInt64(&c.lastRead))
 }
 
-func (c *trackedConsumer) Close() {
-	if conn := c.conn.Load(); conn != nil {
-		_ = conn.(*TrackedConnection).Close()
-	}
-	c.invokeCloseHandler()
+// Determines whether the interaction with this consumer is based on the connection state
+func (c *trackedConsumer) IsConnectionBound() bool {
+	return c.conn.Load() != nil
 }
 
-func (c *trackedConsumer) invokeCloseHandler() {
-	go c.closeHandlerOnce.Do(func() {
-		c.closeHandler(c.Id())
-	})
-}
-
-// When the consumer is connection-based, it closes the connection and invokes the close handler
-func (c *trackedConsumer) CloseWhenConnectionBound() bool {
+// Closes the net connection, when connection exists
+func (c *trackedConsumer) CloseConnection() bool {
 	if conn := c.conn.Load(); conn != nil {
-		_ = conn.(*TrackedConnection).Close()
-		c.invokeCloseHandler()
+		_ = conn.(net.Conn).Close()
 		return true
 	}
 	return false

@@ -28,7 +28,7 @@ type ConsumerState struct {
 
 	mu                 sync.Mutex
 	connections        map[string]ConsumerInfo     // Consumers by connection id
-	trackedConnections map[string]*trackedConsumer // Connections by id // TODO: Reevaluate
+	trackedConnections map[string]*trackedConsumer // Connections by id (for long-lived connections)
 	peerGroups         map[int]peerGroupInfo       // Group information provided by a peer, by ordinal
 	recentlyRemoved    map[consumerKey]removedInfo // Consumers which connections were recently removed by key
 
@@ -74,7 +74,10 @@ func (m *ConsumerState) AddConnection(tc *trackedConsumer, consumer ConsumerInfo
 	_, found := m.connections[id]
 
 	m.connections[id] = consumer
-	m.trackedConnections[id] = tc
+
+	if tc.IsConnectionBound() {
+		m.trackedConnections[id] = tc
+	}
 
 	return !found, len(m.connections)
 }
@@ -98,8 +101,8 @@ func (m *ConsumerState) RemoveConnection(id string) (bool, int) {
 	return found, len(m.connections)
 }
 
-// Gets a copy of the current open connections
-func (m *ConsumerState) GetConnections() []*trackedConsumer {
+// Gets a snapshot of the current consumers with tracked open connections
+func (m *ConsumerState) GetConnectionBoundConsumers() []*trackedConsumer {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	result := make([]*trackedConsumer, 0, len(m.trackedConnections))
