@@ -20,7 +20,7 @@ type TrackedConnection struct {
 	closeHandlerOnce sync.Once
 	closeHandler     func(*TrackedConnection)
 	id               uuid.UUID
-	lastRead         int64 // Optionally used to follow last access to a resource
+	lastRead         int64 // TODO: Remove
 }
 
 // Creates a new TrackedConnection using the provided tcp conn.

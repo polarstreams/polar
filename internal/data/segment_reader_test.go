@@ -406,7 +406,7 @@ var _ = Describe("SegmentReader", func() {
 type testReadItem struct {
 	chunkResult chan SegmentChunk
 	errorResult chan error
-	origin      uuid.UUID
+	origin      string
 }
 
 func newTestReadItem() *testReadItem {
@@ -416,7 +416,7 @@ func newTestReadItem() *testReadItem {
 	}
 }
 
-func newTestReadItemWithOrigin(origin uuid.UUID) *testReadItem {
+func newTestReadItemWithOrigin(origin string) *testReadItem {
 	item := newTestReadItem()
 	item.origin = origin
 	return item
@@ -427,7 +427,7 @@ func (r *testReadItem) SetResult(err error, chunk SegmentChunk) {
 	r.errorResult <- err
 }
 
-func (r *testReadItem) Origin() uuid.UUID {
+func (r *testReadItem) Origin() string {
 	return r.origin
 }
 

@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"net"
 	"strconv"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/data"
@@ -13,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/karlseguin/jsonwriter"
 	"github.com/klauspost/compress/zstd"
+	"github.com/rs/zerolog/log"
 )
 
 // Represents a single consumer instance
@@ -43,11 +48,11 @@ const (
 type segmentReadItem struct {
 	chunkResult chan SegmentChunk
 	errorResult chan error
-	origin      uuid.UUID
+	origin      string
 	commitOnly  bool
 }
 
-func newSegmentReadItem(origin uuid.UUID, commitOnly bool) *segmentReadItem {
+func newSegmentReadItem(origin string, commitOnly bool) *segmentReadItem {
 	return &segmentReadItem{
 		chunkResult: make(chan SegmentChunk, 1),
 		errorResult: make(chan error, 1),
@@ -61,7 +66,7 @@ func (r *segmentReadItem) SetResult(err error, chunk SegmentChunk) {
 	r.errorResult <- err
 }
 
-func (r *segmentReadItem) Origin() uuid.UUID {
+func (r *segmentReadItem) Origin() string {
 	return r.origin
 }
 
@@ -181,4 +186,87 @@ type readerKey struct {
 type recordHeader struct {
 	Timestamp int64
 	Length    uint32
+}
+
+// Handles state to support both connection based consumers and connection-less ones.
+type trackedConsumer struct {
+	conn             atomic.Value // Tracked connection, used for connection bound consumers
+	initialConn      net.Conn
+	lastRead         int64        // Used to follow last read from consumer
+	id               atomic.Value // The id representing the connection
+	closeHandlerOnce sync.Once
+	closeHandler     func(string) // The function that is called when the connection is closed or the consumer timed out
+}
+
+func newTrackedConsumer(initialConn net.Conn, closeHandler func(string)) *trackedConsumer {
+	if closeHandler == nil {
+		panic("Close handler can not be nil")
+	}
+
+	return &trackedConsumer{
+		conn:             atomic.Value{},
+		id:               atomic.Value{},
+		initialConn:      initialConn,
+		lastRead:         time.Now().UnixMilli(),
+		closeHandlerOnce: sync.Once{},
+		closeHandler:     closeHandler,
+	}
+}
+
+// Returns the identifier of the consumer instance connection.
+// When using connection-less flow, it matches the identifier of the consumer
+func (c *trackedConsumer) Id() string {
+	id := c.id.Load()
+	if id == nil {
+		log.Error().Msgf("Tracked consumer id accessed before registering")
+	}
+	return id.(string)
+}
+
+// Determines whether this consumer has been registered
+func (c *trackedConsumer) Registered() bool {
+	return c.id.Load() != nil
+}
+
+func (c *trackedConsumer) RegisterAsConnectionLess(id string) {
+	c.id.Store(id)
+	c.initialConn = nil // Allow it to be GC'ed
+}
+
+func (c *trackedConsumer) RegisterAsConnectionBound() {
+	c.id.Store(uuid.New().String())
+	c.conn.Store(c.initialConn)
+}
+
+// Sets the last tracked read for deadlines
+func (c *trackedConsumer) SetAsRead() {
+	atomic.StoreInt64(&c.lastRead, time.Now().UnixMilli())
+}
+
+// Gets the last tracked read for read timeouts
+func (c *trackedConsumer) LastRead() time.Time {
+	return time.UnixMilli(atomic.LoadInt64(&c.lastRead))
+}
+
+func (c *trackedConsumer) Close() {
+	if conn := c.conn.Load(); conn != nil {
+		_ = conn.(*TrackedConnection).Close()
+	}
+	c.invokeCloseHandler()
+}
+
+func (c *trackedConsumer) invokeCloseHandler() {
+	go c.closeHandlerOnce.Do(func() {
+		c.closeHandler(c.Id())
+	})
+}
+
+// When the consumer is connection-based, it closes the connection and invokes the close handler
+func (c *trackedConsumer) CloseWhenConnectionBound() bool {
+	if conn := c.conn.Load(); conn != nil {
+		_ = conn.(*TrackedConnection).Close()
+		c.invokeCloseHandler()
+		return true
+	}
+	return false
 }
