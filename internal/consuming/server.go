@@ -222,6 +222,7 @@ func (c *consumer) postRegister(
 		if err := json.NewDecoder(r.Body).Decode(&consumerInfo); err != nil {
 			return types.NewHttpError(http.StatusBadRequest, "Invalid ConsumerInfo payload")
 		}
+		tc.RegisterAsConnectionBound()
 	}
 
 	if consumerInfo.Group == "" {

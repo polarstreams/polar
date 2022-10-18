@@ -219,6 +219,7 @@ func (c *trackedConsumer) Id() string {
 	id := c.id.Load()
 	if id == nil {
 		log.Error().Msgf("Tracked consumer id accessed before registering")
+		return ""
 	}
 	return id.(string)
 }
