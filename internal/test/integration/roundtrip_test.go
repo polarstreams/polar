@@ -6,11 +6,13 @@ package integration_test
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
@@ -255,7 +257,7 @@ var _ = Describe("A 3 node cluster", func() {
 			}
 		})
 
-		It("should support ndjson", func ()  {
+		It("should support producing in ndjson", func ()  {
 			b0.WaitForStart().WaitForVersion1()
 			b1.WaitForStart().WaitForVersion1()
 			b2.WaitForStart().WaitForVersion1()
@@ -298,6 +300,84 @@ var _ = Describe("A 3 node cluster", func() {
 			for n, r := range records {
 				Expect(r).To(Equal(fmt.Sprintf(`{"id": %d}`, n)))
 			}
+		})
+
+		It("should support consuming in JSON", func ()  {
+			b0.WaitForStart().WaitForVersion1()
+			b1.WaitForStart().WaitForVersion1()
+			b2.WaitForStart().WaitForVersion1()
+
+			client := NewTestClient(&TestClientOptions{MaxConnsPerHost: 4})
+			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["topic1", "topic2", "topic3"]}`)
+			const totalMessages = 100
+
+			// Message with multiple lines
+			message := `{"id": %d}
+{"id": %d}`
+
+			var wg sync.WaitGroup
+			// Produce messages in a way to make sure that the coalescer will group some of
+			for i := 0; i < totalMessages; i += 2 {
+				wg.Add(1)
+				go func(i int){
+					defer wg.Done()
+					expectOk(client.ProduceNDJson(0, "topic1", fmt.Sprintf(message, i, i+1), partitionKeyT0Range))
+					expectOk(client.ProduceNDJson(0, "topic2", fmt.Sprintf(message, i, i+1), partitionKeyT0Range))
+				}(i)
+			}
+			wg.Wait()
+			time.Sleep(SegmentFlushInterval)
+
+			responseBodies := make([]string, 0)
+			for i := 0; i < 12; i++ {
+				resp := client.ConsumerPollJson(0);
+				responseBodies = append(responseBodies, ReadBody(resp))
+			}
+
+			// Make sure is not grouped to validate single
+			expectOk(client.ProduceNDJson(0, "topic3", fmt.Sprintf(message, 100, 101), partitionKeyT0Range))
+			time.Sleep(SegmentFlushInterval*2)
+			for i := 0; i < 5; i++ {
+				responseBodies = append(responseBodies, ReadBody(client.ConsumerPollJson(0)))
+			}
+
+			messagesPerTopic := map[string][]int{
+				"topic1": {},
+				"topic2": {},
+				"topic3": {},
+			}
+			for _, b := range responseBodies {
+				if b == "" {
+					continue
+				}
+				jsonDecoder := json.NewDecoder(strings.NewReader(b))
+				var items []map[string]interface{}
+				err := jsonDecoder.Decode(&items)
+				Expect(err).NotTo(HaveOccurred())
+				for _, item := range items {
+					messages := messagesPerTopic[fmt.Sprint(item["topic"])]
+					values := item["values"].([]interface {})
+					for _, v := range values {
+						msg := v.(map[string]interface{})
+						messages = append(messages, int(msg["id"].(float64)))
+					}
+					messagesPerTopic[fmt.Sprint(item["topic"])] = messages
+				}
+			}
+
+			// Check only the first 25% of items as there are no guarantees it got polled in time
+			expected := make([]interface{}, totalMessages/4)
+			for i := range expected {
+				expected[i] = i
+			}
+
+			// Validate topic1 and topic2
+			for i := 1; i <=2; i++ {
+				Expect(messagesPerTopic[fmt.Sprintf("topic%d", i)]).To(ContainElements(expected...))
+			}
+
+			// Validate topic3
+			Expect(messagesPerTopic["topic3"]).To(ContainElements(100, 101))
 		})
 
 		It("should get topology changes and resize the ring", func () {

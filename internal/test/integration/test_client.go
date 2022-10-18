@@ -6,7 +6,7 @@ package integration
 import (
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -25,7 +25,7 @@ type TestClient struct {
 }
 
 type TestClientOptions struct {
-
+	MaxConnsPerHost int // The max number of connections when producing
 }
 
 const (
@@ -54,10 +54,9 @@ func NewTestClient(options *TestClientOptions) *TestClient {
 		},
 	}
 
-
 	producerClient := &http.Client{
 		Transport: &http.Transport{
-			MaxConnsPerHost: 1,
+			MaxConnsPerHost: options.MaxConnsPerHost,
 		},
 	}
 
@@ -100,11 +99,23 @@ func (c *TestClient) RegisterAsConsumer(clusterSize int, message string) {
 }
 
 func (c *TestClient) ConsumerPoll(ordinal int) *http.Response {
+	return c.consumerPoll(ordinal, "")
+}
+
+func (c *TestClient) ConsumerPollJson(ordinal int) *http.Response {
+	return c.consumerPoll(ordinal, "application/json")
+}
+
+func (c *TestClient) consumerPoll(ordinal int, accept string) *http.Response {
 	url := fmt.Sprintf("http://127.0.0.%d:%d/%s", ordinal+1, consumerPort, conf.ConsumerPollUrl)
 	var resp *http.Response
 	for i := 0; i < 10; i++ {
 		var err error
-		resp, err = c.consumerClient.Post(url, "application/json", strings.NewReader(""))
+		req, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(""))
+		if accept != "" {
+			req.Header.Set("Accept", accept)
+		}
+		resp, err = c.consumerClient.Do(req)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resp.StatusCode).To(BeNumerically(">=", http.StatusOK))
 		Expect(resp.StatusCode).To(BeNumerically("<", 300))
@@ -132,8 +143,9 @@ func (c *TestClient) Close() {
 	c.consumerClient.CloseIdleConnections()
 }
 
+// Reads all the data in the body and closes it
 func ReadBody(resp *http.Response) string {
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	Expect(err).NotTo(HaveOccurred())
     return string(body)
 }

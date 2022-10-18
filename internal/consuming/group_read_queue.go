@@ -1,6 +1,7 @@
 package consuming
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 	. "github.com/barcostreams/barco/internal/types"
 	"github.com/barcostreams/barco/internal/utils"
 	. "github.com/google/uuid"
+	"github.com/karlseguin/jsonwriter"
+	"github.com/klauspost/compress/zstd"
 	"github.com/rs/zerolog/log"
 )
 
@@ -36,6 +39,8 @@ type groupReadQueue struct {
 	config         conf.ConsumerConfig
 	readerIndex    uint16
 	readers        map[readerKey]map[string]*SegmentReader // Uses token+index as keys and map of readers per topic as values
+	decoder        *zstd.Decoder                           // Decoder used for json consumer responses
+	decoderBuffer  []byte                                  // Small buffer for reading the decoded payload
 }
 
 func newGroupReadQueue(
@@ -47,6 +52,10 @@ func newGroupReadQueue(
 	rrFactory ReplicationReaderFactory,
 	config conf.ConsumerConfig,
 ) *groupReadQueue {
+	decoder, err := zstd.NewReader(bytes.NewReader(make([]byte, 0)),
+		zstd.WithDecoderConcurrency(1), zstd.WithDecoderMaxMemory(uint64(config.MaxGroupSize())))
+	utils.PanicIfErr(err, "Invalid zstd reader settings")
+
 	queue := &groupReadQueue{
 		items:          make(chan readQueueItem),
 		readers:        make(map[readerKey]map[string]*SegmentReader),
@@ -57,6 +66,8 @@ func newGroupReadQueue(
 		gossiper:       gossiper,
 		rrFactory:      rrFactory,
 		config:         config,
+		decoder:        decoder,
+		decoderBuffer:  make([]byte, 16_384),
 	}
 	go queue.process()
 	go queue.refreshPeriodically()
@@ -69,6 +80,7 @@ type readQueueItem struct {
 	done       chan bool // Gets a single value when it's done writing the response
 	commitOnly bool
 	refresh    bool // Determines whether the item was meant for the read queue to re-evaluate internal maps
+	format     responseFormat
 }
 
 func (q *groupReadQueue) process() {
@@ -145,7 +157,7 @@ func (q *groupReadQueue) process() {
 			continue
 		}
 
-		err := marshalResponse(item.writer, responseItems)
+		err := q.marshalResponse(item.writer, item.format, responseItems)
 		if err != nil {
 			if len(failedResponseItems) > 0 {
 				log.Warn().
@@ -216,8 +228,16 @@ func (q *groupReadQueue) refreshPeriodically() {
 	}
 }
 
-func marshalResponse(w http.ResponseWriter, responseItems []consumerResponseItem) error {
-	w.Header().Add("Content-Type", contentType)
+func (q *groupReadQueue) marshalResponse(
+	w http.ResponseWriter,
+	format responseFormat,
+	responseItems []consumerResponseItem,
+) error {
+	if format == jsonFormat {
+		return q.marshalJsonResponse(w, responseItems)
+	}
+
+	w.Header().Add("Content-Type", defaultMimeType)
 	if err := binary.Write(w, conf.Endianness, uint16(len(responseItems))); err != nil {
 		// There was an issue writing to the wire
 		log.Err(err).Msgf("There was an error while trying to write the consumer response")
@@ -234,11 +254,28 @@ func marshalResponse(w http.ResponseWriter, responseItems []consumerResponseItem
 	return nil
 }
 
-func (q *groupReadQueue) readNext(connId UUID, w http.ResponseWriter) {
+func (q *groupReadQueue) marshalJsonResponse(w http.ResponseWriter, responseItems []consumerResponseItem) error {
+	w.Header().Add("Content-Type", jsonMimeType)
+	writer := jsonwriter.New(w)
+	var err error = nil
+	writer.RootArray(func() {
+		for _, item := range responseItems {
+			err = item.MarshalJson(writer, q.decoder, q.decoderBuffer)
+			if err != nil {
+				log.Err(err).Msgf("There was an error while trying to write the consumer response items in json")
+				break
+			}
+		}
+	})
+	return err
+}
+
+func (q *groupReadQueue) readNext(connId UUID, format responseFormat, w http.ResponseWriter) {
 	done := make(chan bool, 1)
 	q.items <- readQueueItem{
 		connId: connId,
 		writer: w,
+		format: format,
 		done:   done,
 	}
 
