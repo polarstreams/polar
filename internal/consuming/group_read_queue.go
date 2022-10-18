@@ -237,7 +237,7 @@ func (q *groupReadQueue) marshalResponse(
 		return q.marshalJsonResponse(w, responseItems)
 	}
 
-	w.Header().Add("Content-Type", defaultContentType)
+	w.Header().Add("Content-Type", defaultMimeType)
 	if err := binary.Write(w, conf.Endianness, uint16(len(responseItems))); err != nil {
 		// There was an issue writing to the wire
 		log.Err(err).Msgf("There was an error while trying to write the consumer response")
@@ -255,7 +255,7 @@ func (q *groupReadQueue) marshalResponse(
 }
 
 func (q *groupReadQueue) marshalJsonResponse(w http.ResponseWriter, responseItems []consumerResponseItem) error {
-	w.Header().Add("Content-Type", jsonContentType)
+	w.Header().Add("Content-Type", jsonMimeType)
 	writer := jsonwriter.New(w)
 	var err error = nil
 	writer.RootArray(func() {

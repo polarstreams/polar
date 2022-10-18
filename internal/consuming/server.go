@@ -31,8 +31,8 @@ const (
 )
 
 const (
-	defaultContentType = "application/vnd.barco.consumermessage"
-	jsonContentType    = "application/json"
+	defaultMimeType = "application/vnd.barco.consumermessage"
+	jsonMimeType    = "application/json"
 )
 
 var removeDebouncer = Debounce(removeDelay, 0.4) // Debounce events that occurred in the following 2 minutes
@@ -250,7 +250,7 @@ func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter, r *h
 	groupReadQueue := c.getOrCreateReadQueue(group)
 
 	format := compressedBinaryFormat
-	if w.Header().Get(ContentTypeHeaderKey) == ContentTypeJSON {
+	if r.Header.Get("Accept") == ContentTypeJSON {
 		format = jsonFormat
 	}
 
