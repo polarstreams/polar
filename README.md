@@ -1,9 +1,9 @@
 # Barco Streams
 
 Barco is a lightweight, elastic, Kubernetes-native event streaming system. It acts as a persistent buffer between
-services providing at least once delivery guarantees.
+services providing at-least-once delivery guarantees.
 
-Barco Streams is optimized to be resource efficient, have minimal operational overhead and be a good K8s neighbor.
+Barco Streams is optimized to be resource efficient, have minimal operational overhead, and be a good K8s neighbor.
 
 ![go build](https://github.com/barcostreams/barco/actions/workflows/go.yml/badge.svg)
 
@@ -12,14 +12,14 @@ Barco Streams is optimized to be resource efficient, have minimal operational ov
 ### Lightweight & Fast
 
 - Limited memory footprint
-- Production workloads with 0.5GiB of memory per pod
+- Production workloads consume 0.5GiB of memory per pod
 - [1+ million durable writes per second on commodity hardware](./docs/BENCHMARKS.md)
 - Small binary size, arm64 as first class citizen
 - No additional dependencies, i.e., no Zookeeper
 
 ### Elastic
 
-- New brokers can be started up in seconds, join the cluster and receive new data
+- New brokers can be started up, join the cluster, and receive new data in seconds
 - No need to operate it manually for scaling up/down cluster
 - After a period of low usage, it scales down automatically
 - Elastic in both computing and storage
@@ -35,7 +35,7 @@ Barco Streams is optimized to be resource efficient, have minimal operational ov
 
 <details>
 <summary>⚠️ <strong>The project is still in early development</strong> ⚠️</summary>
-Barco Streams is not production ready, expect bugs and things that don't work.
+Barco Streams is not production ready yet, expect bugs and things that don't work.
 
 We honestly value your contribution to make this project ready for general availability. If you want to contribute,
 check out the [Contributing Guide](docs/CONTRIBUTING.md).
@@ -75,7 +75,7 @@ Read [this guide to run it using docker compose](./docs/install/DOCKER_COMPOSE.m
 Barco expects the cluster to be composed by multiple brokers. To simplify application development, we introduced
 "dev mode" setting to run a single-broker cluster for application development.
 
-After [building](#build) Barco, set `BARCO_DEV_MODE` environment variable before running:
+After [building](#build) Barco, set the `BARCO_DEV_MODE` environment variable before running:
 
 ```bash
 BARCO_DEV_MODE=true BARCO_HOME=./barco-data go run .
