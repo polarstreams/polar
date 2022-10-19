@@ -13,10 +13,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-var _ = Describe("Scale down with a non-reusable cluster", func ()  {
+var _ = Describe("Scale down with a non-reusable cluster", func() {
 	var b0, b1, b2, b3, b4, b5 *TestBroker
 
-	BeforeEach(func ()  {
+	BeforeEach(func() {
 		b0 = nil
 		b1 = nil
 		b2 = nil
@@ -25,7 +25,7 @@ var _ = Describe("Scale down with a non-reusable cluster", func ()  {
 		b5 = nil
 	})
 
-	AfterEach(func ()  {
+	AfterEach(func() {
 		log.Debug().Msgf("Shutting down test cluster")
 		brokers := []*TestBroker{b0, b1, b2, b3, b4, b5}
 		for _, b := range brokers {
@@ -35,7 +35,7 @@ var _ = Describe("Scale down with a non-reusable cluster", func ()  {
 		}
 	})
 
-	It("should scale down", func () {
+	It("should scale down", func() {
 		b0 = NewTestBroker(0, &TestBrokerOptions{InitialClusterSize: 6})
 		b1 = NewTestBroker(1, &TestBrokerOptions{InitialClusterSize: 6})
 		b2 = NewTestBroker(2, &TestBrokerOptions{InitialClusterSize: 6})

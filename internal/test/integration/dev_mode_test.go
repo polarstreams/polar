@@ -14,7 +14,7 @@ import (
 var _ = Describe("Dev mode", func() {
 	var b0 *TestBroker
 
-	AfterEach(func ()  {
+	AfterEach(func() {
 		log.Debug().Msgf("Shutting down dev test cluster")
 
 		if b0 != nil {
@@ -22,7 +22,7 @@ var _ = Describe("Dev mode", func() {
 		}
 	})
 
-	It("Produces and consumes", func ()  {
+	It("Produces and consumes", func() {
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
 		b0.WaitOutput("Barco started")
 
@@ -40,10 +40,6 @@ var _ = Describe("Dev mode", func() {
 
 		time.Sleep(500 * time.Millisecond)
 		b0.LookForErrors(30)
-
-	})
-
-	XIt("Produces and consumes listening to stateless clients", func ()  {
 
 	})
 })

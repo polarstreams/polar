@@ -27,22 +27,22 @@ const (
 
 // Represents a broker process
 type TestBroker struct {
-	ordinal int
-	cmd     *exec.Cmd
-	mu      sync.RWMutex
-	startChan chan bool
+	ordinal    int
+	cmd        *exec.Cmd
+	mu         sync.RWMutex
+	startChan  chan bool
 	brokerName string
-	output  []string
-	options *TestBrokerOptions
+	output     []string
+	options    *TestBrokerOptions
 }
 
 type TestBrokerOptions struct {
 	InitialClusterSize int
-	DevMode bool
+	DevMode            bool
 }
 
 // Creates and starts a broker
-func NewTestBroker(ordinal int, options... *TestBrokerOptions) *TestBroker {
+func NewTestBroker(ordinal int, options ...*TestBrokerOptions) *TestBroker {
 	if len(options) > 1 {
 		panic("Only 1 set of options is supported")
 	}
@@ -53,10 +53,10 @@ func NewTestBroker(ordinal int, options... *TestBrokerOptions) *TestBroker {
 	}
 
 	b := TestBroker{
-		ordinal: ordinal,
-		startChan: make(chan bool, 1),
+		ordinal:    ordinal,
+		startChan:  make(chan bool, 1),
 		brokerName: fmt.Sprintf("Broker%d", ordinal),
-		options: brokerOptions,
+		options:    brokerOptions,
 	}
 	b.Start()
 	return &b
@@ -151,12 +151,12 @@ func (b *TestBroker) WaitForStart() *TestBroker {
 	timerChannel := time.After(5 * time.Second)
 	started := false
 
-    select {
-    case started = <-b.startChan:
+	select {
+	case started = <-b.startChan:
 		log.Debug().Msgf("%s started", b.brokerName)
-    case <-timerChannel:
+	case <-timerChannel:
 		log.Debug().Msgf("%s start timed out", b.brokerName)
-    }
+	}
 
 	if !started {
 		b.Kill()
@@ -171,7 +171,7 @@ func (b *TestBroker) WaitOutput(format string, a ...interface{}) {
 	start := time.Now()
 	found := false
 	pattern := fmt.Sprintf(format, a...)
-	for time.Since(start) < 5 * time.Second {
+	for time.Since(start) < 5*time.Second {
 		output := b.getOutput()
 		r, err := regexp.Compile(pattern)
 		if err != nil {
@@ -210,7 +210,7 @@ func (b *TestBroker) LookForErrors(nMessages int) {
 }
 
 func (b *TestBroker) match(output []string, r *regexp.Regexp) (bool, string) {
-	for i := len(output)-1; i >= 0; i-- {
+	for i := len(output) - 1; i >= 0; i-- {
 		text := output[i]
 		if r.MatchString(text) {
 			return true, text
@@ -250,12 +250,12 @@ func (b *TestBroker) WaitForShutdownOrKill() {
 		exitChan <- true
 	}()
 
-    select {
-    case exited = <-exitChan:
+	select {
+	case exited = <-exitChan:
 		log.Debug().Msgf("%s exited", b.brokerName)
-    case <-timerChan:
+	case <-timerChan:
 		log.Debug().Msgf("%s did not exit before timing out", b.brokerName)
-    }
+	}
 
 	if !exited {
 		log.Error().Msgf("%s Could not be shutted down cleanly, killing process", b.brokerName)
@@ -263,7 +263,7 @@ func (b *TestBroker) WaitForShutdownOrKill() {
 	}
 }
 
-func ShutdownInParallel(brokers... *TestBroker) {
+func ShutdownInParallel(brokers ...*TestBroker) {
 	for _, b := range brokers {
 		b.StartShutdown()
 	}

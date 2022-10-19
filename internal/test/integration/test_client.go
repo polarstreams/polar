@@ -147,5 +147,5 @@ func (c *TestClient) Close() {
 func ReadBody(resp *http.Response) string {
 	body, err := io.ReadAll(resp.Body)
 	Expect(err).NotTo(HaveOccurred())
-    return string(body)
+	return string(body)
 }

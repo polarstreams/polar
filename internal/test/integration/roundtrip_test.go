@@ -40,7 +40,7 @@ var _ = Describe("A 3 node cluster", func() {
 	Describe("Producing and consuming", func() {
 		var b0, b1, b2, b3, b4, b5 *TestBroker
 
-		BeforeEach(func ()  {
+		BeforeEach(func() {
 			b0 = NewTestBroker(0)
 			b1 = NewTestBroker(1)
 			b2 = NewTestBroker(2)
@@ -49,7 +49,7 @@ var _ = Describe("A 3 node cluster", func() {
 			b5 = nil
 		})
 
-		AfterEach(func ()  {
+		AfterEach(func() {
 			log.Debug().Msgf("Shutting down test cluster")
 
 			brokers := []*TestBroker{b0, b1, b2}
@@ -107,7 +107,7 @@ var _ = Describe("A 3 node cluster", func() {
 				Name:       "abc",
 				Token:      -9223372036854775808,
 				RangeIndex: 1,
-				Version: 1,
+				Version:    1,
 			}))
 
 			Expect(item.records).To(HaveLen(1))
@@ -156,7 +156,6 @@ var _ = Describe("A 3 node cluster", func() {
 			expectOk(client.ProduceJson(2, "abc", `{"hello": "world1_2"}`, partitionKeyT1Range))
 			time.Sleep(1 * time.Second)
 
-
 			// Wait for the consumer to be considered
 			time.Sleep(500 * time.Millisecond)
 
@@ -166,7 +165,6 @@ var _ = Describe("A 3 node cluster", func() {
 			topicId, r := findRecord(messages, `{"hello": "world1_1"}`)
 			Expect(r).NotTo(BeNil())
 			Expect(topicId.Token).To(Equal(GetTokenAtIndex(3, 1)), "Token should be T1")
-
 
 			// Try to find the record for T1 v2
 			resp = client.ConsumerPoll(2)
@@ -180,7 +178,7 @@ var _ = Describe("A 3 node cluster", func() {
 			// Use the Producer API while the server is restarting
 			const totalRequests = 100
 			c := make(chan httpResponseResult, totalRequests)
-			go func ()  {
+			go func() {
 				url := client.ProducerUrl(1, "abc", partitionKeyT1Range)
 				message := `{"hello": "world1_restarting"}`
 				for i := 0; i < totalRequests; i++ {
@@ -213,7 +211,7 @@ var _ = Describe("A 3 node cluster", func() {
 			client.Close()
 		})
 
-		It("should create and expose multiple segments", func ()  {
+		It("should create and expose multiple segments", func() {
 			b0.WaitForStart().WaitForVersion1()
 			b1.WaitForStart().WaitForVersion1()
 			b2.WaitForStart().WaitForVersion1()
@@ -222,7 +220,7 @@ var _ = Describe("A 3 node cluster", func() {
 			const totalMessages = 50
 			for i := 0; i < totalMessages; i++ {
 				// Generate a message each time to make it harder to compress
-				message := fmt.Sprintf(`{"long_message": "%s", "id": %d}`, generateString(500 * 1024), i)
+				message := fmt.Sprintf(`{"long_message": "%s", "id": %d}`, generateString(500*1024), i)
 				resp := client.ProduceJson(0, "abc", message, partitionKeyT0Range)
 				expectOk(resp)
 			}
@@ -233,14 +231,14 @@ var _ = Describe("A 3 node cluster", func() {
 			records := make([]string, 0, totalMessages)
 			expectedOffset := int64(0)
 			for {
-				resp := client.ConsumerPoll(0);
+				resp := client.ConsumerPoll(0)
 				if resp.StatusCode == http.StatusOK {
 					consumerResponses := readConsumerResponse(resp)
 					for _, c := range consumerResponses {
 						Expect(c.startOffset).To(Equal(expectedOffset))
 						for _, r := range c.records {
 							// Store only the last characters to avoid blowing up memory in the test
-							records = append(records, r.body[len(r.body) - 10:])
+							records = append(records, r.body[len(r.body)-10:])
 						}
 						// Increase the next one
 						expectedOffset += int64(len(c.records))
@@ -257,7 +255,7 @@ var _ = Describe("A 3 node cluster", func() {
 			}
 		})
 
-		It("should support producing in ndjson", func ()  {
+		It("should support producing in ndjson", func() {
 			b0.WaitForStart().WaitForVersion1()
 			b1.WaitForStart().WaitForVersion1()
 			b2.WaitForStart().WaitForVersion1()
@@ -282,7 +280,7 @@ var _ = Describe("A 3 node cluster", func() {
 
 			records := make([]string, 0, totalMessages)
 			for {
-				resp := client.ConsumerPoll(0);
+				resp := client.ConsumerPoll(0)
 				if resp.StatusCode == http.StatusOK {
 					messages := readConsumerResponse(resp)
 					for _, m := range messages {
@@ -302,7 +300,7 @@ var _ = Describe("A 3 node cluster", func() {
 			}
 		})
 
-		It("should support consuming in JSON", func ()  {
+		It("should support consuming in JSON", func() {
 			b0.WaitForStart().WaitForVersion1()
 			b1.WaitForStart().WaitForVersion1()
 			b2.WaitForStart().WaitForVersion1()
@@ -319,7 +317,7 @@ var _ = Describe("A 3 node cluster", func() {
 			// Produce messages in a way to make sure that the coalescer will group some of
 			for i := 0; i < totalMessages; i += 2 {
 				wg.Add(1)
-				go func(i int){
+				go func(i int) {
 					defer wg.Done()
 					expectOk(client.ProduceNDJson(0, "topic1", fmt.Sprintf(message, i, i+1), partitionKeyT0Range))
 					expectOk(client.ProduceNDJson(0, "topic2", fmt.Sprintf(message, i, i+1), partitionKeyT0Range))
@@ -330,13 +328,13 @@ var _ = Describe("A 3 node cluster", func() {
 
 			responseBodies := make([]string, 0)
 			for i := 0; i < 12; i++ {
-				resp := client.ConsumerPollJson(0);
+				resp := client.ConsumerPollJson(0)
 				responseBodies = append(responseBodies, ReadBody(resp))
 			}
 
 			// Make sure is not grouped to validate single
 			expectOk(client.ProduceNDJson(0, "topic3", fmt.Sprintf(message, 100, 101), partitionKeyT0Range))
-			time.Sleep(SegmentFlushInterval*2)
+			time.Sleep(SegmentFlushInterval * 2)
 			for i := 0; i < 5; i++ {
 				responseBodies = append(responseBodies, ReadBody(client.ConsumerPollJson(0)))
 			}
@@ -356,7 +354,7 @@ var _ = Describe("A 3 node cluster", func() {
 				Expect(err).NotTo(HaveOccurred())
 				for _, item := range items {
 					messages := messagesPerTopic[fmt.Sprint(item["topic"])]
-					values := item["values"].([]interface {})
+					values := item["values"].([]interface{})
 					for _, v := range values {
 						msg := v.(map[string]interface{})
 						messages = append(messages, int(msg["id"].(float64)))
@@ -372,7 +370,7 @@ var _ = Describe("A 3 node cluster", func() {
 			}
 
 			// Validate topic1 and topic2
-			for i := 1; i <=2; i++ {
+			for i := 1; i <= 2; i++ {
 				Expect(messagesPerTopic[fmt.Sprintf("topic%d", i)]).To(ContainElements(expected...))
 			}
 
@@ -380,7 +378,95 @@ var _ = Describe("A 3 node cluster", func() {
 			Expect(messagesPerTopic["topic3"]).To(ContainElements(100, 101))
 		})
 
-		It("should get topology changes and resize the ring", func () {
+		It("should support stateless consumers", func() {
+			b0.WaitForStart().WaitForVersion1()
+			b1.WaitForStart().WaitForVersion1()
+			b2.WaitForStart().WaitForVersion1()
+
+			pClient := NewTestClient(nil)
+
+			const totalMessages = 12
+			const topic = "topic1"
+			message := `{"id": %d}`
+
+			var wg sync.WaitGroup
+			// Produce messages in a way to make sure that the coalescer will group some of them
+			for i := 0; i < totalMessages; i += 3 {
+				wg.Add(1)
+				go func(i int) {
+					defer wg.Done()
+					expectOk(pClient.ProduceJson(0, topic, fmt.Sprintf(message, i), partitionKeyT0Range))
+					expectOk(pClient.ProduceJson(1, topic, fmt.Sprintf(message, i+1), partitionKeyT1Range))
+					expectOk(pClient.ProduceJson(2, topic, fmt.Sprintf(message, i+2), partitionKeyT2Range))
+				}(i)
+			}
+			wg.Wait()
+			time.Sleep(SegmentFlushInterval * 2)
+
+			client := &http.Client{
+				Transport: &http.Transport{
+					MaxConnsPerHost: 1,
+					MaxIdleConns:    1,
+				},
+			}
+
+			const registerUrl = "http://127.0.0.%d:9252/v1/consumer/register?consumer_id=c1&topic=%s"
+			// Register on the first broker
+			req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf(registerUrl, 1, topic), nil)
+			resp, err := client.Do(req)
+			Expect(err).NotTo(HaveOccurred())
+			expectOk(resp)
+
+			// Try register on the second one: it should be a noop
+			req, _ = http.NewRequest(http.MethodPut, fmt.Sprintf(registerUrl, 2, topic), nil)
+			resp, err = client.Do(req)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ReadBody(resp)).To(Equal("Already registered"))
+			expectStatusOk(resp)
+
+			client.CloseIdleConnections() // Close the connection pools
+
+			// Poll from all the brokers
+			messages := []map[string]any{}
+			finished := false
+			for i := 0; i < 10 && !finished; i++ {
+				for brokerIp := 1; brokerIp <= 3; brokerIp++ {
+					pollUrl := fmt.Sprintf("http://127.0.0.%d:9252/v1/consumer/poll?consumer_id=c1", brokerIp)
+					req, _ := http.NewRequest(http.MethodPost, pollUrl, nil)
+					req.Header.Add("Accept", "application/json")
+					resp, err := client.Do(req)
+					Expect(err).NotTo(HaveOccurred())
+					if resp.ContentLength == 0 {
+						_ = resp.Body.Close()
+						continue
+					}
+					if resp.StatusCode != http.StatusOK {
+						panic(fmt.Sprintf("Unexpected status: %s", resp.Status))
+					}
+
+					response := []ConsumerPollResponseJson{}
+					err = json.NewDecoder(resp.Body).Decode(&response)
+					resp.Body.Close()
+					Expect(err).NotTo(HaveOccurred())
+					for _, m := range response {
+						messages = append(messages, m.Values...)
+					}
+
+					if len(messages) == totalMessages {
+						finished = true
+						break
+					}
+				}
+
+				client.CloseIdleConnections() // Close the connection pools
+			}
+
+			for i := 0; i < totalMessages; i++ {
+				Expect(messages).To(ContainElement(map[string]any{"id": float64(i)}))
+			}
+		})
+
+		It("should get topology changes and resize the ring", func() {
 			b0.WaitForStart()
 			b1.WaitForStart()
 			b2.WaitForStart()
@@ -414,13 +500,18 @@ var _ = Describe("A 3 node cluster", func() {
 	})
 })
 
-func expectOk(resp *http.Response, description... interface{}) {
+func expectOk(resp *http.Response, description ...interface{}) {
 	defer resp.Body.Close()
 	Expect(resp.StatusCode).To(Equal(http.StatusOK), description...)
 	Expect(ReadBody(resp)).To(Equal("OK"))
 }
 
-func expectOkOrMessage(resp *http.Response, message string, description... interface{}) {
+func expectStatusOk(resp *http.Response) {
+	defer resp.Body.Close()
+	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+}
+
+func expectOkOrMessage(resp *http.Response, message string, description ...interface{}) {
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusMisdirectedRequest {
 		Expect(ReadBody(resp)).To(MatchRegexp(message))
@@ -438,12 +529,12 @@ type consumerResponseItem struct {
 
 type record struct {
 	timestamp time.Time
-	body string
+	body      string
 }
 
 type httpResponseResult struct {
 	resp *http.Response
-	err error
+	err  error
 }
 
 // Use pseudo random value that is hard to compress
