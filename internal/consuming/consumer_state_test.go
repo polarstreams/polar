@@ -385,8 +385,8 @@ func assertTopics(state *ConsumerState, topics []string, consumerIds ...string) 
 }
 
 func addConnection(state *ConsumerState, consumerId string, group string, topics ...string) string {
-	tc := newTrackedConsumer(&fakes.Connection{}, func(_ string) {})
-	tc.RegisterAsConnectionBound()
+	tc := newTrackedConsumerHandler(&fakes.Connection{})
+	tc.TrackAsConnectionBound()
 	state.AddConnection(tc, ConsumerInfo{
 		Id:     consumerId,
 		Group:  group,

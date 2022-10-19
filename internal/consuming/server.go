@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"reflect"
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
@@ -122,7 +123,7 @@ func (c *consumer) AcceptConnections() error {
 				break
 			}
 
-			tc := newTrackedConsumer(conn)
+			tc := newTrackedConsumerHandler(conn)
 
 			router := httprouter.New()
 			router.GET(conf.StatusUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -134,31 +135,11 @@ func (c *consumer) AcceptConnections() error {
 			router.POST(conf.ConsumerPollUrl, toTrackedHandler(tc, c.postPoll))
 			router.POST(conf.ConsumerManualCommitUrl, toTrackedHandler(tc, c.postManualCommit))
 
-			// Detect half-open TCP connections from consumers by getting the last read in loop
-			go func() {
-				for {
-					if time.Since(tc.LastRead()) > c.config.ConsumerReadTimeout() {
-						log.Debug().Msgf("Stop tracking consumer '%s' due to inactivity", tc.Id())
-						tc.CloseConnection()
-						c.unRegister(tc.Id())
-						break
-					}
-					time.Sleep(utils.Jitter(halfOpenTimerResolution))
-				}
-			}()
-
 			// server.ServeConn() will block until the connection is not readable anymore
 			go func() {
 				server.ServeConn(conn, &http2.ServeConnOpts{
 					Handler: h2c.NewHandler(router, server),
 				})
-				if c.localDb.IsShuttingDown() {
-					return
-				}
-				if tc.CloseConnection() {
-					log.Debug().Msgf(
-						"Connection from consumer client with id '%s' is not readable anymore", tc.Id())
-				}
 			}()
 		}
 	}()
@@ -175,14 +156,26 @@ func (c *consumer) Close() {
 	err := c.listener.Close()
 	log.Err(err).Msgf("Consumer connection listener closed")
 
-	connBoundConsumers := c.state.GetConnectionBoundConsumers()
+	connBoundConsumers := c.state.TrackedConsumers()
 	for _, conn := range connBoundConsumers {
-		conn.CloseConnection()
+		conn.Close()
+	}
+}
+
+func (c *consumer) detectReadTimeout(tc *trackedConsumerHandler) {
+	for {
+		if time.Since(tc.LastRead()) > c.config.ConsumerReadTimeout() {
+			log.Debug().Msgf("Stop tracking consumer '%s' due to inactivity", tc.Id())
+			tc.Close()
+			c.unRegister(tc.Id())
+			break
+		}
+		time.Sleep(utils.Jitter(halfOpenTimerResolution))
 	}
 }
 
 func (c *consumer) postRegister(
-	tc *trackedConsumer,
+	tc *trackedConsumerHandler,
 	w http.ResponseWriter,
 	r *http.Request,
 	_ httprouter.Params,
@@ -190,11 +183,17 @@ func (c *consumer) postRegister(
 	tc.SetAsRead()
 	var consumerInfo ConsumerInfo
 	rebalanceDelay := true
+
 	if consumerId := r.URL.Query().Get(consumerQueryKey); consumerId != "" {
-		tc.RegisterAsConnectionLess(consumerId)
 		consumerInfo.Id = consumerId
 		consumerInfo.Group = r.URL.Query().Get("group")
 		consumerInfo.Topics = r.URL.Query()["topic"]
+
+		if existingTc, existingInfo := c.state.TrackedConsumerById(consumerId); existingTc != nil {
+			return c.handleAlreadyRegistered(w, tc, consumerInfo, existingTc, existingInfo)
+		}
+
+		tc.TrackAsStateless(consumerId)
 
 		// Default to "no rebalance delay" for connection-less
 		if r.URL.Query().Get("delay") != "true" {
@@ -204,7 +203,7 @@ func (c *consumer) postRegister(
 		if err := json.NewDecoder(r.Body).Decode(&consumerInfo); err != nil {
 			return types.NewHttpError(http.StatusBadRequest, "Invalid ConsumerInfo payload")
 		}
-		tc.RegisterAsConnectionBound()
+		tc.TrackAsConnectionBound()
 	}
 
 	if consumerInfo.Group == "" {
@@ -226,6 +225,7 @@ func (c *consumer) postRegister(
 		Int("connections", length).
 		Msgf("Registering new connection to consumer '%s' of group '%s' for topics %v",
 			consumerInfo.Id, consumerInfo.Group, consumerInfo.Topics)
+	go c.detectReadTimeout(tc)
 
 	rebalanceAndLog := func() {
 		if c.state.Rebalance() {
@@ -241,7 +241,24 @@ func (c *consumer) postRegister(
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte("OK"))
+	_, _ = w.Write([]byte("Registered"))
+	return nil
+}
+
+func (c *consumer) handleAlreadyRegistered(
+	w http.ResponseWriter,
+	tc *trackedConsumerHandler,
+	info ConsumerInfo,
+	existingTc *trackedConsumerHandler,
+	existingInfo *ConsumerInfo,
+) error {
+	if utils.IfEmpty(info.Group, consumerGroupDefault) != existingInfo.Group ||
+		!reflect.DeepEqual(info.Topics, existingInfo.Topics) {
+		return types.NewHttpError(http.StatusBadRequest, "Consumer already registered with different parameters")
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte("Already registered"))
 	return nil
 }
 
@@ -262,13 +279,28 @@ func (c *consumer) unRegister(id string) {
 	})
 }
 
+// Verifies whether the consumer is tracked or, for stateless consumers, whether it can load an already tracked consumer
+func (c *consumer) isRegistered(tc *trackedConsumerHandler, r *http.Request) bool {
+	if tc.IsTracked() {
+		return true
+	}
+
+	if consumerId := r.URL.Query().Get(consumerQueryKey); consumerId != "" {
+		if existing, _ := c.state.TrackedConsumerById(consumerId); existing != nil {
+			tc.LoadFromExisting(existing)
+			return true
+		}
+	}
+	return false
+}
+
 func (c *consumer) postPoll(
-	tc *trackedConsumer,
+	tc *trackedConsumerHandler,
 	w http.ResponseWriter,
 	r *http.Request,
 	_ httprouter.Params,
 ) error {
-	if !tc.Registered() {
+	if !c.isRegistered(tc, r) {
 		return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
 	}
 	tc.SetAsRead()
@@ -293,12 +325,12 @@ func (c *consumer) postPoll(
 }
 
 func (c *consumer) postManualCommit(
-	tc *trackedConsumer,
+	tc *trackedConsumerHandler,
 	w http.ResponseWriter,
 	r *http.Request,
 	_ httprouter.Params,
 ) error {
-	if !tc.Registered() {
+	if !tc.IsTracked() {
 		return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
 	}
 	tc.SetAsRead()
@@ -325,7 +357,7 @@ func (c *consumer) getOrCreateReadQueue(group string) *groupReadQueue {
 	return grq.(*groupReadQueue)
 }
 
-type ConsumerAwareHandle func(*trackedConsumer, http.ResponseWriter, *http.Request, httprouter.Params) error
+type ConsumerAwareHandle func(*trackedConsumerHandler, http.ResponseWriter, *http.Request, httprouter.Params) error
 
 // Gets the tokens and topics to serve, given a connection.
 func logsToServe(
@@ -351,7 +383,7 @@ func logsToServe(
 	return group, leaderTokens, topics
 }
 
-func toTrackedHandler(tc *trackedConsumer, h ConsumerAwareHandle) httprouter.Handle {
+func toTrackedHandler(tc *trackedConsumerHandler, h ConsumerAwareHandle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		if err := h(tc, w, r, ps); err != nil {
 			adaptHttpErr(err, w)
@@ -386,11 +418,16 @@ func (c *consumer) OnOffsetFromPeer(kv *OffsetStoreKeyValue) {
 }
 
 func (c *consumer) sendConsumerGroupsToPeers() {
+	if len(c.topologyGetter.Topology().Brokers) == 1 {
+		// We are in dev mode, there's never going to be a peer
+		return
+	}
+
 	const sendPeriod = 1000
 	for i := 0; ; i++ {
 		groups := c.state.GetInfoForPeers()
 		topology := c.topologyGetter.Topology()
-		if len(groups) > 0 && len(topology.Brokers) > 1 {
+		if len(groups) > 0 {
 			brokers := topology.NextBrokers(topology.LocalIndex, 2)
 			logEvent := log.Debug()
 			if i%sendPeriod == 0 {

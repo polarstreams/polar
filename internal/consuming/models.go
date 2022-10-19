@@ -11,6 +11,7 @@ import (
 
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/data"
+	"github.com/barcostreams/barco/internal/types"
 	. "github.com/barcostreams/barco/internal/types"
 	"github.com/barcostreams/barco/internal/utils"
 	"github.com/google/uuid"
@@ -187,69 +188,145 @@ type recordHeader struct {
 	Length    uint32
 }
 
+type trackedConsumer interface {
+	types.Closer
+
+	// Sets the last tracked read for deadlines
+	SetAsRead()
+
+	LastRead() time.Time
+
+	// Returns the identifier of the consumer instance connection.
+	// When using connection-less flow, it matches the identifier of the consumer
+	Id() string
+}
+
 // Handles state to support both connection based consumers and connection-less ones.
-type trackedConsumer struct {
-	conn             atomic.Value // For connection bound consumers
-	initialConn      net.Conn
-	lastRead         int64        // Used to follow last read from consumer
-	id               atomic.Value // The id representing the connection
+type trackedConsumerByConnection struct {
+	conn     net.Conn
+	lastRead int64
+	id       string // Id of the connection
 }
 
-func newTrackedConsumer(initialConn net.Conn) *trackedConsumer {
-	return &trackedConsumer{
-		conn:             atomic.Value{},
-		id:               atomic.Value{},
-		initialConn:      initialConn,
-		lastRead:         time.Now().UnixMilli(),
-	}
+func (c *trackedConsumerByConnection) Close() {
+	_ = c.conn.Close()
 }
 
-// Returns the identifier of the consumer instance connection.
-// When using connection-less flow, it matches the identifier of the consumer
-func (c *trackedConsumer) Id() string {
-	id := c.id.Load()
-	if id == nil {
-		log.Error().Msgf("Tracked consumer id accessed before registering")
-		return ""
-	}
-	return id.(string)
-}
-
-// Determines whether this consumer has been registered
-func (c *trackedConsumer) Registered() bool {
-	return c.id.Load() != nil
-}
-
-func (c *trackedConsumer) RegisterAsConnectionLess(id string) {
-	c.id.Store(id)
-	c.initialConn = nil // Allow to be GC'ed
-}
-
-func (c *trackedConsumer) RegisterAsConnectionBound() {
-	c.id.Store(uuid.New().String())
-	c.conn.Store(c.initialConn)
-}
-
-// Sets the last tracked read for deadlines
-func (c *trackedConsumer) SetAsRead() {
+func (c *trackedConsumerByConnection) SetAsRead() {
 	atomic.StoreInt64(&c.lastRead, time.Now().UnixMilli())
 }
 
-// Gets the last tracked read for read timeouts
-func (c *trackedConsumer) LastRead() time.Time {
+func (c *trackedConsumerByConnection) LastRead() time.Time {
 	return time.UnixMilli(atomic.LoadInt64(&c.lastRead))
 }
 
-// Determines whether the interaction with this consumer is based on the connection state
-func (c *trackedConsumer) IsConnectionBound() bool {
-	return c.conn.Load() != nil
+func (c *trackedConsumerByConnection) Id() string {
+	return c.id
 }
 
-// Closes the net connection, when connection exists
-func (c *trackedConsumer) CloseConnection() bool {
-	if conn := c.conn.Load(); conn != nil {
-		_ = conn.(net.Conn).Close()
-		return true
+type trackedConsumerById struct {
+	lastRead int64
+	id       string // Id of the connection and the consumer
+}
+
+func (c *trackedConsumerById) Close() {}
+
+func (c *trackedConsumerById) SetAsRead() {
+	atomic.StoreInt64(&c.lastRead, time.Now().UnixMilli())
+}
+
+func (c *trackedConsumerById) LastRead() time.Time {
+	return time.UnixMilli(atomic.LoadInt64(&c.lastRead))
+}
+
+func (c *trackedConsumerById) Id() string {
+	return c.id
+}
+
+// Maintains state to support both connection based consumers and connection-less ones
+type trackedConsumerHandler struct {
+	value       atomic.Value
+	initialConn net.Conn
+}
+
+func newTrackedConsumerHandler(initialConn net.Conn) *trackedConsumerHandler {
+	return &trackedConsumerHandler{
+		value:       atomic.Value{},
+		initialConn: initialConn,
 	}
-	return false
+}
+
+func (c *trackedConsumerHandler) getValue() trackedConsumer {
+	v := c.value.Load()
+	if v == nil {
+		return nil
+	}
+	return v.(trackedConsumer)
+}
+
+func (c *trackedConsumerHandler) Id() string {
+	value := c.getValue()
+	if value == nil {
+		log.Error().Msgf("Tracked consumer id accessed before registering")
+		return ""
+	}
+	return value.Id()
+}
+
+func (c *trackedConsumerHandler) IsTracked() bool {
+	return c.getValue() != nil
+}
+
+func (c *trackedConsumerHandler) TrackAsStateless(id string) {
+	// Force compile time check
+	var value trackedConsumer = &trackedConsumerById{
+		lastRead: time.Now().UnixMilli(),
+		id:       id,
+	}
+	c.value.Store(value)
+	c.initialConn = nil // Allow to be GC'ed
+}
+
+func (c *trackedConsumerHandler) LoadFromExisting(existing *trackedConsumerHandler) {
+	existingValue := existing.getValue()
+	if existingValue == nil {
+		log.Error().Msgf("Unexpected existing tracked consumer without value")
+		return
+	}
+	byId, ok := existingValue.(*trackedConsumerById)
+	if !ok {
+		log.Error().Msgf("Unexpected existing tracked consumer that is NOT by id: %+v", existingValue)
+		return
+	}
+	c.value.Store(byId)
+	c.initialConn = nil // Allow to be GC'ed
+}
+
+func (c *trackedConsumerHandler) TrackAsConnectionBound() {
+	var value trackedConsumer = &trackedConsumerByConnection{
+		conn:     c.initialConn,
+		lastRead: time.Now().UnixMilli(),
+		id:       uuid.New().String(),
+	}
+	c.value.Store(value)
+}
+
+func (c *trackedConsumerHandler) SetAsRead() {
+	if value := c.getValue(); value != nil {
+		value.SetAsRead()
+	}
+}
+
+func (c *trackedConsumerHandler) LastRead() time.Time {
+	if value := c.getValue(); value != nil {
+		return value.LastRead()
+	}
+	return time.Time{}
+}
+
+// Handles closing the internal connection, when there's one
+func (c *trackedConsumerHandler) Close() {
+	if value := c.getValue(); value != nil {
+		value.Close()
+	}
 }

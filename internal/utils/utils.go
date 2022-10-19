@@ -243,3 +243,10 @@ func Min(a, b int) int {
 	}
 	return b
 }
+
+func IfEmpty(value string, defaultValue string) string {
+	if value == "" {
+		return defaultValue
+	}
+	return value
+}
