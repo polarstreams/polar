@@ -18,6 +18,7 @@ const (
 	ConsumerRegisterUrl     = "/v1/consumer/register"
 	ConsumerPollUrl         = "/v1/consumer/poll"
 	ConsumerManualCommitUrl = "/v1/consumer/commit"
+	ConsumerGoodbye         = "/v1/consumer/goodbye"
 
 	// Gossip Urls
 

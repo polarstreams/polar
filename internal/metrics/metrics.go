@@ -57,9 +57,9 @@ var (
 		Help: "The number of bytes available to allocate",
 	})
 
-	ConsumerConnections = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "barco_consumer_connections",
-		Help: "The number of open connections from consumers",
+	ActiveConsumers = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "barco_consumer_active",
+		Help: "The number of active consumers connected to this broker",
 	})
 )
 

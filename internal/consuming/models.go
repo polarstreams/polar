@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"net/http"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -188,6 +189,20 @@ type recordHeader struct {
 	Length    uint32
 }
 
+// Noop workaround for manual committing
+// https://github.com/barcostreams/barco/issues/70
+type ignoreResponse struct{}
+
+func (i ignoreResponse) Header() http.Header {
+	return http.Header{}
+}
+
+func (i ignoreResponse) Write(b []byte) (int, error) {
+	return len(b), nil
+}
+
+func (i ignoreResponse) WriteHeader(statusCode int) {}
+
 type trackedConsumer interface {
 	types.Closer
 
@@ -197,19 +212,24 @@ type trackedConsumer interface {
 	LastRead() time.Time
 
 	// Returns the identifier of the consumer instance connection.
-	// When using connection-less flow, it matches the identifier of the consumer
+	// When using stateless-less flow, it matches the identifier of the consumer
 	Id() string
+
+	// Determines whether it has been closed
+	IsClosed() bool
 }
 
-// Handles state to support both connection based consumers and connection-less ones.
+// Handles state to support both connection based consumers and stateless-less ones.
 type trackedConsumerByConnection struct {
 	conn     net.Conn
 	lastRead int64
 	id       string // Id of the connection
+	isClosed atomic.Bool
 }
 
 func (c *trackedConsumerByConnection) Close() {
 	_ = c.conn.Close()
+	c.isClosed.Store(true)
 }
 
 func (c *trackedConsumerByConnection) SetAsRead() {
@@ -224,12 +244,19 @@ func (c *trackedConsumerByConnection) Id() string {
 	return c.id
 }
 
+func (c *trackedConsumerByConnection) IsClosed() bool {
+	return c.isClosed.Load()
+}
+
 type trackedConsumerById struct {
 	lastRead int64
 	id       string // Id of the connection and the consumer
+	isClosed atomic.Bool
 }
 
-func (c *trackedConsumerById) Close() {}
+func (c *trackedConsumerById) Close() {
+	c.isClosed.Store(true)
+}
 
 func (c *trackedConsumerById) SetAsRead() {
 	atomic.StoreInt64(&c.lastRead, time.Now().UnixMilli())
@@ -241,6 +268,10 @@ func (c *trackedConsumerById) LastRead() time.Time {
 
 func (c *trackedConsumerById) Id() string {
 	return c.id
+}
+
+func (c *trackedConsumerById) IsClosed() bool {
+	return c.isClosed.Load()
 }
 
 // Maintains state to support both connection based consumers and connection-less ones
@@ -287,6 +318,14 @@ func (c *trackedConsumerHandler) TrackAsStateless(id string) {
 	c.initialConn = nil // Allow to be GC'ed
 }
 
+func (c *trackedConsumerHandler) IsStateless() bool {
+	if v := c.getValue(); v != nil {
+		_, ok := v.(*trackedConsumerById)
+		return ok
+	}
+	return false
+}
+
 func (c *trackedConsumerHandler) LoadFromExisting(existing *trackedConsumerHandler) {
 	existingValue := existing.getValue()
 	if existingValue == nil {
@@ -322,6 +361,13 @@ func (c *trackedConsumerHandler) LastRead() time.Time {
 		return value.LastRead()
 	}
 	return time.Time{}
+}
+
+func (c *trackedConsumerHandler) IsClosed() bool {
+	if v := c.getValue(); v != nil {
+		return v.IsClosed()
+	}
+	return false
 }
 
 // Handles closing the internal connection, when there's one

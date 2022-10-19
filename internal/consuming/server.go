@@ -15,7 +15,6 @@ import (
 	"github.com/barcostreams/barco/internal/metrics"
 	"github.com/barcostreams/barco/internal/types"
 	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
 	. "github.com/barcostreams/barco/internal/utils"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
@@ -28,7 +27,7 @@ const consumerGroupsToPeersDelay = 10 * time.Second
 const (
 	consumerNoOwnedDataDelay    = 5 // Seconds to retry after
 	consumerNoDataDelay         = 1 // Seconds to retry after
-	halfOpenTimerResolution     = 1 * time.Second
+	halfOpenTimerResolution     = 5 * time.Second
 	consumerNotRegisteredStatus = http.StatusConflict
 )
 
@@ -37,8 +36,14 @@ const (
 	jsonMimeType    = "application/json"
 )
 
-// The query string parameter used to determine whether it's connection-less
-const consumerQueryKey = "consumer_id"
+const (
+	// The query string parameters used for the consumer server
+	consumerQueryKey = "consumer_id" // Used to determine whether it's stateless-less
+	topicsQueryKey   = "topic"
+	groupQueryKey    = "group"
+	commitQueryKey   = "commit"
+)
+
 const consumerGroupDefault = "default"
 
 var removeDebouncer = Debounce(removeDelay, 0.4) // Debounce events that occurred in the following 2 minutes
@@ -130,10 +135,11 @@ func (c *consumer) AcceptConnections() error {
 				tc.SetAsRead()
 				fmt.Fprintf(w, "Consumer server listening on %d\n", port)
 			})
-			router.PUT(conf.ConsumerRegisterUrl, toTrackedHandler(tc, c.postRegister))
-			router.POST(conf.ConsumerRegisterUrl, toTrackedHandler(tc, c.postRegister)) // Backwards compatibility
+			router.PUT(conf.ConsumerRegisterUrl, toTrackedHandler(tc, c.putRegister))
+			router.POST(conf.ConsumerRegisterUrl, toTrackedHandler(tc, c.putRegister)) // Backwards compatibility
 			router.POST(conf.ConsumerPollUrl, toTrackedHandler(tc, c.postPoll))
 			router.POST(conf.ConsumerManualCommitUrl, toTrackedHandler(tc, c.postManualCommit))
+			router.POST(conf.ConsumerGoodbye, toTrackedHandler(tc, c.postGoodbye))
 
 			// server.ServeConn() will block until the connection is not readable anymore
 			go func() {
@@ -156,25 +162,25 @@ func (c *consumer) Close() {
 	err := c.listener.Close()
 	log.Err(err).Msgf("Consumer connection listener closed")
 
-	connBoundConsumers := c.state.TrackedConsumers()
-	for _, conn := range connBoundConsumers {
-		conn.Close()
+	for _, tc := range c.state.TrackedConsumers() {
+		// Close connection-bound consumers
+		tc.Close()
 	}
 }
 
 func (c *consumer) detectReadTimeout(tc *trackedConsumerHandler) {
-	for {
+	for !tc.IsClosed() {
 		if time.Since(tc.LastRead()) > c.config.ConsumerReadTimeout() {
 			log.Debug().Msgf("Stop tracking consumer '%s' due to inactivity", tc.Id())
+			c.unRegister(tc.Id(), true)
 			tc.Close()
-			c.unRegister(tc.Id())
 			break
 		}
-		time.Sleep(utils.Jitter(halfOpenTimerResolution))
+		time.Sleep(Jitter(halfOpenTimerResolution))
 	}
 }
 
-func (c *consumer) postRegister(
+func (c *consumer) putRegister(
 	tc *trackedConsumerHandler,
 	w http.ResponseWriter,
 	r *http.Request,
@@ -186,8 +192,8 @@ func (c *consumer) postRegister(
 
 	if consumerId := r.URL.Query().Get(consumerQueryKey); consumerId != "" {
 		consumerInfo.Id = consumerId
-		consumerInfo.Group = r.URL.Query().Get("group")
-		consumerInfo.Topics = r.URL.Query()["topic"]
+		consumerInfo.Group = r.URL.Query().Get(groupQueryKey)
+		consumerInfo.Topics = r.URL.Query()[topicsQueryKey]
 
 		if existingTc, existingInfo := c.state.TrackedConsumerById(consumerId); existingTc != nil {
 			return c.handleAlreadyRegistered(w, tc, consumerInfo, existingTc, existingInfo)
@@ -195,7 +201,7 @@ func (c *consumer) postRegister(
 
 		tc.TrackAsStateless(consumerId)
 
-		// Default to "no rebalance delay" for connection-less
+		// Default to "no rebalance delay" for stateless-less consumers
 		if r.URL.Query().Get("delay") != "true" {
 			rebalanceDelay = false
 		}
@@ -206,9 +212,7 @@ func (c *consumer) postRegister(
 		tc.TrackAsConnectionBound()
 	}
 
-	if consumerInfo.Group == "" {
-		consumerInfo.Group = consumerGroupDefault
-	}
+	consumerInfo.Group = IfEmpty(consumerInfo.Group, consumerGroupDefault)
 
 	if consumerInfo.Id == "" || len(consumerInfo.Topics) == 0 {
 		return types.NewHttpError(http.StatusBadRequest, "Consumer id and topics can not be empty")
@@ -219,7 +223,7 @@ func (c *consumer) postRegister(
 		return nil
 	}
 
-	metrics.ConsumerConnections.Set(float64(length))
+	metrics.ActiveConsumers.Set(float64(length))
 	log.Debug().
 		Str("connId", tc.Id()).
 		Int("connections", length).
@@ -240,8 +244,7 @@ func (c *consumer) postRegister(
 		rebalanceAndLog()
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte("Registered"))
+	RespondText(w, "OK")
 	return nil
 }
 
@@ -252,31 +255,36 @@ func (c *consumer) handleAlreadyRegistered(
 	existingTc *trackedConsumerHandler,
 	existingInfo *ConsumerInfo,
 ) error {
-	if utils.IfEmpty(info.Group, consumerGroupDefault) != existingInfo.Group ||
+	if IfEmpty(info.Group, consumerGroupDefault) != existingInfo.Group ||
 		!reflect.DeepEqual(info.Topics, existingInfo.Topics) {
 		return types.NewHttpError(http.StatusBadRequest, "Consumer already registered with different parameters")
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte("Already registered"))
+	RespondText(w, "Already registered")
 	return nil
 }
 
-func (c *consumer) unRegister(id string) {
+func (c *consumer) unRegister(id string, debounce bool) {
 	removed, length := c.state.RemoveConnection(id)
 	if !removed {
 		return
 	}
 
-	metrics.ConsumerConnections.Set(float64(length))
-	log.Debug().Int("connections", length).Msgf("Connection from consumer client closed")
+	metrics.ActiveConsumers.Set(float64(length))
+	log.Debug().Int("consumers", length).Msgf("Consumer '%s' unregistered", id)
 
-	// We shouldn't rush to rebalance
-	removeDebouncer(func() {
+	rebalanceAndLog := func() {
 		if c.state.Rebalance() {
 			log.Info().Msg("Consumer topology was rebalanced after removing a connection to a consumer client")
 		}
-	})
+	}
+
+	if debounce {
+		// We shouldn't rush to rebalance
+		removeDebouncer(rebalanceAndLog)
+	} else {
+		rebalanceAndLog()
+	}
 }
 
 // Verifies whether the consumer is tracked or, for stateless consumers, whether it can load an already tracked consumer
@@ -330,7 +338,7 @@ func (c *consumer) postManualCommit(
 	r *http.Request,
 	_ httprouter.Params,
 ) error {
-	if !tc.IsTracked() {
+	if !c.isRegistered(tc, r) {
 		return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
 	}
 	tc.SetAsRead()
@@ -346,6 +354,34 @@ func (c *consumer) postManualCommit(
 	log.Debug().Msgf("Received consumer client manual commit from connection '%s'", id)
 	groupReadQueue := c.getOrCreateReadQueue(group)
 	groupReadQueue.manualCommit(id, w)
+	return nil
+}
+
+func (c *consumer) postGoodbye(
+	tc *trackedConsumerHandler,
+	w http.ResponseWriter,
+	r *http.Request,
+	_ httprouter.Params,
+) error {
+	if !c.isRegistered(tc, r) {
+		return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
+	}
+
+	id := tc.Id()
+	log.Debug().Msgf("Processing consumer goodbye from '%s'", id)
+
+	if r.URL.Query().Get(commitQueryKey) != "false" {
+		group, tokens, _ := logsToServe(c.state, c.topologyGetter, id)
+		if len(tokens) > 0 {
+			log.Debug().Msgf("Committing offset as part of goodbye for consumer '%s'", id)
+			groupReadQueue := c.getOrCreateReadQueue(group)
+			groupReadQueue.manualCommit(id, ignoreResponse{})
+		}
+	}
+
+	c.unRegister(id, !tc.IsStateless())
+	tc.Close()
+	RespondText(w, "OK")
 	return nil
 }
 
