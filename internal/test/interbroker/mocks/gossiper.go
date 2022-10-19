@@ -270,6 +270,20 @@ func (_m *Gossiper) SendConsumerGroups(ordinal int, groups []types.ConsumerGroup
 	return r0
 }
 
+// SendConsumerRegister provides a mock function with given fields: ordinal, id, group, topics
+func (_m *Gossiper) SendConsumerRegister(ordinal int, id string, group string, topics []string) error {
+	ret := _m.Called(ordinal, id, group, topics)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int, string, string, []string) error); ok {
+		r0 = rf(ordinal, id, group, topics)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SendGoobye provides a mock function with given fields:
 func (_m *Gossiper) SendGoobye() {
 	_m.Called()

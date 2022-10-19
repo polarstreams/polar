@@ -221,6 +221,25 @@ func InParallel(length int, f func(int) error) []chan error {
 	return result
 }
 
+// Collects single messages from each channel
+func CollectErrors(channels []chan error) []error {
+	result := make([]error, len(channels))
+	for i, c := range channels {
+		result[i] = <-c
+	}
+	return result
+}
+
+// Returns the first non nil error in the slice or nil
+func AnyError(errors []error) error {
+	for _, e := range errors {
+		if e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
 func FindGenByToken(generations []types.Generation, token types.Token) int {
 	for i, gen := range generations {
 		if gen.Start == token {

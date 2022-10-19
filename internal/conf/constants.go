@@ -39,6 +39,7 @@ const (
 	GossipHostIsUpUrl           = "/v1/broker/%s/is-up"
 	GossipConsumerGroupsInfoUrl = "/v1/consumer/groups-info"          // Send/receive consumer groups info
 	GossipConsumerOffsetUrl     = "/v1/consumer/offsets"              // Send/receive consumer offsets
+	GossipConsumerRegisterUrl   = "/v1/consumer/register"             // Send/receive consumer offsets
 	GossipReadProducerOffsetUrl = "/v1/producer/offset/%s/%s/%s/%s"   // Reads the producer offset, with params: topic, token, range, version
 	GossipReadFileStructureUrl  = "/v1/file-structure/%s/%s/%s/%s/%s" // Reads the file names of a given topic & offset (topic, token, range, version and offset)
 	GossipGoodbyeUrl            = "/v1/goodbye"                       // Send/receive message that a broker is shutting down

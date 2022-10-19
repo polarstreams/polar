@@ -165,7 +165,7 @@ func (c *consumer) AcceptConnections() error {
 	<-startChan
 	c.listener = listener
 
-	log.Info().Msgf("Start listening to consumers for http requests on port %d", port)
+	log.Info().Msgf("Start listening to consumers for http requests on %s", address)
 	return nil
 }
 
@@ -199,37 +199,71 @@ func (c *consumer) putRegister(
 	_ httprouter.Params,
 ) error {
 	tc.SetAsRead()
-	var consumerInfo ConsumerInfo
-	rebalanceDelay := true
+	var info ConsumerInfo
+	statelessConsumer := false
 
 	if consumerId := r.URL.Query().Get(consumerQueryKey); consumerId != "" {
-		consumerInfo.Id = consumerId
-		consumerInfo.Group = r.URL.Query().Get(groupQueryKey)
-		consumerInfo.Topics = r.URL.Query()[topicsQueryKey]
+		info.Id = consumerId
+		info.Group = r.URL.Query().Get(groupQueryKey)
+		info.Topics = r.URL.Query()[topicsQueryKey]
 
 		if existingTc, existingInfo := c.state.TrackedConsumerById(consumerId); existingTc != nil {
-			return c.handleAlreadyRegistered(w, tc, consumerInfo, existingTc, existingInfo)
+			if IfEmpty(info.Group, consumerGroupDefault) != existingInfo.Group ||
+				!reflect.DeepEqual(info.Topics, existingInfo.Topics) {
+				return types.NewHttpError(
+					http.StatusBadRequest, "Consumer already registered with different parameters")
+			}
+
+			existingTc.SetAsRead()
+			RespondText(w, "Already registered")
+			return nil
 		}
 
 		tc.TrackAsStateless(consumerId)
-
-		// Default to "no rebalance delay" for stateless-less consumers
-		if r.URL.Query().Get("delay") != "true" {
-			rebalanceDelay = false
-		}
+		statelessConsumer = true
 	} else {
-		if err := json.NewDecoder(r.Body).Decode(&consumerInfo); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
 			return types.NewHttpError(http.StatusBadRequest, "Invalid ConsumerInfo payload")
 		}
 		tc.TrackAsConnectionBound()
 	}
 
-	consumerInfo.Group = IfEmpty(consumerInfo.Group, consumerGroupDefault)
+	// Default to "no rebalance delay" for stateless-less consumers
+	if err := c.addConnectionAndRebalance(tc, info, !statelessConsumer); err != nil {
+		return err
+	}
 
+	if statelessConsumer {
+		// Auto register in peers
+		peers := c.topologyGetter.Topology().Peers()
+		if len(peers) > 0 {
+			// Ignore dev mode
+			err := AnyError(CollectErrors(InParallel(len(peers), func(i int) error {
+				return c.gossiper.SendConsumerRegister(peers[i].Ordinal, info.Id, info.Group, info.Topics)
+			})))
+
+			if err != nil {
+				return err
+			}
+
+			log.Debug().Msgf("Consumer '%s' registered on %d peers", info.Id, len(peers))
+		}
+	}
+
+	RespondText(w, "OK")
+	return nil
+}
+
+func (c *consumer) addConnectionAndRebalance(
+	tc *trackedConsumerHandler,
+	consumerInfo ConsumerInfo,
+	rebalanceDelay bool,
+) error {
 	if consumerInfo.Id == "" || len(consumerInfo.Topics) == 0 {
 		return types.NewHttpError(http.StatusBadRequest, "Consumer id and topics can not be empty")
 	}
 
+	consumerInfo.Group = IfEmpty(consumerInfo.Group, consumerGroupDefault)
 	added, length := c.state.AddConnection(tc, consumerInfo)
 	if !added {
 		return nil
@@ -256,23 +290,6 @@ func (c *consumer) putRegister(
 		rebalanceAndLog()
 	}
 
-	RespondText(w, "OK")
-	return nil
-}
-
-func (c *consumer) handleAlreadyRegistered(
-	w http.ResponseWriter,
-	tc *trackedConsumerHandler,
-	info ConsumerInfo,
-	existingTc *trackedConsumerHandler,
-	existingInfo *ConsumerInfo,
-) error {
-	if IfEmpty(info.Group, consumerGroupDefault) != existingInfo.Group ||
-		!reflect.DeepEqual(info.Topics, existingInfo.Topics) {
-		return types.NewHttpError(http.StatusBadRequest, "Consumer already registered with different parameters")
-	}
-
-	RespondText(w, "Already registered")
 	return nil
 }
 
@@ -463,6 +480,29 @@ func (c *consumer) OnOffsetFromPeer(kv *OffsetStoreKeyValue) {
 		Str("topic", kv.Key.Topic).
 		Msgf("Received offset from peer for token %d/%d", kv.Key.Token, kv.Key.RangeIndex)
 	c.offsetState.Set(kv.Key.Group, kv.Key.Topic, kv.Key.Token, kv.Key.RangeIndex, kv.Value, OffsetCommitLocal)
+}
+
+func (c *consumer) OnRegisterFromPeer(id string, group string, topics []string) error {
+	consumerInfo := ConsumerInfo{
+		Id:     id,
+		Group:  group,
+		Topics: topics,
+	}
+
+	if tc, existingInfo := c.state.TrackedConsumerById(id); tc != nil {
+		if IfEmpty(consumerInfo.Group, consumerGroupDefault) != existingInfo.Group ||
+			!reflect.DeepEqual(consumerInfo.Topics, existingInfo.Topics) {
+			return types.NewHttpError(
+				http.StatusBadRequest, "Consumer already registered with different parameters")
+		}
+		tc.SetAsRead()
+		return nil
+	}
+
+	tc := newTrackedConsumerHandler(nil)
+	tc.TrackAsStateless(id)
+
+	return c.addConnectionAndRebalance(tc, consumerInfo, false)
 }
 
 func (c *consumer) sendConsumerGroupsToPeers() {

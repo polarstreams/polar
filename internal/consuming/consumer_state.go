@@ -74,7 +74,9 @@ func (m *ConsumerState) AddConnection(tc *trackedConsumerHandler, consumer Consu
 	_, found := m.connections[id]
 
 	m.connections[id] = consumer
-	m.trackedConsumers[id] = tc
+	if !found {
+		m.trackedConsumers[id] = tc
+	}
 
 	return !found, len(m.connections)
 }

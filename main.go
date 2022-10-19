@@ -60,7 +60,9 @@ func main() {
 	}
 
 	log.Info().Msgf("Using home dir as %s", config.HomePath())
-	config.CreateAllDirs()
+	if err := config.CreateAllDirs(); err != nil {
+		log.Fatal().Err(err).Msg("Data directories could not be created")
+	}
 
 	localDbClient := localdb.NewClient(config)
 	topicHandler := topics.NewHandler(config)

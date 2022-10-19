@@ -120,7 +120,7 @@ func (i *consumerResponseItem) MarshalJson(
 	decoder *zstd.Decoder,
 	decoderBuffer []byte,
 ) error {
-	decoder.Reset(bytes.NewReader(i.chunk.DataBlock()))
+	_ = decoder.Reset(bytes.NewReader(i.chunk.DataBlock()))
 	writer.ArrayObject(func() {
 		writer.KeyString("topic", i.topic.Name)
 		// Use strings for int64 values

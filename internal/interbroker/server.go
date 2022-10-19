@@ -92,6 +92,7 @@ func (g *gossiper) acceptHttpConnections() error {
 
 			router.POST(conf.GossipConsumerGroupsInfoUrl, ToPostHandle(g.postConsumerGroupInfoHandler))
 			router.POST(conf.GossipConsumerOffsetUrl, ToPostHandle(g.postConsumerOffsetHandler))
+			router.POST(conf.GossipConsumerRegisterUrl, ToPostHandle(g.postConsumerRegister))
 
 			// Routing message is part of gossip but it's usually made using a different client connection
 			router.POST(fmt.Sprintf(conf.RoutingMessageUrl, ":topic"), ToPostHandle(g.postReroutingHandler))
@@ -352,7 +353,7 @@ func (g *gossiper) postConsumerGroupInfoHandler(w http.ResponseWriter, r *http.R
 	return nil
 }
 
-func (g *gossiper) postConsumerOffsetHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+func (g *gossiper) postConsumerOffsetHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
 	var message OffsetStoreKeyValue
 	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
 		return err
@@ -360,6 +361,14 @@ func (g *gossiper) postConsumerOffsetHandler(w http.ResponseWriter, r *http.Requ
 	// Use the registered listener
 	g.consumerInfoListener.OnOffsetFromPeer(&message)
 	return nil
+}
+
+func (g *gossiper) postConsumerRegister(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
+	var message ConsumerRegisterMessage
+	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
+		return err
+	}
+	return g.consumerInfoListener.OnRegisterFromPeer(message.Id, message.Group, message.Topics)
 }
 
 func (g *gossiper) postReroutingHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
