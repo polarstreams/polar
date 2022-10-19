@@ -22,7 +22,7 @@ var _ = Describe("Dev mode", func() {
 		}
 	})
 
-	It("Produce and consume", func ()  {
+	It("Produces and consumes", func ()  {
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
 		b0.WaitOutput("Barco started")
 
@@ -40,6 +40,10 @@ var _ = Describe("Dev mode", func() {
 
 		time.Sleep(500 * time.Millisecond)
 		b0.LookForErrors(30)
+
+	})
+
+	XIt("Produces and consumes listening to stateless clients", func ()  {
 
 	})
 })

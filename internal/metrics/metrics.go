@@ -61,6 +61,11 @@ var (
 		Name: "barco_consumer_active",
 		Help: "The number of active consumers connected to this broker",
 	})
+
+	ConsumerOpenConnections = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "barco_consumer_open_connections",
+		Help: "The number of open connections to consumers that are being served",
+	})
 )
 
 // Serve starts the metrics endpoint

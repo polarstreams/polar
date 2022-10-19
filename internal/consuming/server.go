@@ -105,8 +105,7 @@ func (c *consumer) Init() error {
 }
 
 func (c *consumer) AcceptConnections() error {
-	// TODO: Support both HTTP/1 and HTTP/2
-	server := &http2.Server{}
+	h2s := &http2.Server{}
 	port := c.config.ConsumerPort()
 	address := GetServiceAddress(port, c.topologyGetter.LocalInfo(), c.config)
 
@@ -119,7 +118,7 @@ func (c *consumer) AcceptConnections() error {
 	go func() {
 		startChan <- true
 		for {
-			// HTTP/2-only server (prior knowledge)
+			// HTTP/1 & HTTP/2 with connection tracking
 			conn, err := listener.Accept()
 			if err != nil {
 				if !c.localDb.IsShuttingDown() {
@@ -128,7 +127,15 @@ func (c *consumer) AcceptConnections() error {
 				break
 			}
 
-			tc := newTrackedConsumerHandler(conn)
+			// HTTP1 Server does not support ServeConn(): https://github.com/golang/go/issues/36673
+			// Implement a workaround: listener per connection
+			var connListener net.Listener
+			trackedConn := NewTrackedConnection(conn, func(trackedConn *TrackedConnection) {
+				connListener.Close()
+			})
+
+			connListener = NewSingleConnListener(trackedConn)
+			tc := newTrackedConsumerHandler(trackedConn)
 
 			router := httprouter.New()
 			router.GET(conf.StatusUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -141,11 +148,16 @@ func (c *consumer) AcceptConnections() error {
 			router.POST(conf.ConsumerManualCommitUrl, toTrackedHandler(tc, c.postManualCommit))
 			router.POST(conf.ConsumerGoodbye, toTrackedHandler(tc, c.postGoodbye))
 
-			// server.ServeConn() will block until the connection is not readable anymore
+			// server.Serve() will block until the connection is not readable anymore
 			go func() {
-				server.ServeConn(conn, &http2.ServeConnOpts{
-					Handler: h2c.NewHandler(router, server),
-				})
+				server := &http.Server{
+					Addr:    address,
+					Handler: h2c.NewHandler(router, h2s),
+				}
+
+				metrics.ConsumerOpenConnections.Inc()
+				_ = server.Serve(connListener)
+				metrics.ConsumerOpenConnections.Dec()
 			}()
 		}
 	}()
