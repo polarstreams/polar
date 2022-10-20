@@ -231,6 +231,7 @@ func (b *TestBroker) StartShutdown() {
 }
 
 func (b *TestBroker) Shutdown() {
+	b.StartShutdown()
 	b.WaitForShutdownOrKill()
 }
 
@@ -259,7 +260,7 @@ func (b *TestBroker) WaitForShutdownOrKill() {
 
 	if !exited {
 		log.Error().Msgf("%s Could not be shutted down cleanly, killing process", b.brokerName)
-		b.Kill()
+		_ = b.Kill()
 	}
 }
 

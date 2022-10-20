@@ -28,7 +28,7 @@ var _ = Describe("Dev mode", func() {
 
 		client := NewTestClient(nil)
 		message := `{"hello": "world"}`
-		expectOk(client.ProduceJson(0, "abc", message, ""))
+		expectOk(client.ProduceJson(0, "abc", message, ""), "should produce json")
 		client.RegisterAsConsumer(1, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
 
 		// Wait for the consumer to be considered
