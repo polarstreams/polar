@@ -98,7 +98,7 @@ func (p *producer) AcceptConnections() error {
 
 	<-c
 	p.server = server
-	log.Info().Msgf("Start listening to producers on port %d", port)
+	log.Info().Msgf("Start listening to producers on %s", address)
 	return nil
 }
 

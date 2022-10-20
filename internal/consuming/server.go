@@ -146,7 +146,7 @@ func (c *consumer) AcceptConnections() error {
 			router.POST(conf.ConsumerRegisterUrl, toTrackedHandler(tc, c.putRegister)) // Backwards compatibility
 			router.POST(conf.ConsumerPollUrl, toTrackedHandler(tc, c.postPoll))
 			router.POST(conf.ConsumerManualCommitUrl, toTrackedHandler(tc, c.postManualCommit))
-			router.POST(conf.ConsumerGoodbye, toTrackedHandler(tc, c.postGoodbye))
+			router.PUT(conf.ConsumerGoodbye, toTrackedHandler(tc, c.putGoodbye))
 
 			// server.Serve() will block until the connection is not readable anymore
 			go func() {
@@ -165,7 +165,7 @@ func (c *consumer) AcceptConnections() error {
 	<-startChan
 	c.listener = listener
 
-	log.Info().Msgf("Start listening to consumers for http requests on %s", address)
+	log.Info().Msgf("Start listening to consumers on %s", address)
 	return nil
 }
 
@@ -386,7 +386,7 @@ func (c *consumer) postManualCommit(
 	return nil
 }
 
-func (c *consumer) postGoodbye(
+func (c *consumer) putGoodbye(
 	tc *trackedConsumerHandler,
 	w http.ResponseWriter,
 	r *http.Request,

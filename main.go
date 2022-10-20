@@ -48,7 +48,7 @@ func main() {
 		log.Info().Msg("Starting Barco in dev mode")
 	}
 
-	log.Info().Msgf("With architecture target %s", runtime.GOARCH)
+	log.Info().Msgf("Using architecture target %s", runtime.GOARCH)
 
 	if conf.StartProfiling() {
 		log.Info().Msgf("Profiling enabled")
@@ -82,7 +82,7 @@ func main() {
 	}
 
 	// Basic initialization phase ended
-	metrics.Serve(utils.GetServiceAddress(config.MetricsPort(), discoverer.LocalInfo(), config), config.MetricsPort())
+	metrics.Serve(utils.GetServiceAddress(config.MetricsPort(), discoverer.LocalInfo(), config))
 
 	log.Info().Msg("Start accepting connections from other brokers")
 	if err := gossiper.AcceptConnections(); err != nil {
@@ -95,12 +95,10 @@ func main() {
 
 	generator.StartGenerations()
 
-	log.Info().Msg("Start accepting connections from producers")
 	if err := producer.AcceptConnections(); err != nil {
 		log.Fatal().Err(err).Msg("Exiting")
 	}
 
-	log.Info().Msg("Start accepting connections from consumers")
 	if err := consumer.AcceptConnections(); err != nil {
 		log.Fatal().Err(err).Msg("Exiting")
 	}

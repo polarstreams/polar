@@ -69,7 +69,7 @@ func (d *discoverer) startClientDiscoveryServer() error {
 	d.clientDiscoveryServer = server
 
 	<-c
-	log.Info().Msgf("Start listening to clients for discovery on port %d", port)
+	log.Info().Msgf("Start listening to clients for discovery on %s", address)
 
 	return nil
 }

@@ -69,8 +69,7 @@ var (
 )
 
 // Serve starts the metrics endpoint
-func Serve(address string, port int) {
-	log.Info().Msgf("Starting metrics endpoint on port %d", port)
+func Serve(address string) {
 	c := make(chan bool, 1)
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
@@ -79,5 +78,5 @@ func Serve(address string, port int) {
 		log.Warn().Err(err).Msg("Metrics server stopped listening")
 	}()
 	<-c
-	log.Info().Msgf("Metrics endpoint started on port %d", port)
+	log.Info().Msgf("Metrics endpoint started on %s", address)
 }

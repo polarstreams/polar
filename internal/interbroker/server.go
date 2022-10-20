@@ -110,7 +110,7 @@ func (g *gossiper) acceptHttpConnections() error {
 	<-c
 	g.httpListener = listener
 
-	log.Info().Msgf("Start listening to peers for http requests on port %d", port)
+	log.Info().Msgf("Start listening to peers for http requests on %s", address)
 
 	return nil
 }
