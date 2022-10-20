@@ -7,8 +7,8 @@ import (
 
 	. "github.com/barcostreams/barco/internal/test/conf/mocks"
 	"github.com/barcostreams/barco/internal/test/discovery/mocks"
+	"github.com/barcostreams/barco/internal/test/fakes"
 	. "github.com/barcostreams/barco/internal/types"
-	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -377,19 +377,20 @@ func getTokens(brokerLength int, index int, n int) []TokenRanges {
 	return result
 }
 
-func assertTopics(state *ConsumerState, topics []string, consumerIds ...uuid.UUID) {
+func assertTopics(state *ConsumerState, topics []string, consumerIds ...string) {
 	for _, id := range consumerIds {
 		_, _, topics := state.CanConsume(id)
 		Expect(topics).To(ConsistOf(topics))
 	}
 }
 
-func addConnection(state *ConsumerState, consumerId string, group string, topics ...string) uuid.UUID {
-	conn := NewTrackedConnection(nil, nil)
-	state.AddConnection(conn, ConsumerInfo{
+func addConnection(state *ConsumerState, consumerId string, group string, topics ...string) string {
+	tc := newTrackedConsumerHandler(&fakes.Connection{})
+	tc.TrackAsConnectionBound()
+	state.AddConnection(tc, ConsumerInfo{
 		Id:     consumerId,
 		Group:  group,
 		Topics: topics,
 	})
-	return conn.Id()
+	return tc.Id()
 }

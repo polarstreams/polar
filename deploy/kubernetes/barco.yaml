@@ -16,6 +16,10 @@ spec:
     protocol: TCP
     port: 9251
     targetPort: producer
+  - name: consumer
+    protocol: TCP
+    port: 9252
+    targetPort: consumer
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -89,6 +93,8 @@ spec:
           name: discovery
         - containerPort: 9251
           name: producer
+        - containerPort: 9252
+          name: consumer
         env:
         - name: BARCO_SERVICE_NAME
           value: barco

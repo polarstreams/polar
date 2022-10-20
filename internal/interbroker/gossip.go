@@ -70,6 +70,8 @@ type Gossiper interface {
 	// Sends a message to the broker with the ordinal number containing the local snapshot of consumers
 	SendConsumerGroups(ordinal int, groups []ConsumerGroup) error
 
+	SendConsumerRegister(ordinal int, id string, group string, topics []string) error
+
 	// Sends a message to the broker with the committed offset of a consumer group
 	SendCommittedOffset(ordinal int, offsetKv *OffsetStoreKeyValue) error
 
@@ -525,6 +527,22 @@ func (g *gossiper) SendConsumerGroups(ordinal int, groups []ConsumerGroup) error
 	}
 
 	r, err := g.requestPost(ordinal, conf.GossipConsumerGroupsInfoUrl, jsonBody)
+	defer bodyClose(r)
+	return err
+}
+
+func (g *gossiper) SendConsumerRegister(ordinal int, id string, group string, topics []string) error {
+	message := ConsumerRegisterMessage{
+		Id:     id,
+		Group:  group,
+		Topics: topics,
+	}
+	jsonBody, err := json.Marshal(message)
+	if err != nil {
+		log.Fatal().Err(err).Msgf("json marshalling failed when creating consumer register message")
+	}
+
+	r, err := g.requestPost(ordinal, conf.GossipConsumerRegisterUrl, jsonBody)
 	defer bodyClose(r)
 	return err
 }

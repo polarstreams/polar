@@ -18,13 +18,13 @@ func (g *gossiper) SendToFollowers(
 	segmentId int64,
 	chunk SegmentChunk,
 ) error {
+	if g.config.DevMode() {
+		return nil
+	}
 	peerClients, ok := g.connections.Load().(clientMap)
 	if !ok {
 		log.Error().Msg("Peer clients are not loaded")
 		return fmt.Errorf("Peer clients are not loaded")
-	}
-	if g.config.DevMode() {
-		return nil
 	}
 
 	sent := 0
@@ -118,8 +118,8 @@ func (g *gossiper) StreamFile(
 ) (int, error) {
 	peerClients, ok := g.connections.Load().(clientMap)
 	if !ok {
-		log.Error().Msg("Peer clients are not loaded")
-		return 0, fmt.Errorf("Peer clients are not loaded")
+		log.Error().Msg("Peer clients are not loaded for file streaming")
+		return 0, fmt.Errorf("Peer clients are not loaded for file streaming")
 	}
 
 	response := make(chan dataResponse, 1)

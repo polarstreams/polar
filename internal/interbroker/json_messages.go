@@ -28,6 +28,12 @@ type ConsumerGroupInfoMessage struct {
 	Origin int             `json:"origin"` // The ordinal of the sender
 }
 
+type ConsumerRegisterMessage struct {
+	Id     string   `json:"id"`
+	Group  string   `json:"group"`
+	Topics []string `json:"topics"`
+}
+
 type TopicFileStructureMessage struct {
 	FileNames []string `json:"fileNames"`
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"reflect"
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
@@ -12,10 +13,9 @@ import (
 	"github.com/barcostreams/barco/internal/interbroker"
 	"github.com/barcostreams/barco/internal/localdb"
 	"github.com/barcostreams/barco/internal/metrics"
+	"github.com/barcostreams/barco/internal/types"
 	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
 	. "github.com/barcostreams/barco/internal/utils"
-	. "github.com/google/uuid"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
@@ -25,15 +25,26 @@ import (
 const consumerGroupsToPeersDelay = 10 * time.Second
 
 const (
-	consumerNoOwnedDataDelay = 5 // Seconds to retry after
-	consumerNoDataDelay      = 1 // Seconds to retry after
-	halfOpenTimerResolution  = 1 * time.Second
+	consumerNoOwnedDataDelay    = 5 // Seconds to retry after
+	consumerNoDataDelay         = 1 // Seconds to retry after
+	halfOpenTimerResolution     = 5 * time.Second
+	consumerNotRegisteredStatus = http.StatusConflict
 )
 
 const (
 	defaultMimeType = "application/vnd.barco.consumermessage"
 	jsonMimeType    = "application/json"
 )
+
+const (
+	// The query string parameters used for the consumer server
+	consumerQueryKey = "consumer_id" // Used to determine whether it's stateless-less
+	topicsQueryKey   = "topic"
+	groupQueryKey    = "group"
+	commitQueryKey   = "commit"
+)
+
+const consumerGroupDefault = "default"
 
 var removeDebouncer = Debounce(removeDelay, 0.4) // Debounce events that occurred in the following 2 minutes
 
@@ -94,7 +105,7 @@ func (c *consumer) Init() error {
 }
 
 func (c *consumer) AcceptConnections() error {
-	server := &http2.Server{}
+	h2s := &http2.Server{}
 	port := c.config.ConsumerPort()
 	address := GetServiceAddress(port, c.topologyGetter.LocalInfo(), c.config)
 
@@ -107,7 +118,7 @@ func (c *consumer) AcceptConnections() error {
 	go func() {
 		startChan <- true
 		for {
-			// HTTP/2-only server (prior knowledge)
+			// HTTP/1 & HTTP/2 with connection tracking
 			conn, err := listener.Accept()
 			if err != nil {
 				if !c.localDb.IsShuttingDown() {
@@ -116,55 +127,37 @@ func (c *consumer) AcceptConnections() error {
 				break
 			}
 
+			// HTTP1 Server does not support ServeConn(): https://github.com/golang/go/issues/36673
+			// Implement a workaround: listener per connection
+			var connListener net.Listener
 			trackedConn := NewTrackedConnection(conn, func(trackedConn *TrackedConnection) {
-				c.unRegister(trackedConn)
+				connListener.Close()
 			})
-			log.Debug().Msgf(
-				"Accepted new consumer http connection on %s with assigned id '%s'",
-				conn.LocalAddr().String(),
-				trackedConn.Id())
+
+			connListener = NewSingleConnListener(trackedConn)
+			tc := newTrackedConsumerHandler(trackedConn)
 
 			router := httprouter.New()
 			router.GET(conf.StatusUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+				tc.SetAsRead()
 				fmt.Fprintf(w, "Consumer server listening on %d\n", port)
-				trackedConn.SetAsRead()
 			})
-			router.GET("/test/delay", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-				time.Sleep(10 * time.Second)
-				fmt.Fprintln(w, "Delayed response after 10s")
-				trackedConn.SetAsRead()
-			})
-			router.POST(conf.ConsumerRegisterUrl, toPostHandler(trackedConn, c.postRegister))
-			router.POST(conf.ConsumerPollUrl, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-				c.postPoll(trackedConn, w, r)
-			})
-			router.POST(conf.ConsumerManualCommitUrl, func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-				c.postManualCommit(trackedConn, w)
-			})
+			router.PUT(conf.ConsumerRegisterUrl, toTrackedHandler(tc, c.putRegister))
+			router.POST(conf.ConsumerRegisterUrl, toTrackedHandler(tc, c.putRegister)) // Backwards compatibility
+			router.POST(conf.ConsumerPollUrl, toTrackedHandler(tc, c.postPoll))
+			router.POST(conf.ConsumerManualCommitUrl, toTrackedHandler(tc, c.postManualCommit))
+			router.PUT(conf.ConsumerGoodbye, toTrackedHandler(tc, c.putGoodbye))
 
-			// Detect half-open TCP connections from consumers by getting the last read in loop
+			// server.Serve() will block until the connection is not readable anymore
 			go func() {
-				for trackedConn.IsOpen() {
-					if time.Since(trackedConn.LastRead()) > c.config.ConsumerReadTimeout() {
-						log.Debug().Msgf("Closing consumer connection '%s' due to inactivity", trackedConn.Id())
-						trackedConn.Close()
-						break
-					}
-					time.Sleep(utils.Jitter(halfOpenTimerResolution))
+				server := &http.Server{
+					Addr:    address,
+					Handler: h2c.NewHandler(router, h2s),
 				}
-			}()
 
-			// server.ServeConn() will block until the connection is not readable anymore
-			// start it in the background to accept further connections
-			go func() {
-				server.ServeConn(conn, &http2.ServeConnOpts{
-					Handler: h2c.NewHandler(router, server),
-				})
-				if !c.localDb.IsShuttingDown() {
-					log.Debug().Msgf(
-						"Connection from consumer client with id '%s' is not readable anymore", trackedConn.Id())
-				}
-				trackedConn.Close()
+				metrics.ConsumerOpenConnections.Inc()
+				_ = server.Serve(connListener)
+				metrics.ConsumerOpenConnections.Dec()
 			}()
 		}
 	}()
@@ -172,81 +165,191 @@ func (c *consumer) AcceptConnections() error {
 	<-startChan
 	c.listener = listener
 
-	log.Info().Msgf("Start listening to consumers for http requests on port %d", port)
+	log.Info().Msgf("Start listening to consumers on %s", address)
 	return nil
 }
 
 func (c *consumer) Close() {
+	// Stop listening
 	err := c.listener.Close()
 	log.Err(err).Msgf("Consumer connection listener closed")
-	connections := c.state.GetConnections()
-	for _, conn := range connections {
-		conn.Close()
+
+	for _, tc := range c.state.TrackedConsumers() {
+		// Close connection-bound consumers
+		tc.Close()
 	}
 }
 
-func (c *consumer) postRegister(
-	conn *TrackedConnection,
+func (c *consumer) detectReadTimeout(tc *trackedConsumerHandler) {
+	for !tc.IsClosed() {
+		if time.Since(tc.LastRead()) > c.config.ConsumerReadTimeout() {
+			log.Debug().Msgf("Stop tracking consumer '%s' due to inactivity", tc.Id())
+			c.unRegister(tc.Id(), true)
+			tc.Close()
+			break
+		}
+		time.Sleep(Jitter(halfOpenTimerResolution))
+	}
+}
+
+func (c *consumer) putRegister(
+	tc *trackedConsumerHandler,
 	w http.ResponseWriter,
 	r *http.Request,
-	ps httprouter.Params,
+	_ httprouter.Params,
 ) error {
-	conn.SetAsRead()
-	var consumerInfo ConsumerInfo
-	if err := json.NewDecoder(r.Body).Decode(&consumerInfo); err != nil {
+	tc.SetAsRead()
+	var info ConsumerInfo
+	statelessConsumer := false
+
+	if consumerId := r.URL.Query().Get(consumerQueryKey); consumerId != "" {
+		info.Id = consumerId
+		info.Group = r.URL.Query().Get(groupQueryKey)
+		info.Topics = r.URL.Query()[topicsQueryKey]
+
+		if existingTc, existingInfo := c.state.TrackedConsumerById(consumerId); existingTc != nil {
+			if IfEmpty(info.Group, consumerGroupDefault) != existingInfo.Group ||
+				!reflect.DeepEqual(info.Topics, existingInfo.Topics) {
+				return types.NewHttpError(
+					http.StatusBadRequest, "Consumer already registered with different parameters")
+			}
+
+			existingTc.SetAsRead()
+			RespondText(w, "Already registered")
+			return nil
+		}
+
+		tc.TrackAsStateless(consumerId)
+		statelessConsumer = true
+	} else {
+		if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
+			return types.NewHttpError(http.StatusBadRequest, "Invalid ConsumerInfo payload")
+		}
+		tc.TrackAsConnectionBound()
+	}
+
+	// Default to "no rebalance delay" for stateless-less consumers
+	if err := c.addConnectionAndRebalance(tc, info, !statelessConsumer); err != nil {
 		return err
 	}
-	added, length := c.state.AddConnection(conn, consumerInfo)
+
+	if statelessConsumer {
+		// Auto register in peers
+		peers := c.topologyGetter.Topology().Peers()
+		if len(peers) > 0 {
+			// Ignore dev mode
+			err := AnyError(CollectErrors(InParallel(len(peers), func(i int) error {
+				return c.gossiper.SendConsumerRegister(peers[i].Ordinal, info.Id, info.Group, info.Topics)
+			})))
+
+			if err != nil {
+				return err
+			}
+
+			log.Debug().Msgf("Consumer '%s' registered on %d peers", info.Id, len(peers))
+		}
+	}
+
+	RespondText(w, "OK")
+	return nil
+}
+
+func (c *consumer) addConnectionAndRebalance(
+	tc *trackedConsumerHandler,
+	consumerInfo ConsumerInfo,
+	rebalanceDelay bool,
+) error {
+	if consumerInfo.Id == "" || len(consumerInfo.Topics) == 0 {
+		return types.NewHttpError(http.StatusBadRequest, "Consumer id and topics can not be empty")
+	}
+
+	consumerInfo.Group = IfEmpty(consumerInfo.Group, consumerGroupDefault)
+	added, length := c.state.AddConnection(tc, consumerInfo)
 	if !added {
 		return nil
 	}
 
-	metrics.ConsumerConnections.Set(float64(length))
+	metrics.ActiveConsumers.Set(float64(length))
 	log.Debug().
-		Stringer("connId", conn.Id()).
+		Str("connId", tc.Id()).
 		Int("connections", length).
 		Msgf("Registering new connection to consumer '%s' of group '%s' for topics %v",
 			consumerInfo.Id, consumerInfo.Group, consumerInfo.Topics)
+	go c.detectReadTimeout(tc)
 
-	c.addDebouncer(func() {
+	rebalanceAndLog := func() {
 		if c.state.Rebalance() {
 			log.Info().Msg("Consumer topology was rebalanced after adding a new consumer connection registered")
 			log.Debug().Msgf("Consumer topology contains consumer groups %v", c.state.groups)
 		}
-	})
+	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte("OK"))
+	if rebalanceDelay {
+		c.addDebouncer(rebalanceAndLog)
+	} else {
+		rebalanceAndLog()
+	}
+
 	return nil
 }
 
-func (c *consumer) unRegister(conn *TrackedConnection) {
-	removed, length := c.state.RemoveConnection(conn.Id())
+func (c *consumer) unRegister(id string, debounce bool) {
+	removed, length := c.state.RemoveConnection(id)
 	if !removed {
 		return
 	}
 
-	metrics.ConsumerConnections.Set(float64(length))
-	log.Debug().Int("connections", length).Msgf("Connection from consumer client closed")
+	metrics.ActiveConsumers.Set(float64(length))
+	log.Debug().Int("consumers", length).Msgf("Consumer '%s' unregistered", id)
 
-	// We shouldn't rush to rebalance
-	removeDebouncer(func() {
+	rebalanceAndLog := func() {
 		if c.state.Rebalance() {
 			log.Info().Msg("Consumer topology was rebalanced after removing a connection to a consumer client")
 		}
-	})
-}
-
-func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter, r *http.Request) {
-	conn.SetAsRead()
-	group, tokens, _ := logsToServe(c.state, c.topologyGetter, conn.Id())
-	if len(tokens) == 0 {
-		log.Debug().Msgf("Received consumer client poll from connection '%s' with no assigned tokens", conn.Id())
-		NoContentResponse(w, consumerNoOwnedDataDelay)
-		return
 	}
 
-	log.Debug().Msgf("Received consumer client poll from connection '%s'", conn.Id())
+	if debounce {
+		// We shouldn't rush to rebalance
+		removeDebouncer(rebalanceAndLog)
+	} else {
+		rebalanceAndLog()
+	}
+}
+
+// Verifies whether the consumer is tracked or, for stateless consumers, whether it can load an already tracked consumer
+func (c *consumer) isRegistered(tc *trackedConsumerHandler, r *http.Request) bool {
+	if tc.IsTracked() {
+		return true
+	}
+
+	if consumerId := r.URL.Query().Get(consumerQueryKey); consumerId != "" {
+		if existing, _ := c.state.TrackedConsumerById(consumerId); existing != nil {
+			tc.LoadFromExisting(existing)
+			return true
+		}
+	}
+	return false
+}
+
+func (c *consumer) postPoll(
+	tc *trackedConsumerHandler,
+	w http.ResponseWriter,
+	r *http.Request,
+	_ httprouter.Params,
+) error {
+	if !c.isRegistered(tc, r) {
+		return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
+	}
+	tc.SetAsRead()
+	id := tc.Id()
+	group, tokens, _ := logsToServe(c.state, c.topologyGetter, id)
+	if len(tokens) == 0 {
+		log.Debug().Msgf("Received consumer client poll from connection '%s' with no assigned tokens", id)
+		NoContentResponse(w, consumerNoOwnedDataDelay)
+		return nil
+	}
+
+	log.Debug().Msgf("Received consumer client poll from '%s'", id)
 	groupReadQueue := c.getOrCreateReadQueue(group)
 
 	format := compressedBinaryFormat
@@ -254,22 +357,61 @@ func (c *consumer) postPoll(conn *TrackedConnection, w http.ResponseWriter, r *h
 		format = jsonFormat
 	}
 
-	groupReadQueue.readNext(conn.Id(), format, w)
+	groupReadQueue.readNext(id, format, w)
+	return nil
 }
 
-func (c *consumer) postManualCommit(conn *TrackedConnection, w http.ResponseWriter) {
-	conn.SetAsRead()
-	group, tokens, _ := logsToServe(c.state, c.topologyGetter, conn.Id())
+func (c *consumer) postManualCommit(
+	tc *trackedConsumerHandler,
+	w http.ResponseWriter,
+	r *http.Request,
+	_ httprouter.Params,
+) error {
+	if !c.isRegistered(tc, r) {
+		return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
+	}
+	tc.SetAsRead()
+	id := tc.Id()
+	group, tokens, _ := logsToServe(c.state, c.topologyGetter, id)
 	if len(tokens) == 0 {
 		log.Debug().
-			Msgf("Received consumer client manual commit from connection '%s' with no assigned tokens", conn.Id())
+			Msgf("Received consumer client manual commit from connection '%s' with no assigned tokens", id)
 		NoContentResponse(w, consumerNoOwnedDataDelay)
-		return
+		return nil
 	}
 
-	log.Debug().Msgf("Received consumer client manual commit from connection '%s'", conn.Id())
+	log.Debug().Msgf("Received consumer client manual commit from connection '%s'", id)
 	groupReadQueue := c.getOrCreateReadQueue(group)
-	groupReadQueue.manualCommit(conn.Id(), w)
+	groupReadQueue.manualCommit(id, w)
+	return nil
+}
+
+func (c *consumer) putGoodbye(
+	tc *trackedConsumerHandler,
+	w http.ResponseWriter,
+	r *http.Request,
+	_ httprouter.Params,
+) error {
+	if !c.isRegistered(tc, r) {
+		return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
+	}
+
+	id := tc.Id()
+	log.Debug().Msgf("Processing consumer goodbye from '%s'", id)
+
+	if r.URL.Query().Get(commitQueryKey) != "false" {
+		group, tokens, _ := logsToServe(c.state, c.topologyGetter, id)
+		if len(tokens) > 0 {
+			log.Debug().Msgf("Committing offset as part of goodbye for consumer '%s'", id)
+			groupReadQueue := c.getOrCreateReadQueue(group)
+			groupReadQueue.manualCommit(id, ignoreResponse{})
+		}
+	}
+
+	c.unRegister(id, !tc.IsStateless())
+	tc.Close()
+	RespondText(w, "OK")
+	return nil
 }
 
 func (c *consumer) getOrCreateReadQueue(group string) *groupReadQueue {
@@ -280,13 +422,13 @@ func (c *consumer) getOrCreateReadQueue(group string) *groupReadQueue {
 	return grq.(*groupReadQueue)
 }
 
-type ConnAwareHandle func(*TrackedConnection, http.ResponseWriter, *http.Request, httprouter.Params) error
+type ConsumerAwareHandle func(*trackedConsumerHandler, http.ResponseWriter, *http.Request, httprouter.Params) error
 
 // Gets the tokens and topics to serve, given a connection.
 func logsToServe(
 	state *ConsumerState,
 	topologyGetter discovery.TopologyGetter,
-	connId UUID,
+	connId string,
 ) (string, []TokenRanges, []string) {
 	group, tokenRanges, topics := state.CanConsume(connId)
 	if len(tokenRanges) == 0 {
@@ -306,9 +448,9 @@ func logsToServe(
 	return group, leaderTokens, topics
 }
 
-func toPostHandler(c *TrackedConnection, h ConnAwareHandle) httprouter.Handle {
+func toTrackedHandler(tc *trackedConsumerHandler, h ConsumerAwareHandle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		if err := h(c, w, r, ps); err != nil {
+		if err := h(tc, w, r, ps); err != nil {
 			adaptHttpErr(err, w)
 		}
 	}
@@ -340,12 +482,40 @@ func (c *consumer) OnOffsetFromPeer(kv *OffsetStoreKeyValue) {
 	c.offsetState.Set(kv.Key.Group, kv.Key.Topic, kv.Key.Token, kv.Key.RangeIndex, kv.Value, OffsetCommitLocal)
 }
 
+func (c *consumer) OnRegisterFromPeer(id string, group string, topics []string) error {
+	consumerInfo := ConsumerInfo{
+		Id:     id,
+		Group:  group,
+		Topics: topics,
+	}
+
+	if tc, existingInfo := c.state.TrackedConsumerById(id); tc != nil {
+		if IfEmpty(consumerInfo.Group, consumerGroupDefault) != existingInfo.Group ||
+			!reflect.DeepEqual(consumerInfo.Topics, existingInfo.Topics) {
+			return types.NewHttpError(
+				http.StatusBadRequest, "Consumer already registered with different parameters")
+		}
+		tc.SetAsRead()
+		return nil
+	}
+
+	tc := newTrackedConsumerHandler(nil)
+	tc.TrackAsStateless(id)
+
+	return c.addConnectionAndRebalance(tc, consumerInfo, false)
+}
+
 func (c *consumer) sendConsumerGroupsToPeers() {
+	if len(c.topologyGetter.Topology().Brokers) == 1 {
+		// We are in dev mode, there's never going to be a peer
+		return
+	}
+
 	const sendPeriod = 1000
 	for i := 0; ; i++ {
 		groups := c.state.GetInfoForPeers()
 		topology := c.topologyGetter.Topology()
-		if len(groups) > 0 && len(topology.Brokers) > 1 {
+		if len(groups) > 0 {
 			brokers := topology.NextBrokers(topology.LocalIndex, 2)
 			logEvent := log.Debug()
 			if i%sendPeriod == 0 {

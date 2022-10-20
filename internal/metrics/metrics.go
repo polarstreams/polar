@@ -57,15 +57,19 @@ var (
 		Help: "The number of bytes available to allocate",
 	})
 
-	ConsumerConnections = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "barco_consumer_connections",
-		Help: "The number of open connections from consumers",
+	ActiveConsumers = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "barco_consumer_active",
+		Help: "The number of active consumers connected to this broker",
+	})
+
+	ConsumerOpenConnections = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "barco_consumer_open_connections",
+		Help: "The number of open connections to consumers that are being served",
 	})
 )
 
 // Serve starts the metrics endpoint
-func Serve(address string, port int) {
-	log.Info().Msgf("Starting metrics endpoint on port %d", port)
+func Serve(address string) {
 	c := make(chan bool, 1)
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
@@ -74,5 +78,5 @@ func Serve(address string, port int) {
 		log.Warn().Err(err).Msg("Metrics server stopped listening")
 	}()
 	<-c
-	log.Info().Msgf("Metrics endpoint started on port %d", port)
+	log.Info().Msgf("Metrics endpoint started on %s", address)
 }

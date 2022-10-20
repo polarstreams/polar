@@ -14,7 +14,6 @@ import (
 	"github.com/barcostreams/barco/internal/interbroker"
 	. "github.com/barcostreams/barco/internal/types"
 	"github.com/barcostreams/barco/internal/utils"
-	. "github.com/google/uuid"
 	"github.com/karlseguin/jsonwriter"
 	"github.com/klauspost/compress/zstd"
 	"github.com/rs/zerolog/log"
@@ -75,7 +74,7 @@ func newGroupReadQueue(
 }
 
 type readQueueItem struct {
-	connId     UUID
+	connId     string
 	writer     http.ResponseWriter
 	done       chan bool // Gets a single value when it's done writing the response
 	commitOnly bool
@@ -270,7 +269,7 @@ func (q *groupReadQueue) marshalJsonResponse(w http.ResponseWriter, responseItem
 	return err
 }
 
-func (q *groupReadQueue) readNext(connId UUID, format responseFormat, w http.ResponseWriter) {
+func (q *groupReadQueue) readNext(connId string, format responseFormat, w http.ResponseWriter) {
 	done := make(chan bool, 1)
 	q.items <- readQueueItem{
 		connId: connId,
@@ -282,7 +281,7 @@ func (q *groupReadQueue) readNext(connId UUID, format responseFormat, w http.Res
 	<-done
 }
 
-func (q *groupReadQueue) manualCommit(connId UUID, w http.ResponseWriter) {
+func (q *groupReadQueue) manualCommit(connId string, w http.ResponseWriter) {
 	done := make(chan bool, 1)
 	q.items <- readQueueItem{
 		connId:     connId,

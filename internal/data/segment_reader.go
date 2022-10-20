@@ -17,7 +17,6 @@ import (
 	"github.com/barcostreams/barco/internal/conf"
 	. "github.com/barcostreams/barco/internal/types"
 	"github.com/barcostreams/barco/internal/utils"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
@@ -105,7 +104,7 @@ func (s *SegmentReader) read() {
 	lastCommit := &time.Time{}
 	nextFileName := ""
 	offsetGap := int64(-1) // The last message offset (inclusive) of the missing messages range: [s.messageOffset, offsetGap]
-	var lastOrigin *uuid.UUID
+	var lastOrigin *string
 
 	for item := range s.Items {
 		shouldResetLastCommitted := lastOrigin != nil && *lastOrigin != item.Origin()

@@ -22,7 +22,9 @@ const removeClientCheckDelay = 5 * time.Second
 
 func (g *gossiper) OpenConnections() {
 	topology := g.discoverer.Topology()
-	log.Info().Msgf("Start opening connections to %d peers", len(topology.Brokers)-1)
+	if len(topology.Brokers) > 1 {
+		log.Info().Msgf("Start opening connections to %d peers", len(topology.Brokers)-1)
+	}
 	g.createNewClients(g.discoverer.Topology())
 }
 

@@ -4,15 +4,21 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"net"
+	"net/http"
 	"strconv"
+	"sync/atomic"
+	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/data"
+	"github.com/barcostreams/barco/internal/types"
 	. "github.com/barcostreams/barco/internal/types"
 	"github.com/barcostreams/barco/internal/utils"
 	"github.com/google/uuid"
 	"github.com/karlseguin/jsonwriter"
 	"github.com/klauspost/compress/zstd"
+	"github.com/rs/zerolog/log"
 )
 
 // Represents a single consumer instance
@@ -43,11 +49,11 @@ const (
 type segmentReadItem struct {
 	chunkResult chan SegmentChunk
 	errorResult chan error
-	origin      uuid.UUID
+	origin      string
 	commitOnly  bool
 }
 
-func newSegmentReadItem(origin uuid.UUID, commitOnly bool) *segmentReadItem {
+func newSegmentReadItem(origin string, commitOnly bool) *segmentReadItem {
 	return &segmentReadItem{
 		chunkResult: make(chan SegmentChunk, 1),
 		errorResult: make(chan error, 1),
@@ -61,7 +67,7 @@ func (r *segmentReadItem) SetResult(err error, chunk SegmentChunk) {
 	r.errorResult <- err
 }
 
-func (r *segmentReadItem) Origin() uuid.UUID {
+func (r *segmentReadItem) Origin() string {
 	return r.origin
 }
 
@@ -114,7 +120,7 @@ func (i *consumerResponseItem) MarshalJson(
 	decoder *zstd.Decoder,
 	decoderBuffer []byte,
 ) error {
-	decoder.Reset(bytes.NewReader(i.chunk.DataBlock()))
+	_ = decoder.Reset(bytes.NewReader(i.chunk.DataBlock()))
 	writer.ArrayObject(func() {
 		writer.KeyString("topic", i.topic.Name)
 		// Use strings for int64 values
@@ -181,4 +187,192 @@ type readerKey struct {
 type recordHeader struct {
 	Timestamp int64
 	Length    uint32
+}
+
+// Noop workaround for manual committing
+// https://github.com/barcostreams/barco/issues/70
+type ignoreResponse struct{}
+
+func (i ignoreResponse) Header() http.Header {
+	return http.Header{}
+}
+
+func (i ignoreResponse) Write(b []byte) (int, error) {
+	return len(b), nil
+}
+
+func (i ignoreResponse) WriteHeader(statusCode int) {}
+
+type trackedConsumer interface {
+	types.Closer
+
+	// Sets the last tracked read for deadlines
+	SetAsRead()
+
+	LastRead() time.Time
+
+	// Returns the identifier of the consumer instance connection.
+	// When using stateless-less flow, it matches the identifier of the consumer
+	Id() string
+
+	// Determines whether it has been closed
+	IsClosed() bool
+}
+
+// Handles state to support both connection based consumers and stateless-less ones.
+type trackedConsumerByConnection struct {
+	conn     net.Conn
+	lastRead int64
+	id       string // Id of the connection
+	isClosed atomic.Bool
+}
+
+func (c *trackedConsumerByConnection) Close() {
+	_ = c.conn.Close()
+	c.isClosed.Store(true)
+}
+
+func (c *trackedConsumerByConnection) SetAsRead() {
+	atomic.StoreInt64(&c.lastRead, time.Now().UnixMilli())
+}
+
+func (c *trackedConsumerByConnection) LastRead() time.Time {
+	return time.UnixMilli(atomic.LoadInt64(&c.lastRead))
+}
+
+func (c *trackedConsumerByConnection) Id() string {
+	return c.id
+}
+
+func (c *trackedConsumerByConnection) IsClosed() bool {
+	return c.isClosed.Load()
+}
+
+type trackedConsumerById struct {
+	lastRead int64
+	id       string // Id of the connection and the consumer
+	isClosed atomic.Bool
+}
+
+func (c *trackedConsumerById) Close() {
+	c.isClosed.Store(true)
+}
+
+func (c *trackedConsumerById) SetAsRead() {
+	atomic.StoreInt64(&c.lastRead, time.Now().UnixMilli())
+}
+
+func (c *trackedConsumerById) LastRead() time.Time {
+	return time.UnixMilli(atomic.LoadInt64(&c.lastRead))
+}
+
+func (c *trackedConsumerById) Id() string {
+	return c.id
+}
+
+func (c *trackedConsumerById) IsClosed() bool {
+	return c.isClosed.Load()
+}
+
+// Maintains state to support both connection based consumers and connection-less ones
+type trackedConsumerHandler struct {
+	value       atomic.Value
+	initialConn net.Conn
+}
+
+func newTrackedConsumerHandler(initialConn net.Conn) *trackedConsumerHandler {
+	return &trackedConsumerHandler{
+		value:       atomic.Value{},
+		initialConn: initialConn,
+	}
+}
+
+func (c *trackedConsumerHandler) getValue() trackedConsumer {
+	v := c.value.Load()
+	if v == nil {
+		return nil
+	}
+	return v.(trackedConsumer)
+}
+
+func (c *trackedConsumerHandler) Id() string {
+	value := c.getValue()
+	if value == nil {
+		log.Error().Msgf("Tracked consumer id accessed before registering")
+		return ""
+	}
+	return value.Id()
+}
+
+func (c *trackedConsumerHandler) IsTracked() bool {
+	return c.getValue() != nil
+}
+
+func (c *trackedConsumerHandler) TrackAsStateless(id string) {
+	// Force compile time check
+	var value trackedConsumer = &trackedConsumerById{
+		lastRead: time.Now().UnixMilli(),
+		id:       id,
+	}
+	c.value.Store(value)
+	c.initialConn = nil // Allow to be GC'ed
+}
+
+func (c *trackedConsumerHandler) IsStateless() bool {
+	if v := c.getValue(); v != nil {
+		_, ok := v.(*trackedConsumerById)
+		return ok
+	}
+	return false
+}
+
+func (c *trackedConsumerHandler) LoadFromExisting(existing *trackedConsumerHandler) {
+	existingValue := existing.getValue()
+	if existingValue == nil {
+		log.Error().Msgf("Unexpected existing tracked consumer without value")
+		return
+	}
+	byId, ok := existingValue.(*trackedConsumerById)
+	if !ok {
+		log.Error().Msgf("Unexpected existing tracked consumer that is NOT by id: %+v", existingValue)
+		return
+	}
+	c.value.Store(byId)
+	c.initialConn = nil // Allow to be GC'ed
+}
+
+func (c *trackedConsumerHandler) TrackAsConnectionBound() {
+	var value trackedConsumer = &trackedConsumerByConnection{
+		conn:     c.initialConn,
+		lastRead: time.Now().UnixMilli(),
+		id:       uuid.New().String(),
+	}
+	c.value.Store(value)
+}
+
+func (c *trackedConsumerHandler) SetAsRead() {
+	if value := c.getValue(); value != nil {
+		value.SetAsRead()
+	}
+}
+
+func (c *trackedConsumerHandler) LastRead() time.Time {
+	if value := c.getValue(); value != nil {
+		return value.LastRead()
+	}
+	return time.Time{}
+}
+
+func (c *trackedConsumerHandler) IsClosed() bool {
+	if v := c.getValue(); v != nil {
+		return v.IsClosed()
+	}
+	return false
+}
+
+// Handles closing the internal connection, when there's one
+func (c *trackedConsumerHandler) Close() {
+	if value := c.getValue(); value != nil {
+		value.Close()
+	}
 }

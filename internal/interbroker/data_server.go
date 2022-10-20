@@ -44,7 +44,7 @@ func (g *gossiper) acceptDataConnections() error {
 	<-c
 	g.dataListener = listener
 
-	log.Info().Msgf("Start listening to peers for data streams on port %d", port)
+	log.Info().Msgf("Start listening to peers for data streams on %s", address)
 
 	return nil
 }

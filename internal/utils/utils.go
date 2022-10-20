@@ -65,10 +65,15 @@ func ToPostHandle(he HandleWithError) httprouter.Handle {
 		if err := he(w, r, ps); err != nil {
 			adaptHttpErr(err, w)
 		} else {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = w.Write([]byte("OK"))
+			RespondText(w, "OK")
 		}
 	}
+}
+
+// Writes a text message in the response
+func RespondText(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(message))
 }
 
 // NewBufferCap returns a buffer with the initial provided initial capacity
@@ -216,6 +221,25 @@ func InParallel(length int, f func(int) error) []chan error {
 	return result
 }
 
+// Collects single messages from each channel
+func CollectErrors(channels []chan error) []error {
+	result := make([]error, len(channels))
+	for i, c := range channels {
+		result[i] = <-c
+	}
+	return result
+}
+
+// Returns the first non nil error in the slice or nil
+func AnyError(errors []error) error {
+	for _, e := range errors {
+		if e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
 func FindGenByToken(generations []types.Generation, token types.Token) int {
 	for i, gen := range generations {
 		if gen.Start == token {
@@ -242,4 +266,11 @@ func Min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func IfEmpty(value string, defaultValue string) string {
+	if value == "" {
+		return defaultValue
+	}
+	return value
 }

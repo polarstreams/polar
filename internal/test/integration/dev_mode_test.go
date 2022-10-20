@@ -14,7 +14,7 @@ import (
 var _ = Describe("Dev mode", func() {
 	var b0 *TestBroker
 
-	AfterEach(func ()  {
+	AfterEach(func() {
 		log.Debug().Msgf("Shutting down dev test cluster")
 
 		if b0 != nil {
@@ -22,13 +22,13 @@ var _ = Describe("Dev mode", func() {
 		}
 	})
 
-	It("Produce and consume", func ()  {
+	It("Produces and consumes", func() {
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
 		b0.WaitOutput("Barco started")
 
 		client := NewTestClient(nil)
 		message := `{"hello": "world"}`
-		expectOk(client.ProduceJson(0, "abc", message, ""))
+		expectOk(client.ProduceJson(0, "abc", message, ""), "should produce json")
 		client.RegisterAsConsumer(1, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
 
 		// Wait for the consumer to be considered
