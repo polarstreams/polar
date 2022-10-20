@@ -59,8 +59,9 @@ Read the [technical introduction](./docs/TECHNICAL_INTRO.md) in our documentatio
 ## Documentation
 
 - [Documentation Index](./docs/README.md)
-- [Benchmarks](./docs/BENCHMARKS.md)
 - [REST API docs][rest-api]
+- [Installing](./docs/install/README.md)
+- [Benchmarks](./docs/BENCHMARKS.md)
 - [FAQ](./docs/FAQ.md)
 
 ## Brief intro about event streaming, consumer groups, ordering guarantees
@@ -72,6 +73,9 @@ TODO: DESCRIBE
 TODO: DESCRIBE
 
 ## Getting started
+
+Producing and consuming messages from Barco is as simple as sending a HTTP request. Use your favorite HTTP client in
+your technology stack to send and retrieve events. Additionally, we also provide a [Go Client Library][go-client].
 
 ### Getting started on Docker
 
@@ -93,7 +97,7 @@ curl -X POST -i -d '{"hello":"world"}' \
     "http://localhost:9251/v1/topic/my_topic/messages"
 ```
 
-Consuming messages is also supported via client libraries and using the REST API. Consuming requires a certain
+Consuming messages is also supported via the REST API or with client libraries. Consuming requires a certain
 request flow to support stateless HTTP clients and still provide ordering and delivery guarantees.
 
 First, register a consumer in the cluster by setting your consumer identifier, the consumer group and
@@ -125,7 +129,7 @@ Read more about the [Barco REST API in the documentation][rest-api]. You can als
 
 ### Getting started on Kubernetes
 
-
+Get started on Kubernetes using [this guide](./docs/getting_started/ON_KUBERNETES.md).
 
 -----
 

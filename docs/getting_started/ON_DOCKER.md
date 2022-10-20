@@ -62,8 +62,8 @@ instance will not continue reading. The broker will also attempt to manually com
 curl -X POST "http://localhost:9252/v1/consumer/goodbye?consumer_id=1"
 ```
 
-If a consumer does not send requests over a span of 2 minutes to a broker, the consumer instance will no longer
-be considered an active reader.
+If a consumer does not send requests over a span of 2 minutes to a broker, the brokers will consider the consumer
+instance as inactive and it will not be included in the data assignment.
 
 Read more about the API flow and guarantees on the [REST API Documentation][rest-api].
 
