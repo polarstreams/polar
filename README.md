@@ -12,9 +12,9 @@ Barco Streams is optimized to be resource efficient, have minimal operational ov
 ### Lightweight & Fast
 
 - Limited memory footprint
-- Production workloads consume 0.5GiB of memory per pod
+- Production workloads using just 0.5GiB of memory per pod
 - [1+ million durable writes per second on commodity hardware](./docs/BENCHMARKS.md)
-- Small binary size, arm64 as first class citizen
+- Small binary size, arm64 as first-class citizen
 - No additional dependencies, i.e., no Zookeeper
 
 ### Elastic
@@ -56,30 +56,71 @@ which will be used to determine the data that naturally belongs to that broker.
 
 Read the [technical introduction](./docs/TECHNICAL_INTRO.md) in our documentation for more information.
 
-## Installing
+## Documentation
 
-### Installing on Kubernetes
+- [Documentation Index](./docs/README.md)
+- [Benchmarks](./docs/BENCHMARKS.md)
+- [REST API docs](./docs/REST_API.md)
+- [FAQ](./docs/FAQ.md)
 
-You can install Barco on Kubernetes using `kubectl` by using [our kustomize base](./deploy/kubernetes/).
+## Brief intro about event streaming, consumer groups, ordering guarantees
 
-Follow [our guide to install on K8s](./docs/install/KUBERNETES.md).
+TODO: DESCRIBE
 
-### Installing with Docker Compose for Application Development
+## Why Barco Streams?
 
-You can use docker / docker compose to run Barco for application development and CI.
+TODO: DESCRIBE
 
-Read [this guide to run it using docker compose](./docs/install/DOCKER_COMPOSE.md).
+## Getting started
 
-### Installing locally for Application Development
+### Getting started on Docker
 
-Barco expects the cluster to be composed by multiple brokers. To simplify application development, we introduced
-"dev mode" setting to run a single-broker cluster for application development.
+Barco Streams is distributed by default with a minimal size of 3 brokers for production use. You can run a
+single-broker cluster locally and in Docker/Podman with developer mode enabled.
 
-After [building](#build) Barco, set the `BARCO_DEV_MODE` environment variable before running:
-
-```bash
-BARCO_DEV_MODE=true BARCO_HOME=./barco-data go run .
+```shell
+docker run --rm --env BARCO_DEV_MODE=true -p 9250-9252:9250-9252 barcostreams/barco:latest
 ```
+
+You can start producing messages using a [client library][go-client] or directly invoking the Barco's
+[REST API](./docs/REST_API.md), for example:
+
+```shell
+curl -X POST -i -d '{"hello":"world"}' \
+    -H "Content-Type: application/json" \
+    "http://localhost:9251/v1/topic/my_topic/messages"
+```
+
+Consuming messages is also supported via client libraries and using the REST API. Consuming requires a certain
+request flow to support stateless HTTP clients and still provide ordering and delivery guarantees.
+
+First, register a consumer in the cluster by setting your consumer identifier, the consumer group and
+the topics to subscribed to:
+
+```shell
+curl -X PUT \
+    "http://localhost:9252/v1/consumer/register?consumer_id=1&group=my_app&topic=my_topic"
+```
+
+Note that `consumer_id` and `group` parameter values can be chosen freely by you, you only have to make sure
+those values are uniform across the different instances of your application. In most cases the application name is a
+good choice for consumer `group` name and the application instance id or a random uuid are suited for the `consumer_id`
+value.
+
+After registering, you can start polling from the brokers:
+
+```shell
+curl -i -X POST -H "Accept: application/json" \
+    "http://localhost:9252/v1/consumer/poll?consumer_id=1"
+```
+
+Autocommit
+
+### Getting started on Kubernetes
+
+
+
+-----
 
 ## Build
 
@@ -123,10 +164,10 @@ services.
 We are always happy to have contributions to the project whether it is source code, documentation, bug reports,
 feature requests or feedback. To get started with contributing:
 
-- Have a look through GitHub issues labeled ["Good first issue"](https://github.com/barcostreams/barco/labels/good%20first%20issue).
+- Have a look through GitHub issues labeled ["Good first issue"][good-first-issue].
 - Read the [contribution guide](docs/CONTRIBUTING.md).
 - See the [build instructions](#build), for details on building Barco.
-- [Create a fork](https://docs.github.com/en/github/getting-started-with-github/fork-a-repo) of Barco and submit a pull
+- [Create a fork][create-fork] of Barco and submit a pull
 request with your proposed changes.
 
 ## License
@@ -144,3 +185,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Affero General Public License for more details.
 
 https://www.gnu.org/licenses/agpl-3.0.html
+
+[good-first-issue]: https://github.com/barcostreams/barco/labels/good%20first%20issue
+[create-fork]: https://docs.github.com/en/github/getting-started-with-github/fork-a-repo
+[go-client]: https://github.com/barcostreams/go-client

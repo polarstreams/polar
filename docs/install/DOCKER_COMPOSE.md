@@ -8,7 +8,7 @@ You can run a single-broker cluster in developer mode using the following servic
 version: "3.9"
 services:
   barco:
-    image: "barcostreams/barco:dev1"
+    image: "barcostreams/barco:latest"
     environment:
       - BARCO_DEV_MODE=true
     healthcheck:
