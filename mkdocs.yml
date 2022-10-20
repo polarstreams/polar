@@ -7,7 +7,11 @@ nav:
   - Overview: 'README.md'
   - About: 'TECHNICAL_INTRO.md'
   - Install: 'install/README.md'
-  - Getting Started: 'GETTING_STARTED.md'
+  - Getting Started:
+    - Getting Started on Docker: 'getting_started/ON_DOCKER.md'
+    - Getting Started on Kubernetes: 'getting_started/ON_KUBERNETES.md'
+  - REST API docs: 'REST_API.md'
+  - Benchmarks: 'BENCHMARKS.md'
   - FAQ: FAQ.md
 
 copyright: >-

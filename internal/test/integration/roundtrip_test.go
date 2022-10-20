@@ -466,7 +466,7 @@ var _ = Describe("A 3 node cluster", func() {
 			}
 
 			for i := 0; i < 2; i++ {
-				req, _ := http.NewRequest(http.MethodPut, "http://127.0.0.1:9252/v1/consumer/goodbye?consumer_id=c1", nil)
+				req, _ := http.NewRequest(http.MethodPost, "http://127.0.0.1:9252/v1/consumer/goodbye?consumer_id=c1", nil)
 				resp, err := client.Do(req)
 				Expect(err).NotTo(HaveOccurred())
 				if i == 0 {

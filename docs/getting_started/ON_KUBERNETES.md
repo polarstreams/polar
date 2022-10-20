@@ -1,4 +1,6 @@
-# Getting Started with Barco
+# Getting Started with Barco on Kubernetes
+
+TODO: NEEDS ADAPTING
 
 Barco supports producing and consuming events using HTTP APIs.
 

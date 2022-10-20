@@ -146,7 +146,7 @@ func (c *consumer) AcceptConnections() error {
 			router.POST(conf.ConsumerRegisterUrl, toTrackedHandler(tc, c.putRegister)) // Backwards compatibility
 			router.POST(conf.ConsumerPollUrl, toTrackedHandler(tc, c.postPoll))
 			router.POST(conf.ConsumerManualCommitUrl, toTrackedHandler(tc, c.postManualCommit))
-			router.PUT(conf.ConsumerGoodbye, toTrackedHandler(tc, c.putGoodbye))
+			router.POST(conf.ConsumerGoodbye, toTrackedHandler(tc, c.postGoodbye))
 
 			// server.Serve() will block until the connection is not readable anymore
 			go func() {
@@ -386,7 +386,7 @@ func (c *consumer) postManualCommit(
 	return nil
 }
 
-func (c *consumer) putGoodbye(
+func (c *consumer) postGoodbye(
 	tc *trackedConsumerHandler,
 	w http.ResponseWriter,
 	r *http.Request,

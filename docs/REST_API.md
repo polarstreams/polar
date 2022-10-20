@@ -10,6 +10,7 @@ Flow
 ## Producer API
 
 ## Consumer API
-Registers automatically on all clients
-Flow
-Autocommit
+Registers automatically on all brokers
+Flow: loop logic
+Autocommit and manual commit
+Read / idle timeout

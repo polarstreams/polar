@@ -6,7 +6,7 @@ You can install Barco on Kubernetes using `kubectl` by using [our kustomize base
 
 Follow [our guide to install on K8s](./KUBERNETES.md).
 
-## Installing with Docker Compose for Application Development
+## Installing on Docker Compose for Application Development
 
 You can use docker / docker compose to run Barco for application development and CI.
 

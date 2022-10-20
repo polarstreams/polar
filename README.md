@@ -60,7 +60,7 @@ Read the [technical introduction](./docs/TECHNICAL_INTRO.md) in our documentatio
 
 - [Documentation Index](./docs/README.md)
 - [Benchmarks](./docs/BENCHMARKS.md)
-- [REST API docs](./docs/REST_API.md)
+- [REST API docs][rest-api]
 - [FAQ](./docs/FAQ.md)
 
 ## Brief intro about event streaming, consumer groups, ordering guarantees
@@ -75,15 +75,17 @@ TODO: DESCRIBE
 
 ### Getting started on Docker
 
+<!-- Start excerpt from docs/getting_started/WITH_DOCKER.md -->
+
 Barco Streams is distributed by default with a minimal size of 3 brokers for production use. You can run a
-single-broker cluster locally and in Docker/Podman with developer mode enabled.
+single-broker using Docker/Podman with developer mode enabled to get started quickly.
 
 ```shell
 docker run --rm --env BARCO_DEV_MODE=true -p 9250-9252:9250-9252 barcostreams/barco:latest
 ```
 
 You can start producing messages using a [client library][go-client] or directly invoking the Barco's
-[REST API](./docs/REST_API.md), for example:
+[REST API][rest-api], for example:
 
 ```shell
 curl -X POST -i -d '{"hello":"world"}' \
@@ -114,7 +116,12 @@ curl -i -X POST -H "Accept: application/json" \
     "http://localhost:9252/v1/consumer/poll?consumer_id=1"
 ```
 
-Autocommit
+You can continue polling the brokers multiple times to consume data.
+
+<!-- End excerpt -->
+
+Read more about the [Barco REST API in the documentation][rest-api]. You can also check out our official
+[Client Library for Go][go-client].
 
 ### Getting started on Kubernetes
 
@@ -189,3 +196,4 @@ https://www.gnu.org/licenses/agpl-3.0.html
 [good-first-issue]: https://github.com/barcostreams/barco/labels/good%20first%20issue
 [create-fork]: https://docs.github.com/en/github/getting-started-with-github/fork-a-repo
 [go-client]: https://github.com/barcostreams/go-client
+[rest-api]: ./docs/REST_API.md
