@@ -73,6 +73,9 @@ spec:
       labels:
         app.kubernetes.io/name: barco
         name: barco
+      annotations:
+        prometheus.io/port: "9253"
+        prometheus.io/scrape: "true"
     spec:
       serviceAccountName: barco
       terminationGracePeriodSeconds: 60
