@@ -61,7 +61,7 @@ your technology stack to send and retrieve events. Additionally, we also provide
 
 ### Getting Started on Docker
 
-<!-- Start excerpt from docs/getting_started/WITH_DOCKER.md -->
+<!-- Start excerpt from docs/getting_started/on_docker/README.md -->
 
 Barco Streams is distributed by default with a minimal size of 3 brokers for production use. You can run a
 single-broker using Docker/Podman with developer mode enabled to get started quickly.
@@ -106,12 +106,13 @@ You can continue polling the brokers multiple times to consume data.
 
 <!-- End excerpt -->
 
-Read more about the [Barco REST API in the documentation][rest-api]. You can also check out our official
+Read more about other API endpoints in the [complete getting started guide](./docs/getting_started/on_docker/) or the
+[Barco REST API docs][rest-api]. You can also check out our official
 [Client Library for Go][go-client].
 
 ### Getting started on Kubernetes
 
-Get started on Kubernetes using [this guide](./docs/getting_started/ON_KUBERNETES.md).
+Get started with Barco on Kubernetes using [this guide](./docs/getting_started/on_kubernetes/).
 
 -----
 
