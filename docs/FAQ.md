@@ -1,17 +1,5 @@
 # Frequently Asked Questions
 
-## Why Barco?
-
-Barco Streams was created to provide a resource and cost efficient event streaming solution for Kubernetes that is easy
-to use and operate.
-
-We believe that deploying and managing a persistent event streaming for a microservice architecture should be as easy as
-deploying a stateless service. Users should be able to start with small pods (512MiB of memory!) and elastically scale
-to support larger workloads with no operational overhead.
-
-Ease of use and resource efficiency is what the Cloud is all about. Pay for the resources that you need and avoid
-overprovisioning in advance.
-
 ## How Barco compares to Apache Kafka
 
 When Apache Kafka was introduced, it solved a previously unresolved problem: how to safely pass messages between

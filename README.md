@@ -3,7 +3,8 @@
 Barco is a lightweight, elastic, Kubernetes-native event streaming system. It acts as a persistent buffer between
 services providing at-least-once delivery guarantees.
 
-Barco Streams is optimized to be resource efficient, have minimal operational overhead, and be a good K8s neighbor.
+Barco Streams is optimized to be developer friendly, resource efficient, have minimal operational overhead, and be a
+good K8s neighbor.
 
 ![go build](https://github.com/barcostreams/barco/actions/workflows/go.yml/badge.svg)
 
@@ -38,46 +39,27 @@ Barco Streams is optimized to be resource efficient, have minimal operational ov
 Barco Streams is not production ready yet, expect bugs and things that don't work.
 
 We honestly value your contribution to make this project ready for general availability. If you want to contribute,
-check out the [Contributing Guide](docs/CONTRIBUTING.md).
+check out the [Contributing Guide](./CONTRIBUTING.md).
 </details>
 
 -----
 
-## How does Barco work?
-
-Events are organized in topics. Topics in Barco are always multi-producer and multi-consumer. To achieve high
-availability and durability, topic events are persisted on disk on multiple Barco brokers.
-
-Data is automatically distributed across brokers using consistent hashing in a similar way as [Amazon
-DynamoDB](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) and [Apache
-Cassandra](https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html#dataset-partitioning-consistent-hashing). Each broker is assigned a token based on the [ordinal
-index](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#ordinal-index) within the cluster,
-which will be used to determine the data that naturally belongs to that broker.
-
-Read the [technical introduction](./docs/TECHNICAL_INTRO.md) in our documentation for more information.
-
-## Documentation
+## Documentation & Resources
 
 - [Documentation Index](./docs/README.md)
+- [Why Barco?](#why-barco-streams)
+- [How does Barco work?](./docs/TECHNICAL_INTRO.md)
+- [Benchmarks](./docs/BENCHMARKS.md)
 - [REST API docs][rest-api]
 - [Installing](./docs/install/README.md)
-- [Benchmarks](./docs/BENCHMARKS.md)
 - [FAQ](./docs/FAQ.md)
 
-## Brief intro about event streaming, consumer groups, ordering guarantees
-
-TODO: DESCRIBE
-
-## Why Barco Streams?
-
-TODO: DESCRIBE
-
-## Getting started
+## Getting Started
 
 Producing and consuming messages from Barco is as simple as sending a HTTP request. Use your favorite HTTP client in
 your technology stack to send and retrieve events. Additionally, we also provide a [Go Client Library][go-client].
 
-### Getting started on Docker
+### Getting Started on Docker
 
 <!-- Start excerpt from docs/getting_started/WITH_DOCKER.md -->
 
@@ -133,6 +115,18 @@ Get started on Kubernetes using [this guide](./docs/getting_started/ON_KUBERNETE
 
 -----
 
+## Why Barco Streams?
+
+Barco Streams was created to provide a developer friendly and resource efficient event streaming solution for
+Kubernetes that is easy to use and operate.
+
+We believe that deploying and managing a persistent event streaming for a microservice architecture should be as easy as
+deploying a stateless service. Users should be able to start with small pods (512MiB of memory!) and elastically scale
+to support larger workloads with no operational overhead.
+
+Ease of use and resource efficiency is what the Cloud is all about. Pay for the resources that you need and avoid
+overprovisioning in advance.
+
 ## Build
 
 ```bash
@@ -141,7 +135,7 @@ go build .
 go test -v ./...
 ```
 
-The [Contributing Guide](docs/CONTRIBUTING.md#environment-setup) has more information about environment setup and other
+The [Contributing Guide](./CONTRIBUTING.md#environment-setup) has more information about environment setup and other
 topics that can help you to build Barco from source.
 
 ## Design Principles
@@ -176,7 +170,7 @@ We are always happy to have contributions to the project whether it is source co
 feature requests or feedback. To get started with contributing:
 
 - Have a look through GitHub issues labeled ["Good first issue"][good-first-issue].
-- Read the [contribution guide](docs/CONTRIBUTING.md).
+- Read the [contribution guide](./CONTRIBUTING.md).
 - See the [build instructions](#build), for details on building Barco.
 - [Create a fork][create-fork] of Barco and submit a pull
 request with your proposed changes.

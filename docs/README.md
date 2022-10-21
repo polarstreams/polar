@@ -10,7 +10,6 @@ technology with "at least once" message delivery guarantees.
 - Installing <!-- TODO: Maybe call it Deploying?-->
     - [Installing on Kubernetes](./install/KUBERNETES.md)
     - [Installing with Docker Compose](./install/DOCKER_COMPOSE.md)
-- [Contributing](./CONTRIBUTING.md)
 - Features
 - [Benchmarks](./BENCHMARKS.md)
 - [FAQ](./FAQ.md)
