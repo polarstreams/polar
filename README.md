@@ -44,7 +44,7 @@ check out the [Contributing Guide](./CONTRIBUTING.md).
 
 -----
 
-## Documentation & Resources
+## Resources
 
 - [Documentation Index](./docs/README.md)
 - [Why Barco?](#why-barco-streams)

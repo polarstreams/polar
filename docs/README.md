@@ -7,9 +7,10 @@ technology with "at least once" message delivery guarantees.
 - Getting started
     - [Getting started on Docker](./getting_started/ON_DOCKER.md)
     - [Getting started on Kubernetes](./getting_started/ON_KUBERNETES.md)
-- Installing <!-- TODO: Maybe call it Deploying?-->
+- Installing
     - [Installing on Kubernetes](./install/KUBERNETES.md)
     - [Installing with Docker Compose](./install/DOCKER_COMPOSE.md)
 - Features
+- [Rest API](./REST_API.md)
 - [Benchmarks](./BENCHMARKS.md)
 - [FAQ](./FAQ.md)
