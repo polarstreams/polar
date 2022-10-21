@@ -31,7 +31,7 @@ bases:
 images:
   # Override the image tag to pin the version used.
   - name: barcostreams/barco
-    newTag: dev1
+    newTag: latest
 
 resources:
   # The namespace previously created to keep the resources in.
@@ -51,5 +51,5 @@ kubectl kustomize
 kubectl apply -k .
 ```
 
-The command line too should create the Namespace, StatefulSet and other resources. You can checkout Barco logs of a
-broker by using `kubectl logs -n streams statefulset/barco`.
+Kubernetes command line tool should create the Namespace, StatefulSet and other resources. You can checkout Barco
+logs of a broker by using `kubectl logs -n streams statefulset/barco`.

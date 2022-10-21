@@ -1,17 +1,5 @@
 # Frequently Asked Questions
 
-## Why Barco?
-
-Barco Streams was created to provide a resource and cost efficient event streaming solution for Kubernetes that is easy
-to use and operate.
-
-We believe that deploying and managing a persistent event streaming for a microservice architecture should be as easy as
-deploying a stateless service. Users should be able to start with small pods (512MiB of memory!) and elastically scale
-to support larger workloads with no operational overhead.
-
-Ease of use and resource efficiency is what the Cloud is all about. Pay for the resources that you need and avoid
-overprovisioning in advance.
-
 ## How Barco compares to Apache Kafka
 
 When Apache Kafka was introduced, it solved a previously unresolved problem: how to safely pass messages between
@@ -37,9 +25,12 @@ Barco differentiators:
 ## What are the hardware requirements
 
 Barco supports production workloads starting at 0.5GiB of memory and less than a dedicated vCPU. Barco is fast even
-when running on the lower end of commodity hardware, [check out the benchmarks for more information](./BENCHMARKS.md).
+when running on the lower end of commodity hardware, [check out the benchmarks for more information][benchmarks].
 
 ## What settings should I tune?
 
 We strive for having no settings to adapt or watch out for when managing a Barco deployment. In practice, we only
 recommend looking for the default number of consumer ranges per broker (fanout).
+
+
+[benchmarks]: ../benchmarks/

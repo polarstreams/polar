@@ -81,7 +81,7 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
       - name: barco
-        image: barcostreams/barco:dev1
+        image: barcostreams/barco:latest
         imagePullPolicy: Always
         securityContext:
           seccompProfile:

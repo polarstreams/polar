@@ -1,18 +1,18 @@
 site_name: Barco Streams
 repo_url: https://github.com/barcostreams/barco
-edit_uri: edit/main/docs/
+edit_uri: blob/main/docs/
 docs_dir: docs
 
 nav:
   - Overview: 'README.md'
-  - Concepts: 'TECHNICAL_INTRO.md'
-  - Getting started: 'GETTING_STARTED.md'
-  - Install:
-      - Docker Compose: 'install/DOCKER_COMPOSE.md'
-      - Kubernetes: 'install/KUBERNETES.md'
-  - Features:
-      - FAQ: FAQ.md
-
+  - About: 'technical_intro/README.md'
+  - Install: 'install/README.md'
+  - Getting Started:
+    - Getting Started on Docker: 'getting_started/on_docker/README.md'
+    - Getting Started on Kubernetes: 'getting_started/on_kubernetes/README.md'
+  - REST API docs: 'rest_api/README.md'
+  - Benchmarks: 'benchmarks/README.md'
+  - FAQ: 'faq/README.md'
 
 copyright: >-
 

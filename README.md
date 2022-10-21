@@ -3,7 +3,8 @@
 Barco is a lightweight, elastic, Kubernetes-native event streaming system. It acts as a persistent buffer between
 services providing at-least-once delivery guarantees.
 
-Barco Streams is optimized to be resource efficient, have minimal operational overhead, and be a good K8s neighbor.
+Barco Streams is optimized to be developer friendly, resource efficient, have minimal operational overhead, and be a
+good K8s neighbor.
 
 ![go build](https://github.com/barcostreams/barco/actions/workflows/go.yml/badge.svg)
 
@@ -12,9 +13,9 @@ Barco Streams is optimized to be resource efficient, have minimal operational ov
 ### Lightweight & Fast
 
 - Limited memory footprint
-- Production workloads consume 0.5GiB of memory per pod
-- [1+ million durable writes per second on commodity hardware](./docs/BENCHMARKS.md)
-- Small binary size, arm64 as first class citizen
+- Production workloads using just 0.5GiB of memory per pod
+- [1+ million durable writes per second on commodity hardware][benchmarks]
+- Small binary size, arm64 as first-class citizen
 - No additional dependencies, i.e., no Zookeeper
 
 ### Elastic
@@ -38,48 +39,93 @@ Barco Streams is optimized to be resource efficient, have minimal operational ov
 Barco Streams is not production ready yet, expect bugs and things that don't work.
 
 We honestly value your contribution to make this project ready for general availability. If you want to contribute,
-check out the [Contributing Guide](docs/CONTRIBUTING.md).
+check out the [Contributing Guide](./CONTRIBUTING.md).
 </details>
 
 -----
 
-## How does Barco work?
+## Resources
 
-Events are organized in topics. Topics in Barco are always multi-producer and multi-consumer. To achieve high
-availability and durability, topic events are persisted on disk on multiple Barco brokers.
+- [Documentation Index](./docs/)
+- [Why Barco?](#why-barco-streams)
+- [How does Barco work?](./docs/technical_intro/)
+- [Benchmarks][benchmarks]
+- [REST API docs][rest-api]
+- [Installing](./docs/install/)
+- [FAQ](./docs/faq/)
 
-Data is automatically distributed across brokers using consistent hashing in a similar way as [Amazon
-DynamoDB](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) and [Apache
-Cassandra](https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html#dataset-partitioning-consistent-hashing). Each broker is assigned a token based on the [ordinal
-index](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#ordinal-index) within the cluster,
-which will be used to determine the data that naturally belongs to that broker.
+## Getting Started
 
-Read the [technical introduction](./docs/TECHNICAL_INTRO.md) in our documentation for more information.
+Producing and consuming messages from Barco is as simple as sending a HTTP request. Use your favorite HTTP client in
+your technology stack to send and retrieve events. Additionally, we also provide a [Go Client Library][go-client].
 
-## Installing
+### Getting Started on Docker
 
-### Installing on Kubernetes
+<!-- Start excerpt from docs/getting_started/WITH_DOCKER.md -->
 
-You can install Barco on Kubernetes using `kubectl` by using [our kustomize base](./deploy/kubernetes/).
+Barco Streams is distributed by default with a minimal size of 3 brokers for production use. You can run a
+single-broker using Docker/Podman with developer mode enabled to get started quickly.
 
-Follow [our guide to install on K8s](./docs/install/KUBERNETES.md).
-
-### Installing with Docker Compose for Application Development
-
-You can use docker / docker compose to run Barco for application development and CI.
-
-Read [this guide to run it using docker compose](./docs/install/DOCKER_COMPOSE.md).
-
-### Installing locally for Application Development
-
-Barco expects the cluster to be composed by multiple brokers. To simplify application development, we introduced
-"dev mode" setting to run a single-broker cluster for application development.
-
-After [building](#build) Barco, set the `BARCO_DEV_MODE` environment variable before running:
-
-```bash
-BARCO_DEV_MODE=true BARCO_HOME=./barco-data go run .
+```shell
+docker run --rm --env BARCO_DEV_MODE=true -p 9250-9252:9250-9252 barcostreams/barco:latest
 ```
+
+You can start producing messages using a [client library][go-client] or directly invoking the Barco's
+[REST API][rest-api], for example:
+
+```shell
+curl -X POST -i -d '{"hello":"world"}' \
+    -H "Content-Type: application/json" \
+    "http://localhost:9251/v1/topic/my_topic/messages"
+```
+
+Consuming messages is also supported via the REST API or with client libraries. Consuming requires a certain
+request flow to support stateless HTTP clients and still provide ordering and delivery guarantees.
+
+First, register a consumer in the cluster by setting your consumer identifier, the consumer group and
+the topics to subscribed to:
+
+```shell
+curl -X PUT \
+    "http://localhost:9252/v1/consumer/register?consumer_id=1&group=my_app&topic=my_topic"
+```
+
+Note that `consumer_id` and `group` parameter values can be chosen freely by you, you only have to make sure
+those values are uniform across the different instances of your application. In most cases the application name is a
+good choice for consumer `group` name and the application instance id or a random uuid are suited for the `consumer_id`
+value.
+
+After registering, you can start polling from the brokers:
+
+```shell
+curl -i -X POST -H "Accept: application/json" \
+    "http://localhost:9252/v1/consumer/poll?consumer_id=1"
+```
+
+You can continue polling the brokers multiple times to consume data.
+
+<!-- End excerpt -->
+
+Read more about the [Barco REST API in the documentation][rest-api]. You can also check out our official
+[Client Library for Go][go-client].
+
+### Getting started on Kubernetes
+
+Get started on Kubernetes using [this guide](./docs/getting_started/ON_KUBERNETES.md).
+
+-----
+
+## Why Barco Streams?
+
+Barco Streams was created to provide a developer friendly and resource efficient event streaming solution for
+Kubernetes that is easy to use and operate.
+
+We believe that deploying and managing a persistent event streaming for a microservice architecture should be as easy as
+deploying a stateless service. Users should be able to start with small pods (512MiB of memory!) and elastically scale
+to support larger workloads with no operational overhead.
+
+Ease of use and resource efficiency is what the Cloud is all about. Pay for the resources that you need and avoid
+overprovisioning in advance.
 
 ## Build
 
@@ -89,7 +135,7 @@ go build .
 go test -v ./...
 ```
 
-The [Contributing Guide](docs/CONTRIBUTING.md#environment-setup) has more information about environment setup and other
+The [Contributing Guide](./CONTRIBUTING.md#environment-setup) has more information about environment setup and other
 topics that can help you to build Barco from source.
 
 ## Design Principles
@@ -123,10 +169,10 @@ services.
 We are always happy to have contributions to the project whether it is source code, documentation, bug reports,
 feature requests or feedback. To get started with contributing:
 
-- Have a look through GitHub issues labeled ["Good first issue"](https://github.com/barcostreams/barco/labels/good%20first%20issue).
-- Read the [contribution guide](docs/CONTRIBUTING.md).
+- Have a look through GitHub issues labeled ["Good first issue"][good-first-issue].
+- Read the [contribution guide](./CONTRIBUTING.md).
 - See the [build instructions](#build), for details on building Barco.
-- [Create a fork](https://docs.github.com/en/github/getting-started-with-github/fork-a-repo) of Barco and submit a pull
+- [Create a fork][create-fork] of Barco and submit a pull
 request with your proposed changes.
 
 ## License
@@ -144,3 +190,9 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Affero General Public License for more details.
 
 https://www.gnu.org/licenses/agpl-3.0.html
+
+[good-first-issue]: https://github.com/barcostreams/barco/labels/good%20first%20issue
+[create-fork]: https://docs.github.com/en/github/getting-started-with-github/fork-a-repo
+[go-client]: https://github.com/barcostreams/go-client
+[rest-api]: ./docs/rest_api/
+[benchmarks]: ./docs/benchmarks/
