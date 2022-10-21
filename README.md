@@ -14,7 +14,7 @@ good K8s neighbor.
 
 - Limited memory footprint
 - Production workloads using just 0.5GiB of memory per pod
-- [1+ million durable writes per second on commodity hardware](./docs/BENCHMARKS.md)
+- [1+ million durable writes per second on commodity hardware][benchmarks]
 - Small binary size, arm64 as first-class citizen
 - No additional dependencies, i.e., no Zookeeper
 
@@ -46,13 +46,13 @@ check out the [Contributing Guide](./CONTRIBUTING.md).
 
 ## Resources
 
-- [Documentation Index](./docs/README.md)
+- [Documentation Index](./docs/)
 - [Why Barco?](#why-barco-streams)
-- [How does Barco work?](./docs/TECHNICAL_INTRO.md)
-- [Benchmarks](./docs/BENCHMARKS.md)
+- [How does Barco work?](./docs/technical_intro/)
+- [Benchmarks][benchmarks]
 - [REST API docs][rest-api]
-- [Installing](./docs/install/README.md)
-- [FAQ](./docs/FAQ.md)
+- [Installing](./docs/install/)
+- [FAQ](./docs/faq/)
 
 ## Getting Started
 
@@ -194,4 +194,5 @@ https://www.gnu.org/licenses/agpl-3.0.html
 [good-first-issue]: https://github.com/barcostreams/barco/labels/good%20first%20issue
 [create-fork]: https://docs.github.com/en/github/getting-started-with-github/fork-a-repo
 [go-client]: https://github.com/barcostreams/go-client
-[rest-api]: ./docs/REST_API.md
+[rest-api]: ./docs/rest_api/
+[benchmarks]: ./docs/benchmarks/

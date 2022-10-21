@@ -25,9 +25,12 @@ Barco differentiators:
 ## What are the hardware requirements
 
 Barco supports production workloads starting at 0.5GiB of memory and less than a dedicated vCPU. Barco is fast even
-when running on the lower end of commodity hardware, [check out the benchmarks for more information](./BENCHMARKS.md).
+when running on the lower end of commodity hardware, [check out the benchmarks for more information][benchmarks].
 
 ## What settings should I tune?
 
 We strive for having no settings to adapt or watch out for when managing a Barco deployment. In practice, we only
 recommend looking for the default number of consumer ranges per broker (fanout).
+
+
+[benchmarks]: ../benchmarks/

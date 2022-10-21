@@ -88,7 +88,7 @@ Responds HTTP status `200 OK` when the data has been stored and replicated.
 Sending an event.
 
 ```shell
-curl -X POST -i -d '{"product_id": 123, "units": -5}' \
+$ curl -X POST -i -d '{"product_id": 123, "units": -5}' \
     -H "Content-Type: application/json" \
     "http://barco.streams:9251/v1/topic/product_stock/messages?partitionKey=123"
 ```
@@ -123,7 +123,7 @@ Registers a consumer in all the brokers, it's the first step in the read flow an
 Register a consumer in the cluster subscribing to the topic `"product_stock"`.
 
 ```shell
-curl -X PUT \
+$ curl -X PUT \
     "http://barco.streams:9252/v1/consumer/register?consumer_id=1&group=product_stock_updater&topic=product_stock"
 ```
 
@@ -192,7 +192,7 @@ Responds HTTP status `409 Conflict` when the consumer is not considered to be re
 Manually commit the position of the reader.
 
 ```shell
-curl -i -X POST "http://barco.streams:9252/v1/consumer/commit?consumer_id=1"
+$ curl -i -X POST "http://barco.streams:9252/v1/consumer/commit?consumer_id=1"
 ```
 
 ### `POST /v1/consumer/goodbye`

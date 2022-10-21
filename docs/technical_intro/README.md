@@ -55,8 +55,8 @@ for resources with unrelated applications on the K8s node.
 - We can use buffering and flush strategies tuned to the workload when writing.
 - We can control exactly the amount of memory dedicated for buffers and caching (K8s working set).
 
-Additionally, when writing, Barco brokers [compresses and checksums chunks](./developer/FILE_FORMATS.md) of data once
-and replicates the compressed payload, reducing network and CPU usage for replication.
+Additionally, when writing, Barco brokers [compresses and checksums chunks][file-formats] of data
+once and replicates the compressed payload, reducing network and CPU usage for replication.
 
 These techniques translates into better overall performance compared to traditional I/O.
 
@@ -74,3 +74,4 @@ Each broker uses the Gossip protocol to agree on token range ownership and consu
 
 [direct-io]: https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/5/html/global_file_system/s1-manage-direct-io
 [io_uring]: https://en.wikipedia.org/wiki/Io_uring
+[file-formats]: https://github.com/barcostreams/barco/blob/docs-reorg/docs/developer/FILE_FORMATS.md

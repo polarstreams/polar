@@ -3,14 +3,13 @@
 Welcome to the Barco Streams Documentation. Barco is a persistent event streaming
 technology with "at least once" message delivery guarantees.
 
-- [About Barco](./TECHNICAL_INTRO.md)
+- [About Barco](./technical_intro/)
 - Getting started
-    - [Getting started on Docker](./getting_started/ON_DOCKER.md)
-    - [Getting started on Kubernetes](./getting_started/ON_KUBERNETES.md)
-- Installing
-    - [Installing on Kubernetes](./install/KUBERNETES.md)
-    - [Installing with Docker Compose](./install/DOCKER_COMPOSE.md)
-- Features
-- [Rest API](./REST_API.md)
-- [Benchmarks](./BENCHMARKS.md)
-- [FAQ](./FAQ.md)
+    - [Getting started on Docker](./getting_started/on_docker/)
+    - [Getting started on Kubernetes](./getting_started/on_kubernetes/)
+- [Installing](./install/)
+    - [Installing on Kubernetes](./install/kubernetes/)
+    - [Installing with Docker Compose](./install/docker_compose/)
+- [Rest API](./rest_api/)
+- [Benchmarks](./benchmarks/)
+- [FAQ](./faq/)
