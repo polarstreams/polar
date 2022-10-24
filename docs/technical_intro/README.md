@@ -44,24 +44,9 @@ they were written.
 
 ## I/O
 
-Internally, Barco uses [Direct I/O][direct-io] and bypasses the Linux page cache to read and write the log segments.
-
-Bypassing the kernel page cache has the following benefits:
-
-- The page cache is a shared resource in K8s. When a container is accessing data in the page cache it has to compete
-for resources with unrelated applications on the K8s node.
-- No copies exist between the kernel cache and the internal read/write buffers.
-- We can use read ahead strategies tuned to the workload when reading.
-- We can use buffering and flush strategies tuned to the workload when writing.
-- We can control exactly the amount of memory dedicated for buffers and caching (K8s working set).
-
-Additionally, when writing, Barco brokers [compresses and checksums chunks][file-formats] of data
-once and replicates the compressed payload, reducing network and CPU usage for replication.
-
-These techniques translates into better overall performance compared to traditional I/O.
-
-We are looking forward to use the new [io_uring] interfaces once its adoption increases.
-This will allow us to simplify the buffer logic within Barco, but we don't expect a performance gain from it.
+Internally, Barco uses a series of I/O-related techniques that make it both fast and lightweight, supporting high
+throughput and consistently low latency while keeping compute and memory resource utilization low. Learn more about
+these techniques in the [I/O Documentation][io-docs].
 
 ## Interbroker communication
 
@@ -74,4 +59,5 @@ Each broker uses the Gossip protocol to agree on token range ownership and consu
 
 [direct-io]: https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/5/html/global_file_system/s1-manage-direct-io
 [io_uring]: https://en.wikipedia.org/wiki/Io_uring
-[file-formats]: https://github.com/barcostreams/barco/blob/docs-reorg/docs/developer/FILE_FORMATS.md
+[file-formats]: https://github.com/barcostreams/barco/blob/main/docs/developer/FILE_FORMATS.md
+[io-docs]: ../features/io/
