@@ -13,7 +13,8 @@ nav:
   - REST API docs: 'rest_api/README.md'
   - Benchmarks: 'benchmarks/README.md'
   - Features:
-    - Modern IO Techniques: 'features/io/README.md'
+    - Modern I/O Techniques: 'features/io/README.md'
+    - Built for Edge Computing: 'features/edge/README.md'
   - FAQ: 'faq/README.md'
 
 copyright: >-
