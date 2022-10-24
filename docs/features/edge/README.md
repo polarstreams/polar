@@ -1,7 +1,7 @@
 # Built for Edge Computing
 
-There's an increasing demand for running computing resources close to end user, whether is at the boundary of
-operator networks, in an AWS Local Zone or an on-premise edge infrastructure. The edge has great potential for
+There's an increasing demand for running computing resources close to end user, whether it's at the boundary of
+operator networks, in an AWS Local Zone or on-premise edge infrastructure. The edge has great potential for
 running latency-sensitive applications with limited hardware resources.
 
 Barco Streams is the perfect solution for event streaming on the Edge for acting as a safe buffer between edge
