@@ -87,3 +87,10 @@ func (s *ReadSegmentChunk) StartOffset() int64 {
 func (s *ReadSegmentChunk) RecordLength() uint32 {
 	return s.Length
 }
+
+type writerType string
+
+const (
+	replicaWriter writerType = "replica"
+	leaderWriter  writerType = "leader"
+)

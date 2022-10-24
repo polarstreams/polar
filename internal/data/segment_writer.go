@@ -38,6 +38,7 @@ type SegmentWriter struct {
 	segmentLength  int64
 	basePath       string
 	replicator     Replicator
+	writerType     writerType
 }
 
 func NewSegmentWriter(
@@ -63,6 +64,7 @@ func NewSegmentWriter(
 		indexFile:   newIndexFileWriter(basePath, config),
 		basePath:    basePath,
 		replicator:  gossiper,
+		writerType:  leaderWriter,
 	}
 
 	if segmentId == nil {
@@ -72,6 +74,7 @@ func NewSegmentWriter(
 		go s.writeLoopAsLeader()
 	} else {
 		log.Info().Msgf("Creating segment writer as replica for %s", &topic)
+		s.writerType = replicaWriter
 		s.createFile(*segmentId)
 		go s.writeLoopAsReplica()
 	}
@@ -98,6 +101,11 @@ func (s *SegmentWriter) writeLoopAsLeader() {
 		}
 
 		s.writeToBuffer(item)
+
+		if s.segmentFile == nil {
+			// We need to make sure the file and segmentId is created locally before sending to replicas
+			s.createFile(s.bufferedOffset)
+		}
 
 		// Response channel should be buffered in case the response is discarded
 		response := make(chan error, 1)
@@ -134,9 +142,10 @@ func (s *SegmentWriter) writeLoopAsReplica() {
 
 		if s.segmentId != item.SegmentId() {
 			if s.buffer.Len() > 0 {
-				s.flush("closing")
+				s.flush("closing as replica")
 			}
 			s.closeFile()
+			s.createFile(item.SegmentId())
 		}
 
 		s.writeToBuffer(item)
@@ -184,8 +193,8 @@ func (s *SegmentWriter) maybeFlush() bool {
 
 func (s *SegmentWriter) createFile(segmentId int64) {
 	s.segmentId = segmentId
-	name := conf.SegmentFileName(s.segmentId)
-	log.Debug().Msgf("Creating segment file %s on %s", name, s.basePath)
+	name := conf.SegmentFileName(segmentId)
+	log.Info().Str("type", string(s.writerType)).Msgf("Creating segment file %s on %s", name, s.basePath)
 
 	f, err := os.OpenFile(filepath.Join(s.basePath, name), conf.SegmentFileWriteFlags, FilePermissions)
 	if err != nil {
@@ -201,12 +210,16 @@ func (s *SegmentWriter) flush(reason string) {
 	length := int64(s.buffer.Len())
 
 	if s.segmentFile == nil {
+		if s.writerType == replicaWriter {
+			log.Panic().Msgf("Flush should not create file on replicas as the file name will be invalid")
+		}
 		s.createFile(s.bufferedOffset)
 	}
 
 	buf := s.buffer.Bytes()
 	log.Debug().
 		Str("reason", reason).
+		Str("writerType", string(s.writerType)).
 		Int64("offset", s.tailOffset).
 		Msgf("Writing %d bytes to segment file %s/%s", len(buf), s.basePath, conf.SegmentFileName(s.segmentId))
 
@@ -240,7 +253,7 @@ func (s *SegmentWriter) closeFile() {
 	// Close the segment file in the background
 	go func() {
 		err := previousFile.Close()
-		log.Err(err).Msgf("Segment file %d closed on %s", previousSegmentId, s.basePath)
+		log.Err(err).Msgf("Closed segment file %s on %s", conf.SegmentFileName(previousSegmentId), s.basePath)
 	}()
 
 	// Close the index file
