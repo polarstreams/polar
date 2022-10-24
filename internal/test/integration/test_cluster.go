@@ -64,9 +64,15 @@ func NewTestBroker(ordinal int, options ...*TestBrokerOptions) *TestBroker {
 
 func (b *TestBroker) Start() {
 	buildOutput, err := exec.Command("go", "build", "-o", "barco.exe", "../../../.").CombinedOutput()
-	// buildOutput, err := exec.Command("go", "build", "-tags=profiling", "-o", "barco.exe", "../../../.").CombinedOutput()
 	Expect(err).NotTo(HaveOccurred(), "Build failed: %s", string(buildOutput))
-	cmd := exec.Command("./barco.exe", "-debug")
+
+	logPretty := ""
+
+	if os.Getenv("BARCO_TEST_LOG_PRETTY") == "true" {
+		logPretty = "-pretty"
+	}
+
+	cmd := exec.Command("./barco.exe", "-debug", logPretty)
 	os.RemoveAll(fmt.Sprintf("./home%d", b.ordinal))
 
 	names := make([]string, 0)
