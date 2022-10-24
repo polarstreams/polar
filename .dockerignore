@@ -1,2 +1,4 @@
 /docs
 /build
+mkdocs.yml
+site/

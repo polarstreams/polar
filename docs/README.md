@@ -12,4 +12,6 @@ technology with "at least once" message delivery guarantees.
     - [Installing with Docker Compose](./install/docker_compose/)
 - [Rest API](./rest_api/)
 - [Benchmarks](./benchmarks/)
+- Features
+    - [Modern IO Techniques](./features/io/)
 - [FAQ](./faq/)

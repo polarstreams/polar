@@ -12,6 +12,8 @@ nav:
     - Getting Started on Kubernetes: 'getting_started/on_kubernetes/README.md'
   - REST API docs: 'rest_api/README.md'
   - Benchmarks: 'benchmarks/README.md'
+  - Features:
+    - Modern IO Techniques: 'features/io/README.md'
   - FAQ: 'faq/README.md'
 
 copyright: >-
