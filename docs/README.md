@@ -14,4 +14,5 @@ technology with "at least once" message delivery guarantees.
 - [Benchmarks](./benchmarks/)
 - Features
     - [Modern IO Techniques](./features/io/)
+    - [Built for Edge Computing](./features/edge/)
 - [FAQ](./faq/)
