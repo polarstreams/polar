@@ -163,7 +163,7 @@ func (t *TopologyInfo) BrokerByOrdinal(ordinal int) *BrokerInfo {
 
 // BrokerByOrdinal gets the broker by a given ordinal.
 func (t *TopologyInfo) BrokerByOrdinalList(ordinals []int) []BrokerInfo {
-	result := make([]BrokerInfo, len(ordinals), len(ordinals))
+	result := make([]BrokerInfo, len(ordinals))
 	for i, v := range ordinals {
 		result[i] = t.Brokers[int(t.GetIndex(v))]
 	}
@@ -200,7 +200,7 @@ func (t *TopologyInfo) NextIndex() BrokerIndex {
 // NextBrokers returns the broker in the position n+1, n+2, n...
 func (t *TopologyInfo) NextBrokers(index BrokerIndex, length int) []BrokerInfo {
 	totalBrokers := len(t.Brokers)
-	result := make([]BrokerInfo, length, length)
+	result := make([]BrokerInfo, length)
 	for i := 0; i < length; i++ {
 		result[i] = t.Brokers[(int(index)+1+i)%totalBrokers]
 	}

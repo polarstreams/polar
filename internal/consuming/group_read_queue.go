@@ -481,13 +481,12 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 			continue
 		}
 
-		// In the case of scaling down, an owned token range might be the result of two previous tokens
-		tokens := []Token{t.Token}
-		tokens = appendJoined(tokens, currentGen)
+		// In the case of scaling down, an owned token range might be the result of two previous rangesWithParents
+		rangesWithParents := q.tokenRangesWithParents(currentGen, t.Indices)
 
-		for _, token := range tokens {
-			for _, index := range t.Indices {
-				key := readerKey{token, index}
+		for _, tokenRange := range rangesWithParents {
+			for _, index := range tokenRange.Indices {
+				key := readerKey{tokenRange.Token, index}
 				readersByTopic, found := q.readers[key]
 				if !found {
 					readersByTopic = make(map[string]*SegmentReader)
@@ -497,7 +496,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 				for _, topic := range topics {
 					reader, found := readersByTopic[topic]
 					if !found {
-						reader = q.createReader(topic, token, index, currentGen)
+						reader = q.createReader(topic, tokenRange.Token, index, currentGen)
 						if reader == nil {
 							continue
 						}
@@ -617,14 +616,41 @@ func (q *groupReadQueue) createReader(
 	return reader
 }
 
-func appendJoined(tokens []Token, gen *Generation) []Token {
+// In the case of scaling down, it returns the previous tokens, otherwise it returns a single one.
+func (q *groupReadQueue) tokenRangesWithParents(gen *Generation, currentIndices []RangeIndex) []TokenRanges {
+	// TODO: Read recursively for more than 1 generation behind
+	currentToken := gen.Start
 	if len(gen.Parents) != 2 {
-		return tokens
+		return []TokenRanges{{Token: currentToken, Indices: currentIndices}}
 	}
 
-	for _, id := range gen.Parents {
-		if id.Start != tokens[0] {
-			tokens = append(tokens, id.Start)
+	tokens := make([]TokenRanges, 0)
+	middleIndex := RangeIndex(q.config.ConsumerRanges()) / 2
+	for _, index := range currentIndices {
+		for _, genId := range gen.Parents {
+			// We've got to project the range indices
+			t := genId.Start
+			indices := make([]RangeIndex, 0)
+			if t == currentToken {
+				if index >= middleIndex {
+					// This range is projected into the following range of the second token
+					continue
+				}
+
+				// For example: range T0/1, gets projected into T0/2 and T0/2 w/ four con consumer ranges
+				indices = append(indices, index*2)
+				indices = append(indices, index*2+1)
+			} else {
+				if index < middleIndex {
+					// This range is projected into the previous range of the first token
+					continue
+				}
+
+				// For example: range T0/3, gets projected into T3/2 and T3/3
+				indices = append(indices, (index-middleIndex)*2)
+				indices = append(indices, (index-middleIndex)*2+1)
+			}
+			tokens = append(tokens, TokenRanges{Token: t, Indices: indices})
 		}
 	}
 	return tokens

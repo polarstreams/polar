@@ -56,7 +56,7 @@ func NewSegmentWriter(
 	s := &SegmentWriter{
 		// Limit's to 1 outstanding write (the current one)
 		// The next group can be generated while the previous is being flushed and sent
-		Items:       make(chan SegmentChunk, 0),
+		Items:       make(chan SegmentChunk),
 		Topic:       topic,
 		buffer:      createAlignedByteBuffer(config.SegmentBufferSize()), // Use an aligned buffer for writing
 		config:      config,
@@ -175,7 +175,7 @@ func (s *SegmentWriter) maybeFlush() bool {
 	}
 
 	canBufferNextGroup := s.buffer.Len()+s.config.MaxGroupSize() < s.config.SegmentBufferSize()
-	if canBufferNextGroup && time.Now().Sub(s.lastFlush) < s.config.SegmentFlushInterval() {
+	if canBufferNextGroup && time.Since(s.lastFlush) < s.config.SegmentFlushInterval() {
 		// Time has not passed and there's enough capacity
 		// in the buffer for the next group
 		return false

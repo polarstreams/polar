@@ -3,7 +3,7 @@
 <!-- Start Intro -->
 
 Barco Streams is distributed by default with a minimal size of 3 brokers for production use. You can run a
-single-broker using Docker/Podman with developer mode enabled to get started quickly.
+single-broker using Docker / Podman with developer mode enabled to get started quickly.
 
 ```shell
 docker run --rm --env BARCO_DEV_MODE=true -p 9250-9252:9250-9252 barcostreams/barco:latest
@@ -68,3 +68,4 @@ instance as inactive and it will not be included in the data assignment.
 Read more about the API flow and guarantees on the [REST API Documentation][rest-api].
 
 [rest-api]: ../../rest_api/
+[go-client]: https://github.com/barcostreams/go-client
