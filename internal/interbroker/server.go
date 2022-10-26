@@ -228,7 +228,7 @@ func (g *gossiper) getTokenInRangeHandler(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set(ContentTypeHeaderKey, contentType)
 	// Encode can't fail for a bool
-	_ = json.NewEncoder(w).Encode(g.discoverer.IsTokenInRange(Token(token)))
+	_ = json.NewEncoder(w).Encode(g.discoverer.IsTokenContainedInAnotherRange(Token(token)))
 	return nil
 }
 

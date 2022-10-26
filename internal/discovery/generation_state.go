@@ -46,7 +46,7 @@ type GenerationState interface {
 	RepairCommitted(gen *Generation) error
 
 	// Determines whether there's active range containing (but not starting) the token
-	IsTokenInRange(token Token) bool
+	IsTokenContainedInAnotherRange(token Token) bool
 
 	// Determines whether there's history matching the token
 	HasTokenHistory(token Token) (bool, error)
@@ -126,7 +126,7 @@ func (d *discoverer) GenerationProposed(token Token) (committed *Generation, pro
 	return
 }
 
-func (d *discoverer) IsTokenInRange(token Token) bool {
+func (d *discoverer) IsTokenContainedInAnotherRange(token Token) bool {
 	generationMap := d.generations.Load().(genMap)
 
 	// O(n) is not that bad given the number of

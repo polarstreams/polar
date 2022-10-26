@@ -23,9 +23,10 @@ import (
 
 // Represents a single consumer instance
 type ConsumerInfo struct {
-	Id     string   `json:"id"`    // A unique id within the consumer group
-	Group  string   `json:"group"` // A group unique id
-	Topics []string `json:"topics"`
+	Id         string            `json:"id"`    // A unique id within the consumer group
+	Group      string            `json:"group"` // A group unique id
+	Topics     []string          `json:"topics"`
+	OnNewGroup OffsetResetPolicy `json:"onNewGroup"`
 
 	// Only used internally
 	assignedTokens []Token
@@ -45,6 +46,15 @@ const (
 	// A JSON formatted response
 	jsonFormat
 )
+
+type OffsetResetPolicy int
+
+const (
+	StartFromEarliest OffsetResetPolicy = iota
+	StartFromLatest
+)
+
+const DefaultOffsetResetPolicy = StartFromEarliest
 
 type segmentReadItem struct {
 	chunkResult chan SegmentChunk

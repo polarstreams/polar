@@ -61,15 +61,17 @@ var _ = Describe("SegmentReader", func() {
 		})
 
 		It("should continue reading the next file", func() {
+			dir, err := os.MkdirTemp("", "read_next_file*")
+			Expect(err).NotTo(HaveOccurred())
+
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(2048)
 			config.On("AutoCommitInterval").Return(1 * time.Second)
+			config.On("DatalogPath", mock.Anything).Return(dir)
 
-			dir, err := os.MkdirTemp("", "read_next_file*")
+			firstFile, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
-			firstFile, err := os.Create(filepath.Join(dir, "00000.dlog"))
-			Expect(err).NotTo(HaveOccurred())
-			secondFile, err := os.Create(filepath.Join(dir, "00020.dlog"))
+			secondFile, err := os.Create(filepath.Join(dir, "00000000000000000020.dlog"))
 
 			// Write to the files
 			_, err = firstFile.Write(createTestChunk(512-chunkHeaderSize, 0, 20))
@@ -106,13 +108,15 @@ var _ = Describe("SegmentReader", func() {
 		})
 
 		It("should read alignment", func() {
+			dir, err := os.MkdirTemp("", "read_alignment*")
+			Expect(err).NotTo(HaveOccurred())
+
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(1024)
 			config.On("AutoCommitInterval").Return(1 * time.Second)
+			config.On("DatalogPath", mock.Anything).Return(dir)
 
-			dir, err := os.MkdirTemp("", "read_alignment*")
-			Expect(err).NotTo(HaveOccurred())
-			file, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			file, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file.Close()
 
@@ -144,13 +148,15 @@ var _ = Describe("SegmentReader", func() {
 		})
 
 		It("should poll until there's new data", func() {
+			dir, err := os.MkdirTemp("", "poll_new_data*")
+			Expect(err).NotTo(HaveOccurred())
+
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(1024)
 			config.On("AutoCommitInterval").Return(1 * time.Second)
+			config.On("DatalogPath", mock.Anything).Return(dir)
 
-			dir, err := os.MkdirTemp("", "poll_new_data*")
-			Expect(err).NotTo(HaveOccurred())
-			file, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			file, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file.Close()
 
@@ -185,17 +191,19 @@ var _ = Describe("SegmentReader", func() {
 		})
 
 		It("should skip files with invalid names", func() {
+			dir, err := os.MkdirTemp("", "poll_gap_empty_file_*")
+			Expect(err).NotTo(HaveOccurred())
+
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(2048)
 			config.On("AutoCommitInterval").Return(1 * time.Second)
+			config.On("DatalogPath", mock.Anything).Return(dir)
 
-			dir, err := os.MkdirTemp("", "poll_gap_empty_file_*")
-			Expect(err).NotTo(HaveOccurred())
-			file1, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			file1, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			file2, err := os.Create(filepath.Join(dir, "invalid.dlog"))
 			Expect(err).NotTo(HaveOccurred())
-			file3, err := os.Create(filepath.Join(dir, "00050.dlog"))
+			file3, err := os.Create(filepath.Join(dir, "00000000000000000050.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file1.Close()
 			defer file2.Close()
@@ -220,13 +228,15 @@ var _ = Describe("SegmentReader", func() {
 		})
 
 		It("should recognize gaps from chunks", func() {
+			dir, err := os.MkdirTemp("", "poll_stream_*")
+			Expect(err).NotTo(HaveOccurred())
+
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(2048)
 			config.On("AutoCommitInterval").Return(1 * time.Second)
+			config.On("DatalogPath", mock.Anything).Return(dir)
 
-			dir, err := os.MkdirTemp("", "poll_stream_*")
-			Expect(err).NotTo(HaveOccurred())
-			file, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			file, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file.Close()
 
@@ -262,17 +272,19 @@ var _ = Describe("SegmentReader", func() {
 		})
 
 		It("should recognize gaps from empty files", func() {
+			dir, err := os.MkdirTemp("", "poll_gap_empty_file_*")
+			Expect(err).NotTo(HaveOccurred())
+
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(2048)
 			config.On("AutoCommitInterval").Return(1 * time.Second)
+			config.On("DatalogPath", mock.Anything).Return(dir)
 
-			dir, err := os.MkdirTemp("", "poll_gap_empty_file_*")
+			file1, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
-			file1, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			emptyFile2, err := os.Create(filepath.Join(dir, "00000000000000000020.dlog"))
 			Expect(err).NotTo(HaveOccurred())
-			emptyFile2, err := os.Create(filepath.Join(dir, "00020.dlog"))
-			Expect(err).NotTo(HaveOccurred())
-			file3, err := os.Create(filepath.Join(dir, "00050.dlog"))
+			file3, err := os.Create(filepath.Join(dir, "00000000000000000050.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file1.Close()
 			defer emptyFile2.Close()
@@ -308,9 +320,9 @@ var _ = Describe("SegmentReader", func() {
 		It("should reset when the origin changes", func() {
 			dir, err := os.MkdirTemp("", "reset_origin_*")
 			Expect(err).NotTo(HaveOccurred())
-			file1, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			file1, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
-			file2, err := os.Create(filepath.Join(dir, "00050.dlog"))
+			file2, err := os.Create(filepath.Join(dir, "00000000000000000050.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file1.Close()
 			defer file2.Close()
@@ -334,6 +346,7 @@ var _ = Describe("SegmentReader", func() {
 			config := new(mocks.Config)
 			config.On("ReadAheadSize").Return(1 * conf.MiB)
 			config.On("AutoCommitInterval").Return(1 * time.Nanosecond) // Commit always
+			config.On("DatalogPath", mock.Anything).Return(dir)
 			offsetState := new(tMocks.OffsetState)
 			offsetState.
 				On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).

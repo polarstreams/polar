@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/data"
 	. "github.com/barcostreams/barco/internal/data"
 	"github.com/barcostreams/barco/internal/discovery"
 	"github.com/barcostreams/barco/internal/interbroker"
@@ -112,7 +114,7 @@ func (q *groupReadQueue) process() {
 		}
 
 		if len(responseItems) == 0 {
-			readers := q.getReaders(tokens, topics)
+			readers := q.getReaders(tokens, topics, q.state.OffsetPolicy(item.connId))
 			totalSize := 0
 
 			for i := 0; i < len(readers) && totalSize < q.config.ConsumerReadThreshold(); i++ {
@@ -467,7 +469,11 @@ func (q *groupReadQueue) useFailedResponseItems(
 }
 
 // Gets the readers, creating them if necessary
-func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) []*SegmentReader {
+func (q *groupReadQueue) getReaders(
+	tokenRanges []TokenRanges,
+	topics []string,
+	policy OffsetResetPolicy,
+) []*SegmentReader {
 	result := make([]*SegmentReader, 0, len(tokenRanges)*len(topics))
 
 	for _, t := range tokenRanges {
@@ -496,7 +502,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 				for _, topic := range topics {
 					reader, found := readersByTopic[topic]
 					if !found {
-						reader = q.createReader(topic, tokenRange.Token, index, currentGen)
+						reader = q.createReader(topic, tokenRange.Token, index, currentGen.Id(), policy)
 						if reader == nil {
 							continue
 						}
@@ -517,10 +523,13 @@ func (q *groupReadQueue) createReader(
 	topic string,
 	token Token,
 	index RangeIndex,
-	source *Generation,
+	source GenId,
+	policy OffsetResetPolicy,
 ) *SegmentReader {
 	// Check that previous tokens (scaled down), whether the reader can ignored because all the data has been consumed
 	if token != source.Start {
+		// TODO: Read recursively for more than 1 generation behind
+
 		// Joined tokens, calculate the index change
 		// The source index starts at the middle of the range
 		sourceIndex := RangeIndex(q.config.ConsumerRanges())/2 + index/2
@@ -532,18 +541,19 @@ func (q *groupReadQueue) createReader(
 	}
 
 	offset := q.offsetState.Get(q.group, topic, token, index)
-	log.Debug().Msgf("May create for group %s, token %d/%d and topic '%s' with offset %s", q.group, token, index, topic, offset)
-
 	if offset == nil {
 		// We have no information of this group
 		//TODO: Verify that we have loaded from other brokers
 
-		offset = &Offset{
-			Offset:  0,
-			Version: 1,
-			Source:  source.Id(),
+		offset = q.setOffsetWhenNotFound(topic, token, index, source, policy, nil)
+		if offset == nil {
+			// We can ignore this for now
+			return nil
 		}
 	}
+
+	log.Debug().Msgf("May create reader for group %s, token %d/%d and topic '%s' with offset %s",
+		q.group, token, index, topic, offset)
 
 	if offset.Offset == OffsetCompleted {
 		// Probably waiting for the reader generation to be moved
@@ -559,7 +569,7 @@ func (q *groupReadQueue) createReader(
 	}
 
 	var maxProducedOffset *int64 = nil
-	if topicId.GenId() != source.Id() {
+	if topicId.GenId() != source {
 		// We are reading from an old generation
 		// We need to set the max offset produced
 		value, err := q.getMaxProducedOffset(&topicId)
@@ -570,7 +580,7 @@ func (q *groupReadQueue) createReader(
 		if value == offsetNoData {
 			// No data was produced for this token+index
 			log.Info().Msgf("No data was produced for %s, moving offset", &topicId)
-			if movedOffset := q.moveOffsetToNextGeneration(topicId, source.Id()); !movedOffset {
+			if movedOffset := q.moveOffsetToNextGeneration(topicId, source); !movedOffset {
 				log.Error().Msgf(
 					"Offset could not be moved for %s, as next generation could not be found", &topicId)
 			}
@@ -602,7 +612,7 @@ func (q *groupReadQueue) createReader(
 		isLeader,
 		replicationReader,
 		topicId,
-		source.Id(),
+		source,
 		offset.Offset,
 		q.offsetState,
 		maxProducedOffset,
@@ -654,6 +664,90 @@ func (q *groupReadQueue) tokenRangesWithParents(gen *Generation, currentIndices 
 		}
 	}
 	return tokens
+}
+
+// Sets and gets the offset when it was not found in the offset state, according to the reset policy
+// It returns nil to signal that this topicId should be ignored
+func (q *groupReadQueue) setOffsetWhenNotFound(
+	topic string,
+	token Token,
+	index RangeIndex,
+	genId GenId,
+	policy OffsetResetPolicy,
+	maxProducedGetter func(topicId *TopicDataId) (int64, error), // Allow injecting for testing
+) *Offset {
+	if maxProducedGetter == nil {
+		maxProducedGetter = q.getMaxProducedOffset
+	}
+
+	if policy == StartFromLatest {
+		if q.topologyGetter.IsTokenContainedInAnotherRange(token) {
+			// When token does not exist any more -> set as OffsetCompleted
+			lastKnownGen, err := q.topologyGetter.GetTokenHistory(token)
+			utils.PanicIfErr(err, "Could not retrieve token history")
+			if lastKnownGen == nil {
+				log.Warn().Msgf(
+					"Last generation of a previous token %s could not be found, it may resolve itself in the future",
+					token)
+				return nil
+			}
+			offset := Offset{
+				Offset:  OffsetCompleted,
+				Version: lastKnownGen.Version,
+				Source:  genId,
+			}
+			q.offsetState.Set(q.group, topic, token, index, offset, OffsetCommitAll)
+			return &offset
+		}
+
+		// When token exists -> use latest generation
+		gen := q.topologyGetter.Generation(token)
+		if gen == nil {
+			log.Warn().Msgf("Generation of a token %s could not be found for setting/getting the offset", token)
+			return nil
+		}
+
+		maxOffset, err := maxProducedGetter(&TopicDataId{
+			Name:       topic,
+			Token:      token,
+			RangeIndex: index,
+			Version:    gen.Version,
+		})
+
+		if err != nil {
+			log.Warn().Err(err).Msgf("There was an error retrieving the max produced offset for reset")
+		}
+
+		offset := Offset{
+			Offset:  maxOffset,
+			Version: gen.Version,
+			Source:  genId,
+		}
+		q.offsetState.Set(q.group, topic, token, index, offset, OffsetCommitAll)
+		return &offset
+	}
+
+	// Use latest generation
+	gen := q.topologyGetter.Generation(token)
+	if gen == nil {
+		log.Warn().Msgf("Generation of a token %s could not be found for setting/getting the offset", token)
+		return nil
+	}
+
+	topicId := &TopicDataId{
+		Name:       topic,
+		Token:      token,
+		RangeIndex: index,
+		Version:    gen.Version,
+	}
+	offsets, err := data.SegmentFileList(topicId, q.config, math.MaxInt64)
+
+	if err != nil || len(offsets) == 0 {
+		log.Warn().Err(err).Msgf("Could not read segment file list for offsets of %s defaulting to 0", topicId)
+		return &Offset{Offset: 0, Version: gen.Version, Source: genId}
+	}
+
+	return &Offset{Offset: offsets[0], Version: gen.Version, Source: genId}
 }
 
 func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (int64, error) {

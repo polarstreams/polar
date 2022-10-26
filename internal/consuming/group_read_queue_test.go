@@ -376,7 +376,7 @@ var _ = Describe("groupReadQueue()", func() {
 		q := &groupReadQueue{config: config}
 		t3 := Token(-6148914691236517888)
 
-		It("should return the same range when single parent", func ()  {
+		It("should return the same range when single parent", func() {
 			gen := &Generation{
 				Start:   StartToken,
 				Version: 2,
@@ -416,6 +416,14 @@ var _ = Describe("groupReadQueue()", func() {
 
 			Expect(q.tokenRangesWithParents(gen, []RangeIndex{3})).
 				To(Equal([]TokenRanges{{Token: t3, Indices: []RangeIndex{2, 3}}}))
+		})
+	})
+
+	Describe("setOffsetWhenNotFound()", func ()  {
+		Context("With StartFromLatest", func ()  {
+			XIt("should set as completed when token is contained in another range", func ()  {
+
+			})
 		})
 	})
 })
