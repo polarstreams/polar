@@ -20,6 +20,8 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+const t3 = Token(-6148914691236517888)
+
 var _ = Describe("groupReadQueue()", func() {
 	Describe("getMaxProducedOffset()", func() {
 		It("should get the max produced offset from local", func() {
@@ -374,7 +376,6 @@ var _ = Describe("groupReadQueue()", func() {
 		config := new(cMocks.Config)
 		config.On("ConsumerRanges").Return(4)
 		q := &groupReadQueue{config: config}
-		t3 := Token(-6148914691236517888)
 
 		It("should return the same range when single parent", func() {
 			gen := &Generation{
@@ -419,10 +420,38 @@ var _ = Describe("groupReadQueue()", func() {
 		})
 	})
 
-	Describe("setOffsetWhenNotFound()", func ()  {
-		Context("With StartFromLatest", func ()  {
-			XIt("should set as completed when token is contained in another range", func ()  {
+	Describe("setOffsetWhenNotFound()", func() {
+		Context("With StartFromLatest", func() {
+			const topic = "topic1"
+			const group = "group1"
+			const index = RangeIndex(1)
+			newGenId := GenId{Start: StartToken, Version: 2}
 
+			It("should set as completed when token is contained in another range", func() {
+				lastKnownGen := &Generation{Start: t3, Version: 1}
+
+				topologyGetter := new(dMocks.Discoverer)
+				topologyGetter.On("IsTokenContainedInAnotherRange", t3).Return(true)
+				topologyGetter.On("GetTokenHistory", t3).Return(lastKnownGen, nil)
+
+				offsetState := new(tMocks.OffsetState)
+
+				offset := Offset{
+					Offset:  OffsetCompleted,
+					Version: lastKnownGen.Version,
+					Source:  newGenId,
+				}
+				offsetState.On("Set", group, topic, t3, index, offset, OffsetCommitAll).Once()
+
+				q := &groupReadQueue{
+					group:          "group1",
+					offsetState:    offsetState,
+					topologyGetter: topologyGetter,
+				}
+
+				actual := q.setOffsetWhenNotFound(topic, t3, index, newGenId, StartFromLatest, nil)
+				offsetState.AssertExpectations(GinkgoT())
+				Expect(*actual).To(Equal(offset))
 			})
 		})
 	})

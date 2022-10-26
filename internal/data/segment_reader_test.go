@@ -347,6 +347,9 @@ var _ = Describe("SegmentReader", func() {
 			config.On("ReadAheadSize").Return(1 * conf.MiB)
 			config.On("AutoCommitInterval").Return(1 * time.Nanosecond) // Commit always
 			config.On("DatalogPath", mock.Anything).Return(dir)
+			config.On("StreamBufferSize").Return(8 * 1024 * 1024)
+			config.On("LogRetentionDuration").Return(nil)
+
 			offsetState := new(tMocks.OffsetState)
 			offsetState.
 				On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -357,6 +360,7 @@ var _ = Describe("SegmentReader", func() {
 			offsetState.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&mockedOffset)
 
 			s := &SegmentReader{
+				datalog:     NewDatalog(config),
 				config:      config,
 				Items:       make(chan ReadItem, 16),
 				offsetState: offsetState,
@@ -554,10 +558,13 @@ func newTestReader() *SegmentReader {
 	config := new(mocks.Config)
 	config.On("ReadAheadSize").Return(1 * conf.MiB)
 	config.On("AutoCommitInterval").Return(1 * time.Second)
+	config.On("StreamBufferSize").Return(8 * 1024 * 1024)
+	config.On("LogRetentionDuration").Return(nil)
 	offsetState := new(tMocks.OffsetState)
 	offsetState.On("Set",
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	return &SegmentReader{
+		datalog:     NewDatalog(config),
 		config:      config,
 		Items:       make(chan ReadItem, 16),
 		offsetState: offsetState,

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/data"
 	"github.com/barcostreams/barco/internal/discovery"
 	"github.com/barcostreams/barco/internal/interbroker"
 	"github.com/barcostreams/barco/internal/localdb"
@@ -60,6 +61,7 @@ func NewConsumer(
 	config conf.ConsumerConfig,
 	localDb localdb.Client,
 	topologyGetter discovery.TopologyGetter,
+	datalog data.Datalog,
 	gossiper interbroker.Gossiper,
 ) Consumer {
 	addDelay := config.ConsumerAddDelay()
@@ -72,6 +74,7 @@ func NewConsumer(
 		topologyGetter: topologyGetter,
 		gossiper:       gossiper,
 		localDb:        localDb,
+		datalog:        datalog,
 		rrFactory:      newReplicationReaderFactory(gossiper),
 		state:          NewConsumerState(config, topologyGetter),
 		offsetState:    newDefaultOffsetState(localDb, topologyGetter, gossiper, config),
@@ -83,6 +86,7 @@ func NewConsumer(
 type consumer struct {
 	config         conf.ConsumerConfig
 	topologyGetter discovery.TopologyGetter
+	datalog        data.Datalog
 	gossiper       interbroker.Gossiper
 	rrFactory      ReplicationReaderFactory
 	localDb        localdb.Client
@@ -416,7 +420,7 @@ func (c *consumer) postGoodbye(
 
 func (c *consumer) getOrCreateReadQueue(group string) *groupReadQueue {
 	grq, _, _ := c.readQueues.LoadOrStore(group, func() (interface{}, error) {
-		return newGroupReadQueue(group, c.state, c.offsetState, c.topologyGetter, c.gossiper, c.rrFactory, c.config), nil
+		return newGroupReadQueue(group, c.state, c.offsetState, c.topologyGetter, c.datalog, c.gossiper, c.rrFactory, c.config), nil
 	})
 
 	return grq.(*groupReadQueue)

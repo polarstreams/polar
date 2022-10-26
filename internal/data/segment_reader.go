@@ -23,6 +23,7 @@ type SegmentReader struct {
 	Items                 chan ReadItem
 	basePath              string
 	headerBuf             []byte
+	datalog               Datalog
 	config                conf.DatalogConfig
 	group                 string
 	isLeader              bool // Determines whether the current broker was the leader of the generation we are reading from
@@ -57,11 +58,13 @@ func NewSegmentReader(
 	initialOffset int64,
 	offsetState OffsetState,
 	maxProducedOffset *int64,
+	datalog Datalog,
 	config conf.DatalogConfig,
 ) (*SegmentReader, error) {
 	// From the same base folder, the SegmentReader will continue reading through the files in order
 	basePath := config.DatalogPath(&topic)
 	s := &SegmentReader{
+		datalog:           datalog,
 		config:            config,
 		basePath:          basePath,
 		Items:             make(chan ReadItem, 16),
@@ -366,7 +369,7 @@ func (s *SegmentReader) fullSeek(foreground bool) (string, int64, error) {
 		atomic.StoreInt64(&s.lastFullSeek, time.Now().UnixMilli())
 	}
 
-	entries, err := SegmentFileList(&s.Topic, s.config, s.messageOffset)
+	entries, err := s.datalog.SegmentFileList(&s.Topic, s.config, s.messageOffset)
 	if err != nil {
 		log.Err(err).Msgf("There was an error listing files in %s while seeking", s.basePath)
 		return "", 0, err

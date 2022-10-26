@@ -35,6 +35,7 @@ type groupReadQueue struct {
 	state          *ConsumerState
 	offsetState    OffsetState
 	topologyGetter discovery.TopologyGetter
+	datalog        data.Datalog
 	gossiper       interbroker.Gossiper
 	rrFactory      ReplicationReaderFactory
 	config         conf.ConsumerConfig
@@ -49,6 +50,7 @@ func newGroupReadQueue(
 	state *ConsumerState,
 	offsetState OffsetState,
 	topologyGetter discovery.TopologyGetter,
+	datalog data.Datalog,
 	gossiper interbroker.Gossiper,
 	rrFactory ReplicationReaderFactory,
 	config conf.ConsumerConfig,
@@ -64,6 +66,7 @@ func newGroupReadQueue(
 		state:          state,
 		offsetState:    offsetState,
 		topologyGetter: topologyGetter,
+		datalog:        datalog,
 		gossiper:       gossiper,
 		rrFactory:      rrFactory,
 		config:         config,
@@ -616,6 +619,7 @@ func (q *groupReadQueue) createReader(
 		offset.Offset,
 		q.offsetState,
 		maxProducedOffset,
+		q.datalog,
 		q.config)
 
 	if err != nil {
@@ -740,7 +744,7 @@ func (q *groupReadQueue) setOffsetWhenNotFound(
 		RangeIndex: index,
 		Version:    gen.Version,
 	}
-	offsets, err := data.SegmentFileList(topicId, q.config, math.MaxInt64)
+	offsets, err := q.datalog.SegmentFileList(topicId, q.config, math.MaxInt64)
 
 	if err != nil || len(offsets) == 0 {
 		log.Warn().Err(err).Msgf("Could not read segment file list for offsets of %s defaulting to 0", topicId)
