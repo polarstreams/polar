@@ -64,7 +64,7 @@ func newCoalescer(
 	config conf.ProducerConfig,
 ) *coalescer {
 	c := &coalescer{
-		items:           make(chan *recordItem, 0),
+		items:           make(chan *recordItem),
 		topicName:       topicName,
 		token:           token,
 		rangeIndex:      rangeIndex,

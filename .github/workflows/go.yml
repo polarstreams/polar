@@ -48,4 +48,4 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
-          args: -D gosimple -D errcheck --tests=false --timeout=3m
+          args: -D errcheck --tests=false --timeout=3m
