@@ -376,7 +376,7 @@ var _ = Describe("groupReadQueue()", func() {
 		q := &groupReadQueue{config: config}
 		t3 := Token(-6148914691236517888)
 
-		It("should return the same range when single parent", func ()  {
+		It("should return the same range when single parent", func() {
 			gen := &Generation{
 				Start:   StartToken,
 				Version: 2,

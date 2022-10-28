@@ -2,7 +2,6 @@ package ownership
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 	"sync/atomic"
 	"time"
@@ -29,8 +28,6 @@ const (
 	shutdownTakeOverDelay       = 1 * time.Second
 	replicationFactor           = 3
 )
-
-var emptyGeneration = Generation{Start: math.MaxInt64, Version: 0, Status: StatusCancelled}
 
 type Generator interface {
 	Initializer
@@ -484,16 +481,17 @@ func (o *generator) createDevGeneration() {
 	}
 
 	gen := &Generation{
-		Start:     StartToken,
-		End:       StartToken,
-		Version:   1,
-		Timestamp: time.Now().UnixMicro(),
-		Leader:    0,
-		Followers: []int{},
-		TxLeader:  0,
-		Tx:        uuid.New(),
-		Status:    StatusCommitted,
-		Parents:   []GenId{},
+		Start:       StartToken,
+		End:         StartToken,
+		Version:     1,
+		Timestamp:   time.Now().UnixMicro(),
+		Leader:      0,
+		Followers:   []int{},
+		TxLeader:    0,
+		Tx:          uuid.New(),
+		Status:      StatusCommitted,
+		Parents:     []GenId{},
+		ClusterSize: 1,
 	}
 
 	err := o.discoverer.RepairCommitted(gen)

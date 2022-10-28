@@ -139,6 +139,11 @@ func (t *TopologyInfo) HasBroker(ordinal int) bool {
 	return ordinal < len(t.Brokers)
 }
 
+// Returns the amount of brokers in the topology
+func (t *TopologyInfo) TotalBrokers() int {
+	return len(t.Brokers)
+}
+
 // GetIndex gets the position of the broker in the broker slice.
 //
 // It returns NotFoundIndex when not found.

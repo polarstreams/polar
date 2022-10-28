@@ -65,6 +65,7 @@ func (o *generator) processLocalFailover(m *localFailoverGenMessage) creationErr
 			Start:   token,
 			Version: previousGen.Version,
 		}},
+		ClusterSize: topology.TotalBrokers(),
 	}
 
 	log.Info().

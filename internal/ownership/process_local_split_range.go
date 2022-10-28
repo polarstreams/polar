@@ -57,20 +57,22 @@ func (o *generator) processLocalSplitRange(m *localSplitRangeGenMessage) creatio
 			Start:   myCurrentGen.Start,
 			Version: myCurrentGen.Version,
 		}},
+		ClusterSize: topology.TotalBrokers(),
 	}
 
 	// Generation for the second part of the range
 	nextTokenGen := Generation{
-		Start:     newToken,
-		End:       myCurrentGen.End,
-		Version:   version,
-		Timestamp: time.Now().UnixMicro(),
-		Leader:    newBrokerOrdinal,
-		Followers: ordinals(nextBrokers[1:3]),
-		TxLeader:  topology.MyOrdinal(),
-		Tx:        tx,
-		Status:    StatusProposed,
-		Parents:   myGen.Parents,
+		Start:       newToken,
+		End:         myCurrentGen.End,
+		Version:     version,
+		Timestamp:   time.Now().UnixMicro(),
+		Leader:      newBrokerOrdinal,
+		Followers:   ordinals(nextBrokers[1:3]),
+		TxLeader:    topology.MyOrdinal(),
+		Tx:          tx,
+		Status:      StatusProposed,
+		Parents:     myGen.Parents,
+		ClusterSize: topology.TotalBrokers(),
 	}
 
 	_, err := o.rangeSplitPropose(&myGen, &nextTokenGen)

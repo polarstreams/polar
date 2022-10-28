@@ -1,6 +1,8 @@
 package localdb
 
-const ddl01 = `
+var migrationQueries = []string{migration1, migration2}
+
+const migration1 = `
 	CREATE TABLE IF NOT EXISTS local_info (
 		key TEXT PRIMARY KEY,
 		schema_version_init TEXT,
@@ -42,4 +44,8 @@ const ddl01 = `
 		source TEXT NOT NULL, -- json of GenId
 		PRIMARY KEY (group_name, topic, token, range_index)
 	);
+`
+
+const migration2 = `
+	ALTER TABLE generations ADD cluster_size int NOT NULL DEFAULT 3;
 `
