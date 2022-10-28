@@ -58,29 +58,31 @@ func (o *generator) processLocalJoinRange(m *localJoinRangeGenMessage) creationE
 
 	tx := uuid.New()
 	gen := &Generation{
-		Start:     myToken,
-		End:       topology.GetToken(topology.NextIndex()),
-		Version:   parentVersion1 + 1,
-		Timestamp: time.Now().UnixMicro(),
-		Leader:    topology.MyOrdinal(),
-		Followers: topology.NaturalFollowers(topology.LocalIndex),
-		TxLeader:  topology.MyOrdinal(),
-		Tx:        tx,
-		Status:    StatusProposed,
-		Parents:   []GenId{{Start: myToken, Version: parentVersion1}, {Start: nextToken, Version: parentVersion2}},
+		Start:       myToken,
+		End:         topology.GetToken(topology.NextIndex()),
+		Version:     parentVersion1 + 1,
+		Timestamp:   time.Now().UnixMicro(),
+		Leader:      topology.MyOrdinal(),
+		Followers:   topology.NaturalFollowers(topology.LocalIndex),
+		TxLeader:    topology.MyOrdinal(),
+		Tx:          tx,
+		Status:      StatusProposed,
+		Parents:     []GenId{{Start: myToken, Version: parentVersion1}, {Start: nextToken, Version: parentVersion2}},
+		ClusterSize: topology.TotalBrokers(),
 	}
 
 	toDeleteGen := &Generation{
-		Start:     nextToken,
-		End:       gen.End,
-		Version:   parentVersion2 + 1, // This next version is not going to be recorded
-		Timestamp: time.Now().UnixMicro(),
-		Leader:    -1,
-		TxLeader:  topology.MyOrdinal(),
-		Tx:        tx,
-		Status:    StatusProposed,
-		Parents:   []GenId{{Start: nextToken, Version: parentVersion2}},
-		ToDelete:  true, // Mark it that is not going to be active any more
+		Start:       nextToken,
+		End:         gen.End,
+		Version:     parentVersion2 + 1, // This next version is not going to be recorded
+		Timestamp:   time.Now().UnixMicro(),
+		Leader:      -1,
+		TxLeader:    topology.MyOrdinal(),
+		Tx:          tx,
+		Status:      StatusProposed,
+		Parents:     []GenId{{Start: nextToken, Version: parentVersion2}},
+		ClusterSize: previousTopology.TotalBrokers(),
+		ToDelete:    true, // Mark it that is not going to be active any more
 	}
 
 	// Set as proposed on followers first

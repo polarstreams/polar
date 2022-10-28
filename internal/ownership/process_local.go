@@ -19,16 +19,17 @@ func (o *generator) processLocalMyToken(message *localGenMessage) creationError 
 	timestamp := time.Now()
 
 	gen := Generation{
-		Start:     token,
-		End:       topology.GetToken(topology.LocalIndex + 1),
-		Version:   0,
-		Timestamp: timestamp.UnixMicro(),
-		Leader:    topology.MyOrdinal(),
-		Followers: topology.NaturalFollowers(topology.LocalIndex),
-		Tx:        uuid.New(),
-		TxLeader:  topology.MyOrdinal(),
-		Status:    StatusProposed,
-		Parents:   make([]GenId, 0),
+		Start:       token,
+		End:         topology.GetToken(topology.LocalIndex + 1),
+		Version:     0,
+		Timestamp:   timestamp.UnixMicro(),
+		Leader:      topology.MyOrdinal(),
+		Followers:   topology.NaturalFollowers(topology.LocalIndex),
+		Tx:          uuid.New(),
+		TxLeader:    topology.MyOrdinal(),
+		Status:      StatusProposed,
+		Parents:     make([]GenId, 0),
+		ClusterSize: topology.TotalBrokers(),
 	}
 
 	log.Info().Msgf(

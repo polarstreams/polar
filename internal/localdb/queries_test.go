@@ -38,15 +38,16 @@ var _ = Describe("Client", func() {
 			// Insert test data
 			for i := 1; i <= 10; i++ {
 				insertGeneration(client, Generation{
-					Start:     start,
-					End:       end,
-					Version:   GenVersion(i),
-					Timestamp: utils.ToUnixMillis(time.Now()),
-					Tx:        tx,
-					Status:    StatusAccepted,
-					Leader:    2,
-					Followers: []int{0, 1},
-					Parents:   []GenId{{Start: start, Version: GenVersion(i - 1)}},
+					Start:       start,
+					End:         end,
+					Version:     GenVersion(i),
+					Timestamp:   utils.ToUnixMillis(time.Now()),
+					Tx:          tx,
+					Status:      StatusAccepted,
+					Leader:      2,
+					Followers:   []int{0, 1},
+					Parents:     []GenId{{Start: start, Version: GenVersion(i - 1)}},
+					ClusterSize: 3,
 				})
 			}
 
@@ -85,15 +86,16 @@ var _ = Describe("Client", func() {
 			inserted := make([]Generation, 0)
 			for i := 1; i <= 3; i++ {
 				item := Generation{
-					Start:     start,
-					End:       end,
-					Version:   GenVersion(i),
-					Timestamp: utils.ToUnixMillis(time.Now()),
-					Tx:        tx,
-					Status:    StatusCommitted,
-					Leader:    2,
-					Followers: []int{0, 1},
-					Parents:   []GenId{{Start: start, Version: GenVersion(i - 1)}},
+					Start:       start,
+					End:         end,
+					Version:     GenVersion(i),
+					Timestamp:   utils.ToUnixMillis(time.Now()),
+					Tx:          tx,
+					Status:      StatusCommitted,
+					Leader:      2,
+					Followers:   []int{0, 1},
+					Parents:     []GenId{{Start: start, Version: GenVersion(i - 1)}},
+					ClusterSize: 6,
 				}
 				insertGeneration(client, item)
 				inserted = append(inserted, item)
@@ -112,37 +114,40 @@ var _ = Describe("Client", func() {
 			defer client.Close()
 
 			gen1_v3 := Generation{
-				Start:     1,
-				End:       2,
-				Version:   3,
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Tx:        uuid.New(),
-				Status:    StatusCommitted,
-				Leader:    2,
-				Followers: []int{0, 1},
-				Parents:   []GenId{{Start: 1, Version: 2}},
+				Start:       1,
+				End:         2,
+				Version:     3,
+				Timestamp:   utils.ToUnixMillis(time.Now()),
+				Tx:          uuid.New(),
+				Status:      StatusCommitted,
+				Leader:      2,
+				Followers:   []int{0, 1},
+				Parents:     []GenId{{Start: 1, Version: 2}},
+				ClusterSize: 3,
 			}
 			gen1_v4 := Generation{
-				Start:     1,
-				End:       2,
-				Version:   4,
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Tx:        uuid.New(),
-				Status:    StatusCommitted,
-				Leader:    2,
-				Followers: []int{0, 1},
-				Parents:   []GenId{{Start: 1, Version: 3}},
+				Start:       1,
+				End:         2,
+				Version:     4,
+				Timestamp:   utils.ToUnixMillis(time.Now()),
+				Tx:          uuid.New(),
+				Status:      StatusCommitted,
+				Leader:      2,
+				Followers:   []int{0, 1},
+				Parents:     []GenId{{Start: 1, Version: 3}},
+				ClusterSize: 3,
 			}
 			gen2_v1 := Generation{
-				Start:     2,
-				End:       3,
-				Version:   1,
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Tx:        uuid.New(),
-				Status:    StatusCommitted,
-				Leader:    2,
-				Followers: []int{0, 1},
-				Parents:   []GenId{{Start: 1, Version: 3}},
+				Start:       2,
+				End:         3,
+				Version:     1,
+				Timestamp:   utils.ToUnixMillis(time.Now()),
+				Tx:          uuid.New(),
+				Status:      StatusCommitted,
+				Leader:      2,
+				Followers:   []int{0, 1},
+				Parents:     []GenId{{Start: 1, Version: 3}},
+				ClusterSize: 3,
 			}
 			insertGeneration(client, gen1_v3)
 			insertGeneration(client, gen1_v4)
@@ -162,37 +167,40 @@ var _ = Describe("Client", func() {
 			defer client.Close()
 
 			gen1_v3 := Generation{
-				Start:     1,
-				End:       2,
-				Version:   3,
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Tx:        uuid.New(),
-				Status:    StatusCommitted,
-				Leader:    2,
-				Followers: []int{0, 1},
-				Parents:   []GenId{{Start: 1, Version: 2}},
+				Start:       1,
+				End:         2,
+				Version:     3,
+				Timestamp:   utils.ToUnixMillis(time.Now()),
+				Tx:          uuid.New(),
+				Status:      StatusCommitted,
+				Leader:      2,
+				Followers:   []int{0, 1},
+				Parents:     []GenId{{Start: 1, Version: 2}},
+				ClusterSize: 12,
 			}
 			gen1_v4 := Generation{
-				Start:     1,
-				End:       2,
-				Version:   4,
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Tx:        uuid.New(),
-				Status:    StatusCommitted,
-				Leader:    2,
-				Followers: []int{0, 1},
-				Parents:   []GenId{gen1_v3.Id()},
+				Start:       1,
+				End:         2,
+				Version:     4,
+				Timestamp:   utils.ToUnixMillis(time.Now()),
+				Tx:          uuid.New(),
+				Status:      StatusCommitted,
+				Leader:      2,
+				Followers:   []int{0, 1},
+				Parents:     []GenId{gen1_v3.Id()},
+				ClusterSize: 12,
 			}
 			gen2_v1 := Generation{
-				Start:     2,
-				End:       3, // Not included
-				Version:   1,
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Tx:        uuid.New(),
-				Status:    StatusCommitted,
-				Leader:    2,
-				Followers: []int{0, 1},
-				Parents:   []GenId{{Start: 1, Version: 3}},
+				Start:       2,
+				End:         3, // Not included
+				Version:     1,
+				Timestamp:   utils.ToUnixMillis(time.Now()),
+				Tx:          uuid.New(),
+				Status:      StatusCommitted,
+				Leader:      2,
+				Followers:   []int{0, 1},
+				Parents:     []GenId{{Start: 1, Version: 3}},
+				ClusterSize: 12,
 			}
 			insertGeneration(client, gen1_v3)
 			insertGeneration(client, gen1_v4)
@@ -212,39 +220,42 @@ var _ = Describe("Client", func() {
 			defer client.Close()
 
 			gen1_v4 := Generation{
-				Start:     0,
-				End:       50,
-				Version:   4,
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Tx:        uuid.New(),
-				Status:    StatusCommitted,
-				Leader:    2,
-				Followers: []int{0, 1},
-				Parents:   []GenId{},
+				Start:       0,
+				End:         50,
+				Version:     4,
+				Timestamp:   utils.ToUnixMillis(time.Now()),
+				Tx:          uuid.New(),
+				Status:      StatusCommitted,
+				Leader:      2,
+				Followers:   []int{0, 1},
+				Parents:     []GenId{},
+				ClusterSize: 3,
 			}
 			gen2_v1 := Generation{
-				Start:     50,
-				End:       100,
-				Version:   1,
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Tx:        uuid.New(),
-				Status:    StatusCommitted,
-				Leader:    2,
-				Followers: []int{0, 1},
-				Parents:   []GenId{},
+				Start:       50,
+				End:         100,
+				Version:     1,
+				Timestamp:   utils.ToUnixMillis(time.Now()),
+				Tx:          uuid.New(),
+				Status:      StatusCommitted,
+				Leader:      2,
+				Followers:   []int{0, 1},
+				Parents:     []GenId{},
+				ClusterSize: 3,
 			}
 
 			// Joined range
 			gen1_v5 := Generation{
-				Start:     0,
-				End:       100, // Included in range
-				Version:   5,
-				Timestamp: utils.ToUnixMillis(time.Now()),
-				Tx:        uuid.New(),
-				Status:    StatusCommitted,
-				Leader:    2,
-				Followers: []int{0, 1},
-				Parents:   []GenId{gen1_v4.Id(), gen2_v1.Id()},
+				Start:       0,
+				End:         100, // Included in range
+				Version:     5,
+				Timestamp:   utils.ToUnixMillis(time.Now()),
+				Tx:          uuid.New(),
+				Status:      StatusCommitted,
+				Leader:      2,
+				Followers:   []int{0, 1},
+				Parents:     []GenId{gen1_v4.Id(), gen2_v1.Id()},
+				ClusterSize: 3,
 			}
 			insertGeneration(client, gen1_v4)
 			insertGeneration(client, gen2_v1)
@@ -261,16 +272,17 @@ var _ = Describe("Client", func() {
 			client := newTestClient()
 
 			gen := Generation{
-				Start:     2001,
-				End:       3001,
-				Version:   123,
-				Timestamp: time.Now().UnixMicro(),
-				Leader:    3,
-				Followers: []int{1, 4},
-				TxLeader:  3,
-				Tx:        uuid.New(),
-				Status:    StatusCommitted,
-				Parents:   []GenId{{Start: 2001, Version: GenVersion(122)}},
+				Start:       2001,
+				End:         3001,
+				Version:     123,
+				Timestamp:   time.Now().UnixMicro(),
+				Leader:      3,
+				Followers:   []int{1, 4},
+				TxLeader:    3,
+				Tx:          uuid.New(),
+				Status:      StatusCommitted,
+				Parents:     []GenId{{Start: 2001, Version: GenVersion(122)}},
+				ClusterSize: 6,
 			}
 
 			err := client.CommitGeneration(&gen, nil)
@@ -284,29 +296,31 @@ var _ = Describe("Client", func() {
 
 			tx := uuid.New()
 			gen1 := Generation{
-				Start:     2001,
-				End:       3001,
-				Version:   123,
-				Timestamp: time.Now().UnixMicro(),
-				Leader:    0,
-				Followers: []int{3, 1},
-				TxLeader:  0,
-				Tx:        tx,
-				Status:    StatusCommitted,
-				Parents:   []GenId{{Start: 2001, Version: GenVersion(122)}},
+				Start:       2001,
+				End:         3001,
+				Version:     123,
+				Timestamp:   time.Now().UnixMicro(),
+				Leader:      0,
+				Followers:   []int{3, 1},
+				TxLeader:    0,
+				Tx:          tx,
+				Status:      StatusCommitted,
+				Parents:     []GenId{{Start: 2001, Version: GenVersion(122)}},
+				ClusterSize: 3,
 			}
 
 			gen2 := Generation{
-				Start:     3001,
-				End:       4001,
-				Version:   1,
-				Timestamp: time.Now().UnixMicro(),
-				Leader:    3,
-				Followers: []int{1, 4},
-				TxLeader:  0,
-				Tx:        tx,
-				Status:    StatusCommitted,
-				Parents:   []GenId{{Start: 2001, Version: GenVersion(122)}},
+				Start:       3001,
+				End:         4001,
+				Version:     1,
+				Timestamp:   time.Now().UnixMicro(),
+				Leader:      3,
+				Followers:   []int{1, 4},
+				TxLeader:    0,
+				Tx:          tx,
+				Status:      StatusCommitted,
+				Parents:     []GenId{{Start: 2001, Version: GenVersion(122)}},
+				ClusterSize: 3,
 			}
 
 			err := client.CommitGeneration(&gen1, &gen2)
@@ -417,11 +431,11 @@ func (c *testConfig) LocalDbPath() string {
 func insertGeneration(c *client, gen Generation) {
 	query := `
 		INSERT INTO generations
-		(start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		(start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents, cluster_size)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := c.db.Exec(
 		query, gen.Start, gen.End, gen.Version, gen.Timestamp, gen.Tx, gen.TxLeader,
-		gen.Status, gen.Leader, utils.ToCsv(gen.Followers), parentsToString(gen.Parents))
+		gen.Status, gen.Leader, utils.ToCsv(gen.Followers), parentsToString(gen.Parents), gen.ClusterSize)
 	Expect(err).NotTo(HaveOccurred())
 }
 

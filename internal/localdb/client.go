@@ -72,8 +72,10 @@ func (c *client) Init() error {
 
 	c.db = db
 
-	if _, err := db.Exec(ddl01); err != nil {
-		return err
+	for _, q := range migrationQueries {
+		if _, err := db.Exec(q); err != nil {
+			return err
+		}
 	}
 
 	existing, err := c.hasLocalInfo()

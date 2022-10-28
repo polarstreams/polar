@@ -24,7 +24,7 @@ type queries struct {
 }
 
 func (c *client) prepareQueries() {
-	const generationColumns = "start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents"
+	const generationColumns = "start_token, end_token, version, timestamp, tx, tx_leader, status, leader, followers, parents, cluster_size"
 
 	c.queries.selectGenerationsByToken = c.prepare(fmt.Sprintf(`
 		SELECT %s FROM generations
@@ -46,7 +46,7 @@ func (c *client) prepareQueries() {
 		`SELECT %s FROM generations WHERE start_token = ? AND version = ?`, generationColumns))
 
 	c.queries.insertGeneration = c.prepare(fmt.Sprintf(
-		`INSERT INTO generations (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, generationColumns))
+		`INSERT INTO generations (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, generationColumns))
 
 	c.queries.insertTransaction = c.prepare(
 		`INSERT INTO transactions (tx, origin, timestamp, status) VALUES (?, ?, ?, ?)`)
@@ -159,7 +159,7 @@ func scanGenRow(rows *sql.Rows) (*Generation, error) {
 	var parents string
 	err := rows.Scan(
 		&result.Start, &result.End, &result.Version, &result.Timestamp, &result.Tx, &result.TxLeader,
-		&result.Status, &result.Leader, &followers, &parents)
+		&result.Status, &result.Leader, &followers, &parents, &result.ClusterSize)
 	if err != nil {
 		return nil, err
 	}
@@ -222,9 +222,13 @@ func (c *client) CommitGeneration(gen1 *Generation, gen2 *Generation) error {
 }
 
 func execInsertGeneration(stmt *sql.Stmt, gen *Generation) error {
+	if gen.ClusterSize == 0 {
+		return fmt.Errorf("Cluster size can not be zero")
+	}
+
 	_, err := stmt.Exec(
 		gen.Start, gen.End, gen.Version, gen.Timestamp, gen.Tx, gen.TxLeader,
-		StatusCommitted, gen.Leader, utils.ToCsv(gen.Followers), parentsToString(gen.Parents))
+		StatusCommitted, gen.Leader, utils.ToCsv(gen.Followers), parentsToString(gen.Parents), gen.ClusterSize)
 	return err
 }
 
