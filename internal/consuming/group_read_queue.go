@@ -22,6 +22,9 @@ import (
 const refreshPeriod = 2 * time.Second
 const offsetNoData = -1 // We should use types and flags in the future
 
+// TODO: REIMPLEMENT
+const mustImplementClusterSize = 0
+
 // Receives read requests per group on a single thread.
 //
 // It should close unused readers
@@ -299,12 +302,12 @@ func (q *groupReadQueue) maybeCloseReader(reader *SegmentReader, chunk SegmentCh
 		// There will be no more data, we should dispose the reader
 		q.closeReader(reader)
 
-		q.moveOffsetToNextGeneration(reader.Topic, reader.SourceVersion)
+		q.moveOffsetToNextGeneration(reader.Topic, reader.TopicRangeClusterSize, reader.SourceVersion)
 	}
 }
 
 // Moves offset to next generation
-func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source GenId) bool {
+func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, topicRangeClusterSize int, source GenId) bool {
 	log.Debug().Msgf("Looking for next generation of %s", topicId.GenId())
 	nextGens := q.topologyGetter.NextGeneration(topicId.GenId())
 	if len(nextGens) == 0 {
@@ -317,11 +320,14 @@ func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source 
 
 		// Mark as completed
 		offset := Offset{
-			Offset:  OffsetCompleted,
-			Version: topicId.Version,
-			Source:  source,
+			Version:     topicId.Version,
+			ClusterSize: mustImplementClusterSize,
+			Offset:      OffsetCompleted,
+			Token:       topicId.Token,
+			Index:       topicId.RangeIndex,
+			Source:      NewOffsetSource(source),
 		}
-		q.offsetState.Set(q.group, topicId.Name, topicId.Token, topicId.RangeIndex, offset, OffsetCommitAll)
+		q.offsetState.Set(q.group, topicId.Name, offset, OffsetCommitAll)
 
 		targetToken := nextGens[0].Start
 		var otherOffset *Offset
@@ -337,10 +343,12 @@ func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source 
 		if topicId.Token == targetToken {
 			// Its the token that continues to be in the cluster
 			targetRangeIndex = topicId.RangeIndex / 2
-			otherOffset = q.offsetState.Get(q.group, topicId.Name, topicId.Token, otherRangeIndex)
+			// TODO: REIMPLEMENT move
+			otherOffset, _ = q.offsetState.Get(q.group, topicId.Name, topicId.Token, otherRangeIndex, topicRangeClusterSize)
 		} else {
 			targetRangeIndex = RangeIndex(q.config.ConsumerRanges())/2 + topicId.RangeIndex/2
-			otherOffset = q.offsetState.Get(q.group, topicId.Name, topicId.Token, otherRangeIndex)
+			// TODO: REIMPLEMENT move
+			otherOffset, _ = q.offsetState.Get(q.group, topicId.Name, topicId.Token, otherRangeIndex, topicRangeClusterSize)
 		}
 
 		otherIsCompleted :=
@@ -352,10 +360,13 @@ func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source 
 			log.Info().Msgf("After scaling down, setting group offset '%s' for topic '%s' to %d/%d v%d",
 				q.group, topicId.Name, targetToken, targetRangeIndex, nextGens[0].Version)
 
-			q.offsetState.Set(q.group, topicId.Name, targetToken, targetRangeIndex, Offset{
-				Offset:  0,
-				Version: nextGens[0].Version,
-				Source:  source,
+			q.offsetState.Set(q.group, topicId.Name, Offset{
+				Version:     nextGens[0].Version,
+				ClusterSize: topicRangeClusterSize,
+				Offset:      0,
+				Token:       targetToken,
+				Index:       targetRangeIndex,
+				Source:      NewOffsetSource(source),
 			}, OffsetCommitAll)
 		} else {
 			log.Info().Msgf("After scaling down, could not move offset '%s' for topic '%s' to %d/%d v%d: other offset %s (of %d/%d)",
@@ -368,12 +379,15 @@ func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source 
 	if len(nextGens) == 1 && len(nextGens[0].Parents) == 1 {
 		gen := nextGens[0]
 		offset := Offset{
-			Offset:  0,
-			Version: gen.Version,
-			Source:  source,
+			Version:     gen.Version,
+			ClusterSize: gen.ClusterSize,
+			Offset:      0,
+			Token:       topicId.Token,
+			Index:       topicId.RangeIndex,
+			Source:      NewOffsetSource(source),
 		}
 		q.offsetState.Set(
-			q.group, topicId.Name, topicId.Token, topicId.RangeIndex, offset, OffsetCommitAll)
+			q.group, topicId.Name, offset, OffsetCommitAll)
 
 		return true
 	}
@@ -404,14 +418,17 @@ func (q *groupReadQueue) moveOffsetToNextGeneration(topicId TopicDataId, source 
 			rangeIndices = []RangeIndex{startRangeIndex, startRangeIndex + 1}
 		}
 
-		offset := Offset{
-			Offset:  0,
-			Version: gen.Version,
-			Source:  source,
-		}
 		for _, rangeIndex := range rangeIndices {
+			offset := Offset{
+				Version:     gen.Version,
+				ClusterSize: mustImplementClusterSize,
+				Offset:      0,
+				Token:       gen.Start,
+				Index:       rangeIndex,
+				Source:      NewOffsetSource(source),
+			}
 			q.offsetState.Set(
-				q.group, topicId.Name, gen.Start, rangeIndex, offset, OffsetCommitAll)
+				q.group, topicId.Name, offset, OffsetCommitAll)
 		}
 
 		return true
@@ -454,7 +471,8 @@ func (q *groupReadQueue) useFailedResponseItems(
 			// Remove it from failed
 			failedResponseItems = append(failedResponseItems[:i], failedResponseItems[i+1:]...)
 
-			offset := q.offsetState.Get(q.group, r.topic.Name, r.topic.Token, r.topic.RangeIndex)
+			// TODO: REIMPLEMENT ranges
+			offset, _ := q.offsetState.Get(q.group, r.topic.Name, r.topic.Token, r.topic.RangeIndex, mustImplementClusterSize)
 			if offset != nil && offset.Version != r.topic.Version {
 				// Since it failed, there were topology changes and the offset state for the group changed
 				// It can be safely ignored
@@ -524,14 +542,16 @@ func (q *groupReadQueue) createReader(
 		// Joined tokens, calculate the index change
 		// The source index starts at the middle of the range
 		sourceIndex := RangeIndex(q.config.ConsumerRanges())/2 + index/2
-		sourceTokenOffset := q.offsetState.Get(q.group, topic, source.Start, sourceIndex)
+		// TODO: IMPLEMENT new ranges
+		sourceTokenOffset, _ := q.offsetState.Get(q.group, topic, source.Start, sourceIndex, mustImplementClusterSize)
 		if sourceTokenOffset != nil && sourceTokenOffset.Version == source.Version {
 			// The offset for the source token is on the last generation, we can ignore this previous token
 			return nil
 		}
 	}
 
-	offset := q.offsetState.Get(q.group, topic, token, index)
+	// TODO: IMPLEMENT new ranges by calling IsBrokerAssigned() and IsConsumerAssigned()
+	offset, _ := q.offsetState.Get(q.group, topic, token, index, mustImplementClusterSize)
 	log.Debug().Msgf("May create for group %s, token %d/%d and topic '%s' with offset %s", q.group, token, index, topic, offset)
 
 	if offset == nil {
@@ -541,7 +561,7 @@ func (q *groupReadQueue) createReader(
 		offset = &Offset{
 			Offset:  0,
 			Version: 1,
-			Source:  source.Id(),
+			Source:  NewOffsetSource(source.Id()),
 		}
 	}
 
@@ -570,7 +590,7 @@ func (q *groupReadQueue) createReader(
 		if value == offsetNoData {
 			// No data was produced for this token+index
 			log.Info().Msgf("No data was produced for %s, moving offset", &topicId)
-			if movedOffset := q.moveOffsetToNextGeneration(topicId, source.Id()); !movedOffset {
+			if movedOffset := q.moveOffsetToNextGeneration(topicId, mustImplementClusterSize, source.Id()); !movedOffset {
 				log.Error().Msgf(
 					"Offset could not be moved for %s, as next generation could not be found", &topicId)
 			}
@@ -602,6 +622,7 @@ func (q *groupReadQueue) createReader(
 		isLeader,
 		replicationReader,
 		topicId,
+		topicGen.ClusterSize,
 		source.Id(),
 		offset.Offset,
 		q.offsetState,

@@ -479,7 +479,7 @@ func (c *consumer) OnOffsetFromPeer(kv *OffsetStoreKeyValue) {
 		Str("group", kv.Key.Group).
 		Str("topic", kv.Key.Topic).
 		Msgf("Received offset from peer for token %d/%d", kv.Key.Token, kv.Key.RangeIndex)
-	c.offsetState.Set(kv.Key.Group, kv.Key.Topic, kv.Key.Token, kv.Key.RangeIndex, kv.Value, OffsetCommitLocal)
+	c.offsetState.Set(kv.Key.Group, kv.Key.Topic, kv.Value, OffsetCommitLocal)
 }
 
 func (c *consumer) OnRegisterFromPeer(id string, group string, topics []string) error {

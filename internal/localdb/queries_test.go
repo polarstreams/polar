@@ -343,7 +343,7 @@ var _ = Describe("Client", func() {
 			value := Offset{
 				Offset:  1001,
 				Version: 3,
-				Source:  GenId{Start: -123, Version: 4},
+				Source:  NewOffsetSource(GenId{Start: -123, Version: 4}),
 			}
 			kv := OffsetStoreKeyValue{
 				Key:   key,
@@ -362,8 +362,8 @@ var _ = Describe("Client", func() {
 				QueryRow(query, key.Group, key.Topic, key.Token, key.RangeIndex).
 				Scan(&obtained.Version, &obtained.Offset, &sourceString)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(sourceString).To(Equal("{\"start\":-123,\"version\":4}"))
-			obtained.Source = genIdFromString(sourceString)
+			Expect(sourceString).To(ContainSubstring("{\"start\":-123,\"version\":4}"))
+			obtained.Source = offsetSourceFromString(sourceString)
 			Expect(obtained).To(Equal(value))
 
 			// Quick test that can be upserted multiple times
@@ -386,7 +386,7 @@ var _ = Describe("Client", func() {
 			value := Offset{
 				Offset:  OffsetCompleted,
 				Version: 2,
-				Source:  GenId{Start: math.MinInt64, Version: 4},
+				Source:  NewOffsetSource(GenId{Start: math.MinInt64, Version: 4}),
 			}
 			kv := OffsetStoreKeyValue{
 				Key:   key,
@@ -406,7 +406,7 @@ var _ = Describe("Client", func() {
 				QueryRow(query, key.Group, key.Topic, key.Token, key.RangeIndex).
 				Scan(&obtained.Version, &obtained.Offset, &sourceString)
 			Expect(err).NotTo(HaveOccurred())
-			obtained.Source = genIdFromString(sourceString)
+			obtained.Source = offsetSourceFromString(sourceString)
 			Expect(obtained).To(Equal(value))
 			Expect(client.Offsets()).To(ContainElement(kv))
 		})

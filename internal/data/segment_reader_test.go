@@ -336,12 +336,12 @@ var _ = Describe("SegmentReader", func() {
 			config.On("AutoCommitInterval").Return(1 * time.Nanosecond) // Commit always
 			offsetState := new(tMocks.OffsetState)
 			offsetState.
-				On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Run(func(_ mock.Arguments) {
 					atomic.AddInt64(&setCalls, 1)
 				})
 
-			offsetState.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&mockedOffset)
+			offsetState.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&mockedOffset, true)
 
 			s := &SegmentReader{
 				config:      config,

@@ -63,23 +63,21 @@ func (s *defaultOffsetState) String() string {
 	return fmt.Sprint(s.offsetMap)
 }
 
-func (s *defaultOffsetState) Get(group string, topic string, token Token, rangeIndex RangeIndex) *Offset {
+func (s *defaultOffsetState) Get(group string, topic string, token Token, rangeIndex RangeIndex, clusterSize int) (offset *Offset, rangesMatch bool) {
 	key := OffsetStoreKey{Group: group, Topic: topic, Token: token, RangeIndex: rangeIndex}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.offsetMap[key]
+	return s.offsetMap[key], true
 }
 
 func (s *defaultOffsetState) Set(
 	group string,
 	topic string,
-	token Token,
-	rangeIndex RangeIndex,
 	value Offset,
 	commit OffsetCommitType,
 ) {
-	key := OffsetStoreKey{Group: group, Topic: topic, Token: token, RangeIndex: rangeIndex}
+	key := OffsetStoreKey{Group: group, Topic: topic, Token: value.Token, RangeIndex: value.Index}
 	// We could use segment logs in the future
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -114,19 +112,20 @@ func (s *defaultOffsetState) processCommit() {
 }
 
 func (s *defaultOffsetState) isOldValue(existing *Offset, newValue *Offset) bool {
+	// TODO: USE TIMESTAMP
 	if existing == nil {
 		// There's no previous value
 		return false
 	}
 
-	if existing.Source.Start == newValue.Source.Start {
+	if existing.Source.Id.Start == newValue.Source.Id.Start {
 		// Same tokens (most common case)
-		if existing.Source.Version < newValue.Source.Version {
+		if existing.Source.Id.Version < newValue.Source.Id.Version {
 			// The source of the previous value is old
 			return false
 		}
 
-		if existing.Source.Version > newValue.Source.Version {
+		if existing.Source.Id.Version > newValue.Source.Id.Version {
 			// The new value's source is old
 			return true
 		}

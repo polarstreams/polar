@@ -238,7 +238,7 @@ func (c *client) SaveOffset(kv *OffsetStoreKeyValue) error {
 	// sqlite does not support uint64 values with high bit set
 	_, err := c.queries.
 		insertOffset.
-		Exec(key.Group, key.Topic, key.Token, key.RangeIndex, value.Version, value.Offset, genIdToString(value.Source))
+		Exec(key.Group, key.Topic, key.Token, key.RangeIndex, value.Version, value.Offset, offsetSourceToString(value.Source))
 	return err
 }
 
@@ -261,7 +261,7 @@ func (c *client) Offsets() ([]OffsetStoreKeyValue, error) {
 		if err != nil {
 			return result, err
 		}
-		kv.Value.Source = genIdFromString(sourceString)
+		kv.Value.Source = offsetSourceFromString(sourceString)
 		result = append(result, kv)
 	}
 	return result, nil
@@ -291,5 +291,17 @@ func genIdFromString(stringValue string) GenId {
 func genIdToString(id GenId) string {
 	bytes, err := json.Marshal(id)
 	utils.PanicIfErr(err, "Unexpected error when serializing GenId")
+	return string(bytes)
+}
+
+func offsetSourceFromString(stringValue string) OffsetSource {
+	var result OffsetSource
+	utils.PanicIfErr(json.Unmarshal([]byte(stringValue), &result), "Unexpected error when deserializing GenId")
+	return result
+}
+
+func offsetSourceToString(s OffsetSource) string {
+	bytes, err := json.Marshal(s)
+	utils.PanicIfErr(err, "Unexpected error when serializing OffsetSource")
 	return string(bytes)
 }
