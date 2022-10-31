@@ -332,18 +332,35 @@ var _ = Describe("Client", func() {
 	})
 
 	Describe("SaveOffset()", func() {
+
+		getStoredOffset := func(client *client, kv OffsetStoreKeyValue) (Offset, string) {
+			const query = `
+				SELECT token, range_index, cluster_size, version, offset, source FROM offsets
+				WHERE group_name = ? AND topic = ? AND token = ? AND range_index = ?`
+			obtained := Offset{}
+			var sourceString string
+			err := client.db.
+				QueryRow(query, kv.Key.Group, kv.Key.Topic, kv.Value.Token, kv.Value.Index).
+				Scan(&obtained.Token, &obtained.Index, &obtained.ClusterSize, &obtained.Version, &obtained.Offset,
+					&sourceString)
+			Expect(err).NotTo(HaveOccurred())
+			obtained.Source = offsetSourceFromString(sourceString)
+			return obtained, sourceString
+		}
+
 		It("should insert a record in offsets table", func() {
 			client := newTestClient()
 			key := OffsetStoreKey{
-				Group:      "group1",
-				Topic:      "topic1",
-				Token:      -123,
-				RangeIndex: 7,
+				Group: "group1",
+				Topic: "topic1",
 			}
 			value := Offset{
-				Offset:  1001,
-				Version: 3,
-				Source:  NewOffsetSource(GenId{Start: -123, Version: 4}),
+				Version:     3,
+				ClusterSize: 6,
+				Offset:      1001,
+				Token:       -123,
+				Index:       1,
+				Source:      NewOffsetSource(GenId{Start: -123, Version: 4}),
 			}
 			kv := OffsetStoreKeyValue{
 				Key:   key,
@@ -353,17 +370,8 @@ var _ = Describe("Client", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify stored
-			query := `
-				SELECT version, offset, source FROM offsets
-				WHERE group_name = ? AND topic = ? AND token = ? AND range_index = ?`
-			obtained := Offset{}
-			var sourceString string
-			err = client.db.
-				QueryRow(query, key.Group, key.Topic, key.Token, key.RangeIndex).
-				Scan(&obtained.Version, &obtained.Offset, &sourceString)
-			Expect(err).NotTo(HaveOccurred())
+			obtained, sourceString := getStoredOffset(client, kv)
 			Expect(sourceString).To(ContainSubstring("{\"start\":-123,\"version\":4}"))
-			obtained.Source = offsetSourceFromString(sourceString)
 			Expect(obtained).To(Equal(value))
 
 			// Quick test that can be upserted multiple times
@@ -378,14 +386,13 @@ var _ = Describe("Client", func() {
 		It("should store max int64", func() {
 			client := newTestClient()
 			key := OffsetStoreKey{
-				Group:      "group1",
-				Topic:      "topic1",
-				Token:      math.MinInt64,
-				RangeIndex: 2,
+				Group: "group1",
+				Topic: "topic1",
 			}
 			value := Offset{
 				Offset:  OffsetCompleted,
 				Version: 2,
+				Token:   112233,
 				Source:  NewOffsetSource(GenId{Start: math.MinInt64, Version: 4}),
 			}
 			kv := OffsetStoreKeyValue{
@@ -395,18 +402,7 @@ var _ = Describe("Client", func() {
 			err := client.SaveOffset(&kv)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify stored
-			query := `
-				SELECT version, offset, source FROM offsets
-				WHERE group_name = ? AND topic = ? AND token = ? AND range_index = ?`
-			obtained := Offset{}
-			var sourceString string
-
-			err = client.db.
-				QueryRow(query, key.Group, key.Topic, key.Token, key.RangeIndex).
-				Scan(&obtained.Version, &obtained.Offset, &sourceString)
-			Expect(err).NotTo(HaveOccurred())
-			obtained.Source = offsetSourceFromString(sourceString)
+			obtained, _ := getStoredOffset(client, kv)
 			Expect(obtained).To(Equal(value))
 			Expect(client.Offsets()).To(ContainElement(kv))
 		})

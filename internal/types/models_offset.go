@@ -85,10 +85,8 @@ func (o *Offset) String() string {
 
 // Represents an identifier of an offset to be persisted
 type OffsetStoreKey struct {
-	Group      string     `json:"group"`
-	Topic      string     `json:"topic"`
-	Token      Token      `json:"token"`
-	RangeIndex RangeIndex `json:"rangeIndex"`
+	Group string `json:"group"`
+	Topic string `json:"topic"`
 }
 
 // Represents an identifier and a value of an offset

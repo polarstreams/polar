@@ -52,11 +52,11 @@ func (c *client) prepareQueries() {
 		`INSERT INTO transactions (tx, origin, timestamp, status) VALUES (?, ?, ?, ?)`)
 
 	c.queries.insertOffset = c.prepare(
-		`REPLACE INTO offsets (group_name, topic, token, range_index, version, offset, source)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		`REPLACE INTO offsets (group_name, topic, token, range_index, cluster_size, version, offset, source)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	c.queries.selectOffsets = c.prepare(
-		`SELECT group_name, topic, token, range_index, version, offset, source FROM offsets`)
+		`SELECT group_name, topic, token, range_index, cluster_size, version, offset, source FROM offsets`)
 }
 
 func (c *client) prepare(query string) *sql.Stmt {
@@ -238,7 +238,7 @@ func (c *client) SaveOffset(kv *OffsetStoreKeyValue) error {
 	// sqlite does not support uint64 values with high bit set
 	_, err := c.queries.
 		insertOffset.
-		Exec(key.Group, key.Topic, key.Token, key.RangeIndex, value.Version, value.Offset, offsetSourceToString(value.Source))
+		Exec(key.Group, key.Topic, kv.Value.Token, kv.Value.Index, kv.Value.ClusterSize, value.Version, value.Offset, offsetSourceToString(value.Source))
 	return err
 }
 
@@ -256,7 +256,7 @@ func (c *client) Offsets() ([]OffsetStoreKeyValue, error) {
 	for rows.Next() {
 		kv := OffsetStoreKeyValue{}
 		err = rows.Scan(
-			&kv.Key.Group, &kv.Key.Topic, &kv.Key.Token, &kv.Key.RangeIndex, &kv.Value.Version, &kv.Value.Offset,
+			&kv.Key.Group, &kv.Key.Topic, &kv.Value.Token, &kv.Value.Index, &kv.Value.ClusterSize, &kv.Value.Version, &kv.Value.Offset,
 			&sourceString)
 		if err != nil {
 			return result, err

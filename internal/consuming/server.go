@@ -478,7 +478,7 @@ func (c *consumer) OnOffsetFromPeer(kv *OffsetStoreKeyValue) {
 	log.Debug().
 		Str("group", kv.Key.Group).
 		Str("topic", kv.Key.Topic).
-		Msgf("Received offset from peer for token %d/%d", kv.Key.Token, kv.Key.RangeIndex)
+		Msgf("Received offset from peer for token %d/%d", kv.Value.Token, kv.Value.Index)
 	c.offsetState.Set(kv.Key.Group, kv.Key.Topic, kv.Value, OffsetCommitLocal)
 }
 

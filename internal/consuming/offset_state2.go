@@ -13,13 +13,13 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func newDefaultOffsetState(
+func newDefaultOffsetState2(
 	localDb localdb.Client,
 	discoverer discovery.TopologyGetter,
 	gossiper interbroker.Gossiper,
 	config conf.ConsumerConfig,
 ) OffsetState {
-	state := &defaultOffsetState{
+	state := &defaultOffsetState2{
 		offsetMap:  make(map[OffsetStoreKey]*Offset),
 		commitChan: make(chan *OffsetStoreKeyValue, 64),
 		localDb:    localDb,
@@ -31,7 +31,8 @@ func newDefaultOffsetState(
 	return state
 }
 
-type defaultOffsetState struct {
+// Stores offsets by range, this
+type defaultOffsetState2 struct {
 	offsetMap  map[OffsetStoreKey]*Offset
 	mu         sync.RWMutex              // We need synchronization for doing CAS operation per key/value
 	commitChan chan *OffsetStoreKeyValue // We need to commit offset in order
@@ -41,7 +42,7 @@ type defaultOffsetState struct {
 	config     conf.ConsumerConfig
 }
 
-func (s *defaultOffsetState) Init() error {
+func (s *defaultOffsetState2) Init() error {
 	// Load local offsets into memory
 	values, err := s.localDb.Offsets()
 	if err != nil {
@@ -57,13 +58,13 @@ func (s *defaultOffsetState) Init() error {
 	return nil
 }
 
-func (s *defaultOffsetState) String() string {
+func (s *defaultOffsetState2) String() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return fmt.Sprint(s.offsetMap)
 }
 
-func (s *defaultOffsetState) Get(group string, topic string, token Token, rangeIndex RangeIndex, clusterSize int) (offset *Offset, rangesMatch bool) {
+func (s *defaultOffsetState2) Get(group string, topic string, token Token, rangeIndex RangeIndex, clusterSize int) (offset *Offset, rangesMatch bool) {
 	key := OffsetStoreKey{Group: group, Topic: topic}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -71,7 +72,7 @@ func (s *defaultOffsetState) Get(group string, topic string, token Token, rangeI
 	return s.offsetMap[key], true
 }
 
-func (s *defaultOffsetState) Set(
+func (s *defaultOffsetState2) Set(
 	group string,
 	topic string,
 	value Offset,
@@ -103,7 +104,7 @@ func (s *defaultOffsetState) Set(
 	}
 }
 
-func (s *defaultOffsetState) processCommit() {
+func (s *defaultOffsetState2) processCommit() {
 	for kv := range s.commitChan {
 		if err := s.localDb.SaveOffset(kv); err != nil {
 			log.Err(err).Interface("offset", *kv).Msgf("Offset could not be stored in the local db")
@@ -111,7 +112,7 @@ func (s *defaultOffsetState) processCommit() {
 	}
 }
 
-func (s *defaultOffsetState) isOldValue(existing *Offset, newValue *Offset) bool {
+func (s *defaultOffsetState2) isOldValue(existing *Offset, newValue *Offset) bool {
 	// TODO: USE TIMESTAMP
 	if existing == nil {
 		// There's no previous value
@@ -141,7 +142,7 @@ func (s *defaultOffsetState) isOldValue(existing *Offset, newValue *Offset) bool
 	return true
 }
 
-func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
+func (s *defaultOffsetState2) sendToFollowers(kv *OffsetStoreKeyValue) {
 	id := GenId{Start: kv.Value.Token, Version: kv.Value.Version}
 	gen := s.discoverer.GenerationInfo(id)
 	if gen == nil {
@@ -174,25 +175,11 @@ func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
 	}
 }
 
-func (s *defaultOffsetState) ProducerOffsetLocal(topic *TopicDataId) (int64, error) {
+func (s *defaultOffsetState2) ProducerOffsetLocal(topic *TopicDataId) (int64, error) {
 	return data.ReadProducerOffset(topic, s.config)
 }
 
-func (s *defaultOffsetState) MinOffset(topic string, token Token, index RangeIndex) *Offset {
-	// s.mu.RLock()
-	// defer s.mu.RUnlock()
-
-	// var result *Offset
-
-	// for k, value := range s.offsetMap {
-	// 	if k.Topic == topic && k.Token == token && k.RangeIndex == index {
-	// 		if result == nil || result.Compare(value) != CompareLessThan {
-	// 			result = value
-	// 		}
-	// 	}
-	// }
-
-	// return result
-	// TODO: REPLACEs
+func (s *defaultOffsetState2) MinOffset(topic string, token Token, index RangeIndex) *Offset {
+	// TODO: CHECK WHETHER IT CAN BE REMOVED
 	return nil
 }
