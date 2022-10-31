@@ -274,3 +274,19 @@ func IfEmpty(value string, defaultValue string) string {
 	}
 	return value
 }
+
+func Intersects(startA, endA, startB, endB types.Token) bool {
+	min := endA
+	max := startB
+	if startA >= startB {
+		min = endB
+		max = startA
+	}
+
+	if min == types.Token(math.MaxInt64) {
+		// Special case for the MaxInt64
+		return min >= max
+	}
+
+	return min > max
+}

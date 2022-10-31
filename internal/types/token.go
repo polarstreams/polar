@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"sort"
+
+	"github.com/rs/zerolog/log"
 )
 
 const StartToken Token = math.MinInt64
@@ -37,17 +39,19 @@ func HashToken(key string) Token {
 }
 
 // GetPrimaryTokenIndex returns the broker index of the start token in a given range
-func GetPrimaryTokenIndex(token Token, tokenRangeLength int, ranges int) (BrokerIndex, RangeIndex) {
-	i := sort.Search(tokenRangeLength, func(i int) bool {
-		return GetTokenAtIndex(tokenRangeLength, i) > token
+func GetPrimaryTokenIndex(token Token, clusterSize int, rangesPerToken int) (BrokerIndex, RangeIndex) {
+	i := sort.Search(clusterSize, func(i int) bool {
+		return GetTokenAtIndex(clusterSize, i) > token
 	})
 
 	index := i - 1
-	rangeSize := chunkSizeUnit * getRingFactor(tokenRangeLength) / int64(ranges)
-	tokenDiff := absInt64(token - GetTokenAtIndex(tokenRangeLength, index))
+	// Expressing the range size as a factor ONLY works if the rangesPerToken never change
+	// during the lifetime of a topic
+	rangeSize := chunkSizeUnit * getRingFactor(clusterSize) / int64(rangesPerToken)
+	tokenDiff := absInt64(token - GetTokenAtIndex(clusterSize, index))
 	rangeIndex := RangeIndex(tokenDiff / rangeSize)
 
-	if int(rangeIndex) >= ranges {
+	if int(rangeIndex) >= rangesPerToken {
 		// The last range is larger than chunkSize*factor
 		rangeIndex = 0
 	}
@@ -69,4 +73,31 @@ func absInt64(num Token) int64 {
 		return -int64(num)
 	}
 	return int64(num)
+}
+
+// Gets the start and end of a range based on the token, range index and cluster size.
+// Not that for the last range, the end will be `MaxInt64`.
+func RangeByTokenAndClusterSize(token Token, index RangeIndex, rangesPerToken int, clusterSize int) (Token, Token) {
+	// Expressing the range size as a factor ONLY works if the rangesPerToken never change
+	// during the lifetime of a topic
+	rangeSize := Token(chunkSizeUnit * getRingFactor(clusterSize) / int64(rangesPerToken))
+	start := token + rangeSize*Token(index)
+	end := Token(0)
+	if index < RangeIndex(rangesPerToken)-1 {
+		end = token + rangeSize*Token(index+1)
+	} else {
+		// The end should be the next token that will cover any mod difference
+		i := sort.Search(clusterSize, func(i int) bool {
+			return GetTokenAtIndex(clusterSize, i) >= token
+		})
+
+		if i == clusterSize {
+			log.Panic().Msgf("Invalid token %d when mapping to ranges", token)
+		}
+		end = GetTokenAtIndex(clusterSize, i+1)
+		if end == StartToken {
+			end = Token(math.MaxInt64)
+		}
+	}
+	return start, end
 }

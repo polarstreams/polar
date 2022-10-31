@@ -2,6 +2,7 @@ package consuming
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/barcostreams/barco/internal/conf"
@@ -10,8 +11,17 @@ import (
 	"github.com/barcostreams/barco/internal/interbroker"
 	"github.com/barcostreams/barco/internal/localdb"
 	. "github.com/barcostreams/barco/internal/types"
+	"github.com/barcostreams/barco/internal/utils"
 	"github.com/rs/zerolog/log"
 )
+
+type offsetRange struct {
+	// The start token of the range.
+	// Note that this accounts for range indices and differs from the the generation range
+	start Token
+	end   Token
+	value Offset
+}
 
 func newDefaultOffsetState2(
 	localDb localdb.Client,
@@ -20,7 +30,7 @@ func newDefaultOffsetState2(
 	config conf.ConsumerConfig,
 ) OffsetState {
 	state := &defaultOffsetState2{
-		offsetMap:  make(map[OffsetStoreKey]*Offset),
+		offsetMap:  make(map[OffsetStoreKey][]offsetRange),
 		commitChan: make(chan *OffsetStoreKeyValue, 64),
 		localDb:    localDb,
 		gossiper:   gossiper,
@@ -31,10 +41,10 @@ func newDefaultOffsetState2(
 	return state
 }
 
-// Stores offsets by range, this
+// Stores offsets by range, gets and sets offsets in the local storage and in peers.
 type defaultOffsetState2 struct {
-	offsetMap  map[OffsetStoreKey]*Offset
-	mu         sync.RWMutex              // We need synchronization for doing CAS operation per key/value
+	offsetMap  map[OffsetStoreKey][]offsetRange // A map of sorted lists of offset ranges
+	mu         sync.RWMutex
 	commitChan chan *OffsetStoreKeyValue // We need to commit offset in order
 	localDb    localdb.Client
 	gossiper   interbroker.Gossiper
@@ -44,16 +54,17 @@ type defaultOffsetState2 struct {
 
 func (s *defaultOffsetState2) Init() error {
 	// Load local offsets into memory
-	values, err := s.localDb.Offsets()
+	_, err := s.localDb.Offsets()
 	if err != nil {
 		return err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, kv := range values {
-		s.offsetMap[kv.Key] = &kv.Value
-	}
+	// TODO: IMPLEMENT
+	// s.mu.Lock()
+	// defer s.mu.Unlock()
+	// for _, kv := range values {
+	// 	s.offsetMap[kv.Key] = &kv.Value
+	// }
 
 	return nil
 }
@@ -64,12 +75,53 @@ func (s *defaultOffsetState2) String() string {
 	return fmt.Sprint(s.offsetMap)
 }
 
-func (s *defaultOffsetState2) Get(group string, topic string, token Token, rangeIndex RangeIndex, clusterSize int) (offset *Offset, rangesMatch bool) {
-	key := OffsetStoreKey{Group: group, Topic: topic}
+func (s *defaultOffsetState2) Get(
+	group string,
+	topic string,
+	token Token,
+	index RangeIndex,
+	clusterSize int,
+) (offset *Offset, rangesMatch bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.offsetMap[key], true
+	key := OffsetStoreKey{Group: group, Topic: topic}
+	list, found := s.offsetMap[key]
+	if !found {
+		return nil, false
+	}
+
+	start, end := RangeByTokenAndClusterSize(token, index, s.config.ConsumerRanges(), clusterSize)
+
+	offsetIndex := sort.Search(len(list), func(i int) bool {
+		item := list[i]
+		return item.end >= end
+	})
+
+	item := list[offsetIndex]
+	rangesMatch = item.start == start && item.end == end
+	if rangesMatch {
+		return &item.value, rangesMatch
+	}
+
+	// It might not be contained
+	if !utils.Intersects(item.start, item.end, start, end) {
+		return nil, false
+	}
+
+	// When its contained, return the first non-completed range
+	result := &list[offsetIndex].value
+	for i := offsetIndex - 1; i >= 0; i-- {
+		item := list[i]
+		if !utils.Intersects(item.start, item.end, start, end) {
+			break
+		}
+		if item.value.Offset != OffsetCompleted {
+			result = &item.value
+		}
+	}
+
+	return result, rangesMatch
 }
 
 func (s *defaultOffsetState2) Set(
@@ -79,17 +131,8 @@ func (s *defaultOffsetState2) Set(
 	commit OffsetCommitType,
 ) {
 	key := OffsetStoreKey{Group: group, Topic: topic}
-	// We could use segment logs in the future
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	existingValue := s.offsetMap[key]
 
-	if s.isOldValue(existingValue, &value) {
-		// We have a newer value in our map, don't override
-		return
-	}
-
-	s.offsetMap[key] = &value
+	// TODO: IMPLEMENT
 
 	if commit != OffsetCommitNone {
 		// Store commits locally in order but don't await for it to complete
@@ -102,6 +145,8 @@ func (s *defaultOffsetState2) Set(
 			go s.sendToFollowers(kv)
 		}
 	}
+
+	// TODO: IMPLEMENT MOVE OFFSET
 }
 
 func (s *defaultOffsetState2) processCommit() {

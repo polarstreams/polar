@@ -176,8 +176,8 @@ func (c *config) Init() error {
 	if c.StreamBufferSize() < c.MaxGroupSize() {
 		return fmt.Errorf("StreamBufferSize can not be lower than MaxGroupSize")
 	}
-	if c.ConsumerRanges() < 2 && c.ConsumerRanges()%2 != 0 {
-		return fmt.Errorf("ConsumerRanges should be a positive even number")
+	if c.ConsumerRanges() < 2 || c.ConsumerRanges()%2 != 0 || c.ConsumerRanges() > 1000 {
+		return fmt.Errorf("ConsumerRanges should be a positive even number, less than or equal to 1000")
 	}
 	value := env(envLogRetentionDuration, defaultLogRetention)
 	if _, err := time.ParseDuration(value); err != nil && value != "null" {

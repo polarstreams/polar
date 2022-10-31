@@ -87,6 +87,18 @@ var _ = Describe("Token", func() {
 		})
 	})
 
+	Describe("RangeByTokenAndClusterSize()", func() {
+		It("should have fixed values", func() {
+			start0, end0_3 := RangeByTokenAndClusterSize(StartToken, 0, 4, 3)
+			Expect(start0).To(Equal(StartToken))
+			Expect(end0_3).To(Equal(Token(-7686143364045646848)))
+			start1_6, end1_6 := RangeByTokenAndClusterSize(StartToken, 1, 4, 6)
+			Expect(end1_6).To(Equal(end0_3),
+				"The end of range 0 of a 3-broker cluster matches end of range 1 in a 6-broker cluster")
+			Expect(start1_6).To(Equal(Token(-8454757700450211328)))
+		})
+	})
+
 	Describe("HashToken()", func() {
 		It("Should return the expected values", func() {
 			// Taken from Cassandra token() function

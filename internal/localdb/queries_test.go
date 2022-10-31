@@ -332,7 +332,6 @@ var _ = Describe("Client", func() {
 	})
 
 	Describe("SaveOffset()", func() {
-
 		getStoredOffset := func(client *client, kv OffsetStoreKeyValue) (Offset, string) {
 			const query = `
 				SELECT token, range_index, cluster_size, version, offset, source FROM offsets
