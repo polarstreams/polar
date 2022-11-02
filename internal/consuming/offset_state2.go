@@ -143,6 +143,7 @@ func (s *defaultOffsetState2) Set(
 	value Offset,
 	commit OffsetCommitType,
 ) bool {
+	// TODO: IMPLEMENT MOVE OFFSET SOMEWHERE
 	key := OffsetStoreKey{Group: group, Topic: topic}
 	if !s.setMap(key, &value) {
 		return false
@@ -213,10 +214,108 @@ func (s *defaultOffsetState2) setMap(key OffsetStoreKey, value *Offset) bool {
 			list[offsetIndex] = rangeToInsert
 		}
 		s.offsetMap[key] = list
+		return true
 	}
 
-	// TODO: RANGES could be different (out of sync? any other scenario?)
-	// TODO: IMPLEMENT MOVE OFFSET SOMEWHERE
+	// Occurs only when there's a change in the topology
+	// Ranges may be needed to be cut, replaced with extended ones ,...
+	overlapping := overlappingIndices(list, offsetIndex, start, end)
+	if len(overlapping) == 1 && (start > list[overlapping[0]].start || end < list[overlapping[0]].end){
+		return s.offsetSplit(key, value, list, overlapping[0], start, end)
+	}
+
+	return s.offsetJoin(key, value, list, overlapping, start, end)
+}
+
+// Gets all overlapping ranges in ascending order
+func overlappingIndices(list []offsetRange, offsetIndex int, start Token, end Token) []int {
+	result := make([]int, 0)
+	for i := offsetIndex; i >= 0; i-- {
+		item := list[i]
+		if !utils.Intersects(item.start, item.end, start, end) {
+			break
+		}
+		result = append([]int{i}, result...)
+	}
+
+	return result
+}
+
+func (s *defaultOffsetState2) offsetJoin(
+	key OffsetStoreKey,
+	value *Offset,
+	list []offsetRange,
+	indices []int,
+	start Token,
+	end Token,
+) bool {
+	if value.Source.Timestamp < list[indices[0]].value.Source.Timestamp {
+		// Old value
+		return false
+	}
+
+	firstIndex := indices[0]
+	lastIndex := indices[len(indices)-1]
+
+	list = append(list[:firstIndex+1], list[lastIndex+1:]...)
+	list[firstIndex] = offsetRange{start: start, end: end, value: *value}
+	s.offsetMap[key] = list
+
+	return true
+}
+
+func (s *defaultOffsetState2) offsetSplit(
+	key OffsetStoreKey,
+	value *Offset,
+	list []offsetRange,
+	index int,
+	start Token,
+	end Token,
+) bool {
+	existing := list[index]
+	// Use the timestamp as a way to check that we don't have newer data
+	if value.Source.Timestamp < existing.value.Source.Timestamp {
+		// Old value
+		return false
+	}
+
+	// Mark the previous one as completed
+	existing.value.Offset = OffsetCompleted
+
+	// Remove the existing one and insert in place
+	toInsert := make([]offsetRange, 0)
+
+	if existing.start < start {
+		// Add the portion at the beginning of the range
+		toInsert = append(toInsert, offsetRange{
+			start: existing.start,
+			end:   start, // Until the beginning of the new portion
+			value: existing.value,
+		})
+	}
+
+	// Insert the new portion
+	toInsert = append(toInsert, offsetRange{
+		start: start,
+		end:   end,
+		value: *value,
+	})
+
+	if existing.end > end {
+		// Add the portion at the end of the range
+		toInsert = append(toInsert, offsetRange{
+			start: end, // From he end of the new portion
+			end:   existing.end,
+			value: existing.value,
+		})
+	}
+
+	resultList := append(list[:index], toInsert...)
+	if index < len(list)-1 {
+		resultList = append(resultList, list[index+1:]...)
+	}
+	s.offsetMap[key] = resultList
+
 	return true
 }
 
