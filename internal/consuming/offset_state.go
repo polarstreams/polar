@@ -76,7 +76,7 @@ func (s *defaultOffsetState) Set(
 	topic string,
 	value Offset,
 	commit OffsetCommitType,
-) {
+) bool {
 	key := OffsetStoreKey{Group: group, Topic: topic}
 	// We could use segment logs in the future
 	s.mu.Lock()
@@ -85,7 +85,7 @@ func (s *defaultOffsetState) Set(
 
 	if s.isOldValue(existingValue, &value) {
 		// We have a newer value in our map, don't override
-		return
+		return false
 	}
 
 	s.offsetMap[key] = &value
@@ -101,6 +101,8 @@ func (s *defaultOffsetState) Set(
 			go s.sendToFollowers(kv)
 		}
 	}
+
+	return true
 }
 
 func (s *defaultOffsetState) processCommit() {

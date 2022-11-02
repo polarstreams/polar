@@ -92,14 +92,14 @@ func (s *defaultOffsetState2) Get(
 	}
 
 	start, end := RangeByTokenAndClusterSize(token, index, s.config.ConsumerRanges(), clusterSize)
-
-	offsetIndex := sort.Search(len(list), func(i int) bool {
-		item := list[i]
-		return item.end >= end
-	})
-
+	offsetIndex := binarySearch(list, end)
+	endIsGreater := offsetIndex == len(list)
+	if endIsGreater {
+		offsetIndex--
+	}
 	item := list[offsetIndex]
 	rangesMatch = item.start == start && item.end == end
+
 	if rangesMatch {
 		return &item.value, rangesMatch
 	}
@@ -111,6 +111,9 @@ func (s *defaultOffsetState2) Get(
 
 	// When its contained, return the first non-completed range
 	result := &list[offsetIndex].value
+	if endIsGreater {
+		result = nil
+	}
 	for i := offsetIndex - 1; i >= 0; i-- {
 		item := list[i]
 		if !utils.Intersects(item.start, item.end, start, end) {
@@ -124,15 +127,26 @@ func (s *defaultOffsetState2) Get(
 	return result, rangesMatch
 }
 
+// Returns the index of the first match where the end of the range is greater than or equal to the provided end.
+//
+// The returned index could be an exact match, the last matching range or len(list).
+func binarySearch(list []offsetRange, end Token) int {
+	return sort.Search(len(list), func(i int) bool {
+		item := list[i]
+		return item.end >= end
+	})
+}
+
 func (s *defaultOffsetState2) Set(
 	group string,
 	topic string,
 	value Offset,
 	commit OffsetCommitType,
-) {
+) bool {
 	key := OffsetStoreKey{Group: group, Topic: topic}
-
-	// TODO: IMPLEMENT
+	if !s.setMap(key, &value) {
+		return false
+	}
 
 	if commit != OffsetCommitNone {
 		// Store commits locally in order but don't await for it to complete
@@ -146,7 +160,64 @@ func (s *defaultOffsetState2) Set(
 		}
 	}
 
-	// TODO: IMPLEMENT MOVE OFFSET
+	return true
+}
+
+func (s *defaultOffsetState2) setMap(key OffsetStoreKey, value *Offset) bool {
+	// Set can be called from the reader, a peer or to move offset (queue)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	start, end := RangeByTokenAndClusterSize(value.Token, value.Index, s.config.ConsumerRanges(), value.ClusterSize)
+	list, found := s.offsetMap[key]
+	if !found {
+		s.offsetMap[key] = []offsetRange{{
+			start: start,
+			end:   end,
+			value: *value,
+		}}
+		return true
+	}
+
+	offsetIndex := binarySearch(list, end)
+	endIsGreater := offsetIndex == len(list)
+	if endIsGreater {
+		offsetIndex--
+	}
+	item := list[offsetIndex]
+
+	// Check ranges exact match (most common case)
+	if item.start == start && item.end == end {
+		if s.isOldValue(&item.value, value) {
+			// Ignore
+			return false
+		}
+
+		// 1x1 replace
+		list[offsetIndex].value = *value
+		return true
+	}
+
+	if !utils.Intersects(item.start, item.end, start, end) {
+		// Insert when it does not intersect
+		rangeToInsert := offsetRange{
+			start: start,
+			end:   end,
+			value: *value,
+		}
+
+		if endIsGreater {
+			list = append(list, rangeToInsert)
+		} else {
+			list = append(list[:offsetIndex+1], list[offsetIndex:]...)
+			list[offsetIndex] = rangeToInsert
+		}
+		s.offsetMap[key] = list
+	}
+
+	// TODO: RANGES could be different (out of sync? any other scenario?)
+	// TODO: IMPLEMENT MOVE OFFSET SOMEWHERE
+	return true
 }
 
 func (s *defaultOffsetState2) processCommit() {
@@ -158,12 +229,7 @@ func (s *defaultOffsetState2) processCommit() {
 }
 
 func (s *defaultOffsetState2) isOldValue(existing *Offset, newValue *Offset) bool {
-	// TODO: USE TIMESTAMP
-	if existing == nil {
-		// There's no previous value
-		return false
-	}
-
+	// TODO: Consider value token and timestamp
 	if existing.Source.Id.Start == newValue.Source.Id.Start {
 		// Same tokens (most common case)
 		if existing.Source.Id.Version < newValue.Source.Id.Version {
