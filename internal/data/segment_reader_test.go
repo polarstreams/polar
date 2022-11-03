@@ -339,7 +339,8 @@ var _ = Describe("SegmentReader", func() {
 				On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Run(func(_ mock.Arguments) {
 					atomic.AddInt64(&setCalls, 1)
-				})
+				}).
+				Return(true)
 
 			offsetState.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&mockedOffset, true)
 
@@ -542,8 +543,7 @@ func newTestReader() *SegmentReader {
 	config.On("ReadAheadSize").Return(1 * conf.MiB)
 	config.On("AutoCommitInterval").Return(1 * time.Second)
 	offsetState := new(tMocks.OffsetState)
-	offsetState.On("Set",
-		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	offsetState.On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(true)
 	return &SegmentReader{
 		config:      config,
 		Items:       make(chan ReadItem, 16),

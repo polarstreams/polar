@@ -48,17 +48,5 @@ const migration1 = `
 
 const migration2 = `
 ALTER TABLE generations ADD cluster_size int NOT NULL DEFAULT 3;
-DROP TABLE offsets;
-
-CREATE TABLE offsets (
-	group_name TEXT NOT NULL,
-	topic TEXT NOT NULL,
-	token BIGINT NOT NULL,
-	range_index INT NOT NULL,
-	cluster_size int NOT NULL,
-	version INT NOT NULL,
-	offset INT NOT NULL,
-	source TEXT NOT NULL, -- json of OffsetSource
-	PRIMARY KEY (group_name, topic, token, range_index, version)
-);
+ALTER TABLE offsets ADD cluster_size int NOT NULL DEFAULT 3;
 `

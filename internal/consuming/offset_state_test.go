@@ -1,11 +1,13 @@
 package consuming
 
 import (
+	"time"
+
 	cMocks "github.com/barcostreams/barco/internal/test/conf/mocks"
+	dbMocks "github.com/barcostreams/barco/internal/test/localdb/mocks"
 	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/rs/zerolog/log"
 )
 
 var _ = Describe("defaultOffsetState", func() {
@@ -189,7 +191,7 @@ var _ = Describe("defaultOffsetState", func() {
 
 		It("should insert a range at the beginning", func() {
 			// Empty initial map
-			s := newTestOffsetState(map[OffsetStoreKey][]offsetRange{}, consumerRanges)
+			s := newTestOffsetState(nil, consumerRanges)
 
 			offset := Offset{
 				Version:     2,
@@ -217,7 +219,7 @@ var _ = Describe("defaultOffsetState", func() {
 			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T1_0, end: endC3T1_0, value: offset}))
 		})
 
-		It("should insert when offset splitting at the start", func ()  {
+		It("should insert when offset splitting at the start", func() {
 			// Split the range (startC3T0_1, endC3T0_1]
 			startC6T0_2, endC6T0_2 := RangeByTokenAndClusterSize(t0, 2, consumerRanges, 6)
 			startC6T0_3, endC6T0_3 := RangeByTokenAndClusterSize(t0, 3, consumerRanges, 6)
@@ -241,7 +243,7 @@ var _ = Describe("defaultOffsetState", func() {
 				offsetRange{start: startC6T0_3, end: endC6T0_3, value: existingOffset}))
 		})
 
-		It("should insert when offset splitting at the end", func ()  {
+		It("should insert when offset splitting at the end", func() {
 			// Split the range (startC3T0_1, endC3T0_1]
 			startC6T0_2, endC6T0_2 := RangeByTokenAndClusterSize(t0, 2, consumerRanges, 6)
 			startC6T0_3, endC6T0_3 := RangeByTokenAndClusterSize(t0, 3, consumerRanges, 6)
@@ -265,7 +267,7 @@ var _ = Describe("defaultOffsetState", func() {
 			Expect(s.offsetMap[key1][3]).To(Equal(offsetRange{start: startC6T0_3, end: endC6T0_3, value: offset}))
 		})
 
-		It("should join entirely contained ranges", func ()  {
+		It("should join entirely contained ranges", func() {
 			// Replace C12_T0_2 and C12_T0_3 with C6_T0_1
 			startC6T0_1, endC6T0_1 := RangeByTokenAndClusterSize(t0, 1, consumerRanges, 6)
 			s := newTestOffsetState(offsetMap, consumerRanges)
@@ -283,8 +285,7 @@ var _ = Describe("defaultOffsetState", func() {
 			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC6T0_1, end: endC6T0_1, value: offset}))
 		})
 
-		It("should join partially contained ranges", func ()  {
-			log.Debug().Msgf("--Starting test")
+		It("should join partially contained ranges", func() {
 			// Replace C12_T0_2 and C12_T0_3 with C3_T0_0
 			startC3T0_0, endC3T0_0 := RangeByTokenAndClusterSize(t0, 0, consumerRanges, 3)
 			// Values C12_T0_0 and C12_T0_1 are not contained (range at the beginning empty)
@@ -304,6 +305,101 @@ var _ = Describe("defaultOffsetState", func() {
 			Expect(s.offsetMap[key1]).To(HaveLen(2))
 			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T0_0, end: endC3T0_0, value: offset}))
 			Expect(s.offsetMap[key1][1]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueC3_T0_1}))
+		})
+	})
+
+	Describe("Init()", func() {
+		It("should load the offsets from localdb", func() {
+			localDb := new(dbMocks.Client)
+			localDb.On("Offsets").Return([]OffsetStoreKeyValue{
+				{Key: key1, Value: valueC3_T0_1},
+				{Key: key1, Value: valueC3_T2_3},
+			}, nil)
+
+			s := newTestOffsetState(nil, 4)
+			s.localDb = localDb
+
+			Expect(s.Init()).NotTo(HaveOccurred())
+			Expect(s.offsetMap[key1]).To(HaveLen(2))
+			startC3T0_1, endC3T0_1 := RangeByTokenAndClusterSize(t0, 1, consumerRanges, 3)
+			startC3T2_3, endC3T2_3 := RangeByTokenAndClusterSize(t2C3, 3, consumerRanges, 3)
+			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueC3_T0_1}))
+			Expect(s.offsetMap[key1][1]).To(Equal(offsetRange{start: startC3T2_3, end: endC3T2_3, value: valueC3_T2_3}))
+		})
+
+		It("should ignore previous offsets by source for identical ranges", func ()  {
+			localDb := new(dbMocks.Client)
+
+			// Identical ranges, compared by source
+			valueT0old := valueC3_T0_1
+			valueT0old.Source = OffsetSource{Id: GenId{Start: t0, Version: 1}}
+			valueT0new := valueC3_T0_1
+			valueT0new.Offset = 445566990123
+			valueT0new.Source = OffsetSource{Id: GenId{Start: t0, Version: 2}} // Newer source
+
+			localDb.On("Offsets").Return([]OffsetStoreKeyValue{
+				{Key: key1, Value: valueT0old},
+				{Key: key1, Value: valueT0new},
+			}, nil)
+
+			s := newTestOffsetState(nil, 4)
+			s.localDb = localDb
+
+			Expect(s.Init()).NotTo(HaveOccurred())
+			startC3T0_1, endC3T0_1 := RangeByTokenAndClusterSize(t0, 1, consumerRanges, 3)
+			Expect(s.offsetMap[key1]).To(HaveLen(1))
+			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueT0new}))
+		})
+
+		It("should ignore previous offsets by value for identical ranges", func ()  {
+			localDb := new(dbMocks.Client)
+
+			// Identical ranges, compared by values
+			valueT0new := valueC3_T0_1
+			valueT0new.Offset = 445566990123
+			valueT0new.Version = 100
+			valueT0old := valueC3_T0_1
+
+			localDb.On("Offsets").Return([]OffsetStoreKeyValue{
+				{Key: key1, Value: valueT0new},
+				{Key: key1, Value: valueT0old},
+			}, nil)
+
+			s := newTestOffsetState(nil, 4)
+			s.localDb = localDb
+
+			Expect(s.Init()).NotTo(HaveOccurred())
+			startC3T0_1, endC3T0_1 := RangeByTokenAndClusterSize(t0, 1, consumerRanges, 3)
+			Expect(s.offsetMap[key1]).To(HaveLen(1))
+			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueT0new}))
+		})
+
+		It("should ignore previous offsets by timestamp for different ranges", func ()  {
+			localDb := new(dbMocks.Client)
+
+
+			valueT0new := valueC3_T0_1
+			valueT0new.Source.Timestamp = time.Now().UnixMicro() // Newer timestamp
+			valueT6old := Offset{
+				Version:     4,
+				ClusterSize: 6,
+				Offset:      7090,
+				Token:       GetTokenAtIndex(12, 1), // T6
+				Index:       1,
+			}
+
+			localDb.On("Offsets").Return([]OffsetStoreKeyValue{
+				{Key: key1, Value: valueT0new},
+				{Key: key1, Value: valueT6old},
+			}, nil)
+
+			s := newTestOffsetState(nil, 4)
+			s.localDb = localDb
+
+			Expect(s.Init()).NotTo(HaveOccurred())
+			startC3T0_1, endC3T0_1 := RangeByTokenAndClusterSize(t0, 1, consumerRanges, 3)
+			Expect(s.offsetMap[key1]).To(HaveLen(1))
+			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueT0new}))
 		})
 	})
 })

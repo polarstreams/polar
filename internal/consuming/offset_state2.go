@@ -54,17 +54,16 @@ type defaultOffsetState2 struct {
 
 func (s *defaultOffsetState2) Init() error {
 	// Load local offsets into memory
-	_, err := s.localDb.Offsets()
+	values, err := s.localDb.Offsets()
 	if err != nil {
 		return err
 	}
 
-	// TODO: IMPLEMENT
-	// s.mu.Lock()
-	// defer s.mu.Unlock()
-	// for _, kv := range values {
-	// 	s.offsetMap[kv.Key] = &kv.Value
-	// }
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, kv := range values {
+		s.setMap(kv.Key, &kv.Value)
+	}
 
 	return nil
 }
@@ -143,12 +142,19 @@ func (s *defaultOffsetState2) Set(
 	value Offset,
 	commit OffsetCommitType,
 ) bool {
-	// TODO: IMPLEMENT MOVE OFFSET SOMEWHERE
+	// Set can be called from the reader, a peer or to move offset (queue)
 	key := OffsetStoreKey{Group: group, Topic: topic}
-	if !s.setMap(key, &value) {
+
+	// Callers of setMap() must hold the lock
+	s.mu.Lock()
+	addedToMap := s.setMap(key, &value)
+	s.mu.Unlock()
+
+	if !addedToMap {
 		return false
 	}
 
+	// TODO: IMPLEMENT MOVE OFFSET SOMEWHERE
 	if commit != OffsetCommitNone {
 		// Store commits locally in order but don't await for it to complete
 		kv := &OffsetStoreKeyValue{Key: key, Value: value}
@@ -164,11 +170,10 @@ func (s *defaultOffsetState2) Set(
 	return true
 }
 
+// Sets the offset in the map
+//
+// Callers of this function MUST hold the lock
 func (s *defaultOffsetState2) setMap(key OffsetStoreKey, value *Offset) bool {
-	// Set can be called from the reader, a peer or to move offset (queue)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	start, end := RangeByTokenAndClusterSize(value.Token, value.Index, s.config.ConsumerRanges(), value.ClusterSize)
 	list, found := s.offsetMap[key]
 	if !found {
@@ -220,7 +225,7 @@ func (s *defaultOffsetState2) setMap(key OffsetStoreKey, value *Offset) bool {
 	// Occurs only when there's a change in the topology
 	// Ranges may be needed to be cut, replaced with extended ones ,...
 	overlapping := overlappingIndices(list, offsetIndex, start, end)
-	if len(overlapping) == 1 && (start > list[overlapping[0]].start || end < list[overlapping[0]].end){
+	if len(overlapping) == 1 && (start > list[overlapping[0]].start || end < list[overlapping[0]].end) {
 		return s.offsetSplit(key, value, list, overlapping[0], start, end)
 	}
 
@@ -249,12 +254,15 @@ func (s *defaultOffsetState2) offsetJoin(
 	start Token,
 	end Token,
 ) bool {
-	if value.Source.Timestamp < list[indices[0]].value.Source.Timestamp {
-		// Old value
+	firstIndex := indices[0]
+	if s.isOldValue(&list[firstIndex].value, value) {
 		return false
 	}
 
-	firstIndex := indices[0]
+	log.Info().Msgf(
+		"Joining offset for range (%d, %d), new offset v%d %d (cluster size %d)",
+		start, end, value.Version, value.Offset, value.ClusterSize)
+
 	lastIndex := indices[len(indices)-1]
 
 	list = append(list[:firstIndex+1], list[lastIndex+1:]...)
@@ -274,7 +282,7 @@ func (s *defaultOffsetState2) offsetSplit(
 ) bool {
 	existing := list[index]
 	// Use the timestamp as a way to check that we don't have newer data
-	if value.Source.Timestamp < existing.value.Source.Timestamp {
+	if s.isOldValue(&existing.value, value) {
 		// Old value
 		return false
 	}
@@ -310,11 +318,16 @@ func (s *defaultOffsetState2) offsetSplit(
 		})
 	}
 
+	log.Info().Msgf(
+		"Splitting offset for existing range (%d, %d) into %d portions, new offset v%d %d (cluster size %d)",
+		existing.start, existing.end, len(toInsert), value.Version, value.Offset, value.ClusterSize)
+
 	resultList := append(list[:index], toInsert...)
 	if index < len(list)-1 {
 		resultList = append(resultList, list[index+1:]...)
 	}
-	s.offsetMap[key] = resultList
+
+		s.offsetMap[key] = resultList
 
 	return true
 }
@@ -328,7 +341,6 @@ func (s *defaultOffsetState2) processCommit() {
 }
 
 func (s *defaultOffsetState2) isOldValue(existing *Offset, newValue *Offset) bool {
-	// TODO: Consider value token and timestamp
 	if existing.Source.Id.Start == newValue.Source.Id.Start {
 		// Same tokens (most common case)
 		if existing.Source.Id.Version < newValue.Source.Id.Version {
@@ -342,14 +354,17 @@ func (s *defaultOffsetState2) isOldValue(existing *Offset, newValue *Offset) boo
 		}
 	}
 
-	if existing.Version < newValue.Version {
-		return false
-	}
-	if existing.Version == newValue.Version && existing.Offset <= newValue.Offset {
-		return false
+	if existing.Token == newValue.Token && existing.Index == newValue.Index {
+		if existing.Version < newValue.Version {
+			return false
+		}
+		if existing.Version == newValue.Version && existing.Offset <= newValue.Offset {
+			return false
+		}
+		return true
 	}
 
-	return true
+	return existing.Source.Timestamp > newValue.Source.Timestamp
 }
 
 func (s *defaultOffsetState2) sendToFollowers(kv *OffsetStoreKeyValue) {
