@@ -45,6 +45,17 @@ type Offset struct {
 	Source      OffsetSource `json:"source"`      // The point-in-time when the offset was recorded.
 }
 
+func NewOffset(topic *TopicDataId, clusterSize int, source GenId, value int64) Offset {
+	return Offset{
+		Token:       topic.Token,
+		Index:       topic.RangeIndex,
+		Version:     topic.Version,
+		ClusterSize: clusterSize,
+		Offset:      value,
+		Source:      NewOffsetSource(source),
+	}
+}
+
 // Checks whether a consumer that is assigned the provided range can read a past offset.
 // Used when ranges don't match
 func (o *Offset) IsAssignedToConsumer(currentToken Token, currentIndex RangeIndex, clusterSize int) bool {

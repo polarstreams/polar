@@ -4,10 +4,12 @@ import (
 	"time"
 
 	cMocks "github.com/barcostreams/barco/internal/test/conf/mocks"
+	dMocks "github.com/barcostreams/barco/internal/test/discovery/mocks"
 	dbMocks "github.com/barcostreams/barco/internal/test/localdb/mocks"
 	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 )
 
 var _ = Describe("defaultOffsetState", func() {
@@ -18,7 +20,7 @@ var _ = Describe("defaultOffsetState", func() {
 	t1C3 := GetTokenAtIndex(3, 1)
 	t2C3 := GetTokenAtIndex(3, 2)
 
-	key1 := OffsetStoreKey{Group: group, Topic: topic}
+	key := OffsetStoreKey{Group: group, Topic: topic}
 	valueC12_T0_2 := Offset{
 		Token:       t0,
 		Index:       2,
@@ -56,7 +58,7 @@ var _ = Describe("defaultOffsetState", func() {
 		startC3T0_1, endC3T0_1 := RangeByTokenAndClusterSize(t0, 1, consumerRanges, 3)
 		startC3T2_3, endC3T2_3 := RangeByTokenAndClusterSize(t2C3, 3, consumerRanges, 3)
 		offsetMap := map[OffsetStoreKey][]offsetRange{
-			key1: {
+			key: {
 				{start: startC12_T0_2, end: endC12_T0_2, value: valueC12_T0_2},
 				{start: startC12_T0_3, end: endC12_T0_3, value: valueC12_T0_3},
 				{start: startC3T0_1, end: endC3T0_1, value: valueC3_T0_1},
@@ -64,7 +66,7 @@ var _ = Describe("defaultOffsetState", func() {
 			},
 		}
 
-		s := &defaultOffsetState2{
+		s := &defaultOffsetState{
 			offsetMap: offsetMap,
 			config:    config,
 		}
@@ -95,12 +97,12 @@ var _ = Describe("defaultOffsetState", func() {
 
 		It("should return nil when there are ranges with smaller end", func() {
 			offsetMap := map[OffsetStoreKey][]offsetRange{
-				key1: {
+				key: {
 					{start: startC12_T0_2, end: endC12_T0_2, value: valueC12_T0_2},
 				},
 			}
 
-			s := &defaultOffsetState2{
+			s := &defaultOffsetState{
 				offsetMap: offsetMap,
 				config:    config,
 			}
@@ -152,7 +154,7 @@ var _ = Describe("defaultOffsetState", func() {
 		startC3T1_0, endC3T1_0 := RangeByTokenAndClusterSize(t1C3, 0, consumerRanges, 3)
 
 		offsetMap := map[OffsetStoreKey][]offsetRange{
-			key1: {
+			key: {
 				{start: startC12_T0_2, end: endC12_T0_2, value: valueC12_T0_2},
 				{start: startC12_T0_3, end: endC12_T0_3, value: valueC12_T0_3},
 				{start: startC3T0_1, end: endC3T0_1, value: valueC3_T0_1},
@@ -171,8 +173,8 @@ var _ = Describe("defaultOffsetState", func() {
 			result := s.Set(group, topic, offsetEnd, OffsetCommitNone)
 
 			Expect(result).To(BeTrue())
-			Expect(s.offsetMap[key1]).To(HaveLen(4))
-			Expect(s.offsetMap[key1][3]).To(Equal(offsetRange{start: startC3T2_3, end: endC3T2_3, value: offsetEnd}))
+			Expect(s.offsetMap[key]).To(HaveLen(4))
+			Expect(s.offsetMap[key][3]).To(Equal(offsetRange{start: startC3T2_3, end: endC3T2_3, value: offsetEnd}))
 
 			offsetMiddle := Offset{
 				Version:     2,
@@ -184,9 +186,9 @@ var _ = Describe("defaultOffsetState", func() {
 			result = s.Set(group, topic, offsetMiddle, OffsetCommitNone)
 
 			Expect(result).To(BeTrue())
-			Expect(s.offsetMap[key1]).To(HaveLen(5))
-			Expect(s.offsetMap[key1][3]).To(Equal(offsetRange{start: startC3T1_0, end: endC3T1_0, value: offsetMiddle}))
-			Expect(s.offsetMap[key1][4]).To(Equal(offsetRange{start: startC3T2_3, end: endC3T2_3, value: offsetEnd}))
+			Expect(s.offsetMap[key]).To(HaveLen(5))
+			Expect(s.offsetMap[key][3]).To(Equal(offsetRange{start: startC3T1_0, end: endC3T1_0, value: offsetMiddle}))
+			Expect(s.offsetMap[key][4]).To(Equal(offsetRange{start: startC3T2_3, end: endC3T2_3, value: offsetEnd}))
 		})
 
 		It("should insert a range at the beginning", func() {
@@ -202,8 +204,8 @@ var _ = Describe("defaultOffsetState", func() {
 			}
 			result := s.Set(group, topic, offset, OffsetCommitNone)
 			Expect(result).To(BeTrue())
-			Expect(s.offsetMap[key1]).To(HaveLen(1))
-			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T2_3, end: endC3T2_3, value: offset}))
+			Expect(s.offsetMap[key]).To(HaveLen(1))
+			Expect(s.offsetMap[key][0]).To(Equal(offsetRange{start: startC3T2_3, end: endC3T2_3, value: offset}))
 
 			// Insert at the beginning with the range
 			offset = Offset{
@@ -215,8 +217,8 @@ var _ = Describe("defaultOffsetState", func() {
 			}
 			result = s.Set(group, topic, offset, OffsetCommitNone)
 			Expect(result).To(BeTrue())
-			Expect(s.offsetMap[key1]).To(HaveLen(2))
-			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T1_0, end: endC3T1_0, value: offset}))
+			Expect(s.offsetMap[key]).To(HaveLen(2))
+			Expect(s.offsetMap[key][0]).To(Equal(offsetRange{start: startC3T1_0, end: endC3T1_0, value: offset}))
 		})
 
 		It("should insert when offset splitting at the start", func() {
@@ -237,9 +239,9 @@ var _ = Describe("defaultOffsetState", func() {
 
 			result := s.Set(group, topic, offset, OffsetCommitNone)
 			Expect(result).To(BeTrue())
-			Expect(s.offsetMap[key1]).To(HaveLen(4))
-			Expect(s.offsetMap[key1][2]).To(Equal(offsetRange{start: startC6T0_2, end: endC6T0_2, value: offset}))
-			Expect(s.offsetMap[key1][3]).To(Equal(
+			Expect(s.offsetMap[key]).To(HaveLen(4))
+			Expect(s.offsetMap[key][2]).To(Equal(offsetRange{start: startC6T0_2, end: endC6T0_2, value: offset}))
+			Expect(s.offsetMap[key][3]).To(Equal(
 				offsetRange{start: startC6T0_3, end: endC6T0_3, value: existingOffset}))
 		})
 
@@ -261,10 +263,10 @@ var _ = Describe("defaultOffsetState", func() {
 
 			result := s.Set(group, topic, offset, OffsetCommitNone)
 			Expect(result).To(BeTrue())
-			Expect(s.offsetMap[key1]).To(HaveLen(4))
-			Expect(s.offsetMap[key1][2]).To(Equal(
+			Expect(s.offsetMap[key]).To(HaveLen(4))
+			Expect(s.offsetMap[key][2]).To(Equal(
 				offsetRange{start: startC6T0_2, end: endC6T0_2, value: existingOffset}))
-			Expect(s.offsetMap[key1][3]).To(Equal(offsetRange{start: startC6T0_3, end: endC6T0_3, value: offset}))
+			Expect(s.offsetMap[key][3]).To(Equal(offsetRange{start: startC6T0_3, end: endC6T0_3, value: offset}))
 		})
 
 		It("should join entirely contained ranges", func() {
@@ -281,8 +283,8 @@ var _ = Describe("defaultOffsetState", func() {
 			}
 			result := s.Set(group, topic, offset, OffsetCommitNone)
 			Expect(result).To(BeTrue())
-			Expect(s.offsetMap[key1]).To(HaveLen(2))
-			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC6T0_1, end: endC6T0_1, value: offset}))
+			Expect(s.offsetMap[key]).To(HaveLen(2))
+			Expect(s.offsetMap[key][0]).To(Equal(offsetRange{start: startC6T0_1, end: endC6T0_1, value: offset}))
 		})
 
 		It("should join partially contained ranges", func() {
@@ -291,7 +293,7 @@ var _ = Describe("defaultOffsetState", func() {
 			// Values C12_T0_0 and C12_T0_1 are not contained (range at the beginning empty)
 
 			s := newTestOffsetState(offsetMap, consumerRanges)
-			Expect(s.offsetMap[key1]).To(HaveLen(3))
+			Expect(s.offsetMap[key]).To(HaveLen(3))
 			offset := Offset{
 				Version:     4,
 				ClusterSize: 3,
@@ -302,9 +304,181 @@ var _ = Describe("defaultOffsetState", func() {
 			}
 			result := s.Set(group, topic, offset, OffsetCommitNone)
 			Expect(result).To(BeTrue())
-			Expect(s.offsetMap[key1]).To(HaveLen(2))
-			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T0_0, end: endC3T0_0, value: offset}))
-			Expect(s.offsetMap[key1][1]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueC3_T0_1}))
+			Expect(s.offsetMap[key]).To(HaveLen(2))
+			Expect(s.offsetMap[key][0]).To(Equal(offsetRange{start: startC3T0_0, end: endC3T0_0, value: offset}))
+			Expect(s.offsetMap[key][1]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueC3_T0_1}))
+		})
+
+		It("should move to the next generation when cluster size is the same", func() {
+			gen := Generation{
+				Start:       t0,
+				End:         t1C3,
+				Version:     1,
+				Parents:     []GenId{},
+				ClusterSize: 3,
+			}
+			nextGens := []Generation{{
+				Start:       t0,
+				End:         t1C3,
+				Version:     2,
+				ClusterSize: 3,
+			}}
+
+			discoverer := new(dMocks.Discoverer)
+			discoverer.On("GenerationInfo", mock.Anything, mock.Anything).Return(&gen, nil)
+			discoverer.On("NextGeneration", mock.Anything).Return(nextGens)
+			s := newTestOffsetState(offsetMap, consumerRanges)
+			s.discoverer = discoverer
+			value := valueC3_T0_1
+			value.Offset = OffsetCompleted
+
+			result := s.Set(group, topic, value, OffsetCommitNone)
+			Expect(result).To(BeTrue())
+			Expect(s.offsetMap[key]).To(HaveLen(3))
+			Expect(s.offsetMap[key][2]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: Offset{
+				Version:     2, // Next version
+				ClusterSize: 3,
+				Offset:      0,
+				Token:       t0,
+				Index:       1,
+			}}))
+		})
+
+		Context("Splitting offsets", func() {
+			gen := Generation{
+				Start:       t0,
+				End:         t1C3,
+				Version:     1,
+				Parents:     []GenId{},
+				ClusterSize: 3,
+			}
+			t3C6 := GetTokenAtIndex(6, 1)
+			nextGens := []Generation{
+				{Start: t0, End: t3C6, Version: 2, ClusterSize: 6},
+				{Start: t3C6, End: t1C3, Version: 1, ClusterSize: 6},
+			}
+
+			discoverer := new(dMocks.Discoverer)
+			discoverer.On("GenerationInfo", mock.Anything, mock.Anything).Return(&gen, nil)
+			discoverer.On("NextGeneration", mock.Anything).Return(nextGens)
+
+			It("should move to the next generation when scaling up on low indices", func() {
+				s := newTestOffsetState(offsetMap, consumerRanges)
+				s.discoverer = discoverer
+				value := valueC3_T0_1
+				value.Offset = OffsetCompleted
+
+				startC6T0_2, endC6T0_2 := RangeByTokenAndClusterSize(t0, 2, consumerRanges, 6)
+				startC6T0_3, endC6T0_3 := RangeByTokenAndClusterSize(t0, 3, consumerRanges, 6)
+				result := s.Set(group, topic, value, OffsetCommitNone)
+				Expect(result).To(BeTrue())
+				Expect(s.offsetMap[key]).To(HaveLen(4))
+				Expect(s.offsetMap[key][2]).To(Equal(offsetRange{start: startC6T0_2, end: endC6T0_2, value: Offset{
+					Version:     2,
+					ClusterSize: 6,
+					Offset:      0,
+					Token:       t0,
+					Index:       2,
+				}}))
+				Expect(s.offsetMap[key][3]).To(Equal(offsetRange{start: startC6T0_3, end: endC6T0_3, value: Offset{
+					Version:     2,
+					ClusterSize: 6,
+					Offset:      0,
+					Token:       t0,
+					Index:       3,
+				}}))
+			})
+
+			It("should move to the next generation when scaling up on high indices", func() {
+				s := newTestOffsetState(offsetMap, consumerRanges)
+				// Add the range that is going to be split
+				valueC3_T0_2 := Offset{
+					Version:     1,
+					ClusterSize: 3,
+					Offset:      0,
+					Token:       t0,
+					Index:       2,
+				}
+				s.Set(group, topic, valueC3_T0_2, OffsetCommitNone)
+				Expect(s.offsetMap[key]).To(HaveLen(4))
+
+				s.discoverer = discoverer
+				value := valueC3_T0_2
+				value.Offset = OffsetCompleted
+				result := s.Set(group, topic, value, OffsetCommitNone)
+				Expect(result).To(BeTrue())
+				Expect(s.offsetMap[key]).To(HaveLen(5))
+
+				startC6T3_0, endC6T3_0 := RangeByTokenAndClusterSize(t3C6, 0, consumerRanges, 6)
+				startC6T3_1, endC6T3_1 := RangeByTokenAndClusterSize(t3C6, 1, consumerRanges, 6)
+				Expect(s.offsetMap[key][3]).To(Equal(offsetRange{start: startC6T3_0, end: endC6T3_0, value: Offset{
+					Version:     1,
+					ClusterSize: 6,
+					Offset:      0,
+					Token:       t3C6,
+					Index:       0,
+				}}))
+				Expect(s.offsetMap[key][4]).To(Equal(offsetRange{start: startC6T3_1, end: endC6T3_1, value: Offset{
+					Version:     1,
+					ClusterSize: 6,
+					Offset:      0,
+					Token:       t3C6,
+					Index:       1,
+				}}))
+			})
+		})
+
+		Context("Joining offsets", func() {
+			t6C12 := GetTokenAtIndex(12, 1)
+			t3C6 := GetTokenAtIndex(6, 1)
+			gen := Generation{
+				Start:       t0,
+				End:         t6C12,
+				Version:     3,
+				Parents:     []GenId{},
+				ClusterSize: 12,
+			}
+
+			nextGens := []Generation{
+				{Start: t0, End: t3C6, Version: 10, ClusterSize: 6, Parents: []GenId{gen.Id(), {}}},
+			}
+			discoverer := new(dMocks.Discoverer)
+			discoverer.On("GenerationInfo", mock.Anything, mock.Anything).Return(&gen, nil)
+			discoverer.On("NextGeneration", mock.Anything).Return(nextGens)
+
+			It("should join the offset of itself and sibling on same token", func() {
+				// Join C12_T0_2 and C12_T0_3 into C6_T0_1
+				s := newTestOffsetState(offsetMap, consumerRanges)
+				s.discoverer = discoverer
+				Expect(s.offsetMap[key]).To(HaveLen(3))
+
+				// Complete C12_T0_2
+				s.Set(group, topic, Offset{
+					Version:     gen.Version,
+					ClusterSize: gen.ClusterSize,
+					Offset:      OffsetCompleted,
+					Token:       gen.Start,
+					Index:       2,
+				}, OffsetCommitNone)
+				Expect(s.offsetMap[key]).To(HaveLen(3), "Join didn't happened yet")
+
+				// Complete C12_T0_3
+				s.Set(group, topic, Offset{
+					Version:     gen.Version,
+					ClusterSize: gen.ClusterSize,
+					Offset:      OffsetCompleted,
+					Token:       gen.Start,
+					Index:       3,
+				}, OffsetCommitNone)
+				Expect(s.offsetMap[key]).To(HaveLen(2), "Join should have occurred")
+				Expect(s.offsetMap[key][0]).To(Equal(offsetRange{start: startC12_T0_2, end: endC12_T0_3, value: Offset{
+					Token:       nextGens[0].Start,
+					Version:     nextGens[0].Version,
+					ClusterSize: nextGens[0].ClusterSize,
+					Offset:      0,
+					Index:       1, // C6_T0_1
+				}}))
+			})
 		})
 	})
 
@@ -312,22 +486,22 @@ var _ = Describe("defaultOffsetState", func() {
 		It("should load the offsets from localdb", func() {
 			localDb := new(dbMocks.Client)
 			localDb.On("Offsets").Return([]OffsetStoreKeyValue{
-				{Key: key1, Value: valueC3_T0_1},
-				{Key: key1, Value: valueC3_T2_3},
+				{Key: key, Value: valueC3_T0_1},
+				{Key: key, Value: valueC3_T2_3},
 			}, nil)
 
 			s := newTestOffsetState(nil, 4)
 			s.localDb = localDb
 
 			Expect(s.Init()).NotTo(HaveOccurred())
-			Expect(s.offsetMap[key1]).To(HaveLen(2))
+			Expect(s.offsetMap[key]).To(HaveLen(2))
 			startC3T0_1, endC3T0_1 := RangeByTokenAndClusterSize(t0, 1, consumerRanges, 3)
 			startC3T2_3, endC3T2_3 := RangeByTokenAndClusterSize(t2C3, 3, consumerRanges, 3)
-			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueC3_T0_1}))
-			Expect(s.offsetMap[key1][1]).To(Equal(offsetRange{start: startC3T2_3, end: endC3T2_3, value: valueC3_T2_3}))
+			Expect(s.offsetMap[key][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueC3_T0_1}))
+			Expect(s.offsetMap[key][1]).To(Equal(offsetRange{start: startC3T2_3, end: endC3T2_3, value: valueC3_T2_3}))
 		})
 
-		It("should ignore previous offsets by source for identical ranges", func ()  {
+		It("should ignore previous offsets by source for identical ranges", func() {
 			localDb := new(dbMocks.Client)
 
 			// Identical ranges, compared by source
@@ -338,8 +512,8 @@ var _ = Describe("defaultOffsetState", func() {
 			valueT0new.Source = OffsetSource{Id: GenId{Start: t0, Version: 2}} // Newer source
 
 			localDb.On("Offsets").Return([]OffsetStoreKeyValue{
-				{Key: key1, Value: valueT0old},
-				{Key: key1, Value: valueT0new},
+				{Key: key, Value: valueT0old},
+				{Key: key, Value: valueT0new},
 			}, nil)
 
 			s := newTestOffsetState(nil, 4)
@@ -347,11 +521,11 @@ var _ = Describe("defaultOffsetState", func() {
 
 			Expect(s.Init()).NotTo(HaveOccurred())
 			startC3T0_1, endC3T0_1 := RangeByTokenAndClusterSize(t0, 1, consumerRanges, 3)
-			Expect(s.offsetMap[key1]).To(HaveLen(1))
-			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueT0new}))
+			Expect(s.offsetMap[key]).To(HaveLen(1))
+			Expect(s.offsetMap[key][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueT0new}))
 		})
 
-		It("should ignore previous offsets by value for identical ranges", func ()  {
+		It("should ignore previous offsets by value for identical ranges", func() {
 			localDb := new(dbMocks.Client)
 
 			// Identical ranges, compared by values
@@ -361,8 +535,8 @@ var _ = Describe("defaultOffsetState", func() {
 			valueT0old := valueC3_T0_1
 
 			localDb.On("Offsets").Return([]OffsetStoreKeyValue{
-				{Key: key1, Value: valueT0new},
-				{Key: key1, Value: valueT0old},
+				{Key: key, Value: valueT0new},
+				{Key: key, Value: valueT0old},
 			}, nil)
 
 			s := newTestOffsetState(nil, 4)
@@ -370,13 +544,12 @@ var _ = Describe("defaultOffsetState", func() {
 
 			Expect(s.Init()).NotTo(HaveOccurred())
 			startC3T0_1, endC3T0_1 := RangeByTokenAndClusterSize(t0, 1, consumerRanges, 3)
-			Expect(s.offsetMap[key1]).To(HaveLen(1))
-			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueT0new}))
+			Expect(s.offsetMap[key]).To(HaveLen(1))
+			Expect(s.offsetMap[key][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueT0new}))
 		})
 
-		It("should ignore previous offsets by timestamp for different ranges", func ()  {
+		It("should ignore previous offsets by timestamp for different ranges", func() {
 			localDb := new(dbMocks.Client)
-
 
 			valueT0new := valueC3_T0_1
 			valueT0new.Source.Timestamp = time.Now().UnixMicro() // Newer timestamp
@@ -389,8 +562,8 @@ var _ = Describe("defaultOffsetState", func() {
 			}
 
 			localDb.On("Offsets").Return([]OffsetStoreKeyValue{
-				{Key: key1, Value: valueT0new},
-				{Key: key1, Value: valueT6old},
+				{Key: key, Value: valueT0new},
+				{Key: key, Value: valueT6old},
 			}, nil)
 
 			s := newTestOffsetState(nil, 4)
@@ -398,13 +571,13 @@ var _ = Describe("defaultOffsetState", func() {
 
 			Expect(s.Init()).NotTo(HaveOccurred())
 			startC3T0_1, endC3T0_1 := RangeByTokenAndClusterSize(t0, 1, consumerRanges, 3)
-			Expect(s.offsetMap[key1]).To(HaveLen(1))
-			Expect(s.offsetMap[key1][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueT0new}))
+			Expect(s.offsetMap[key]).To(HaveLen(1))
+			Expect(s.offsetMap[key][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueT0new}))
 		})
 	})
 })
 
-func newTestOffsetState(originalMap map[OffsetStoreKey][]offsetRange, consumerRanges int) *defaultOffsetState2 {
+func newTestOffsetState(originalMap map[OffsetStoreKey][]offsetRange, consumerRanges int) *defaultOffsetState {
 	config := new(cMocks.Config)
 	config.On("ConsumerRanges").Return(consumerRanges)
 
@@ -418,7 +591,7 @@ func newTestOffsetState(originalMap map[OffsetStoreKey][]offsetRange, consumerRa
 		offsetMap[k] = list
 	}
 
-	return &defaultOffsetState2{
+	return &defaultOffsetState{
 		offsetMap: offsetMap,
 		config:    config,
 	}

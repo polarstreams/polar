@@ -282,12 +282,6 @@ func parentsToString(parents []GenId) string {
 	return string(bytes)
 }
 
-func genIdFromString(stringValue string) GenId {
-	var result GenId
-	utils.PanicIfErr(json.Unmarshal([]byte(stringValue), &result), "Unexpected error when deserializing GenId")
-	return result
-}
-
 func genIdToString(id GenId) string {
 	bytes, err := json.Marshal(id)
 	utils.PanicIfErr(err, "Unexpected error when serializing GenId")
