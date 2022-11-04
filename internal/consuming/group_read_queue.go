@@ -22,9 +22,6 @@ import (
 const refreshPeriod = 2 * time.Second
 const offsetNoData = -1 // We should use types and flags in the future
 
-// TODO: REIMPLEMENT
-const mustImplementClusterSize = 0
-
 // Receives read requests per group on a single thread.
 //
 // It should close unused readers
@@ -346,10 +343,10 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 
 				// TODO: IMPLEMENT
 				// get ranges offsets
-					// when there isn't an offset, use reset policy
+				// when there isn't an offset, use reset policy
 				// per each offset ranges
-					// Check exists topicReaders[key] -> append to result and move on
-					// Create the reader
+				// Check exists topicReaders[key] -> append to result and move on
+				// Create the reader
 
 				// There isn't an existing reader for that key
 				// We need to check the offsets for that range and see what readers have to be created

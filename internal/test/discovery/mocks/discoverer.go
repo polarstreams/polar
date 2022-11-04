@@ -229,15 +229,15 @@ func (_m *Discoverer) NextGeneration(id types.GenId) []types.Generation {
 }
 
 // ParentRanges provides a mock function with given fields: gen, indices
-func (_m *Discoverer) ParentRanges(gen *types.Generation, indices []types.RangeIndex) []types.TokenRanges {
+func (_m *Discoverer) ParentRanges(gen *types.Generation, indices []types.RangeIndex) []types.GenerationRanges {
 	ret := _m.Called(gen, indices)
 
-	var r0 []types.TokenRanges
-	if rf, ok := ret.Get(0).(func(*types.Generation, []types.RangeIndex) []types.TokenRanges); ok {
+	var r0 []types.GenerationRanges
+	if rf, ok := ret.Get(0).(func(*types.Generation, []types.RangeIndex) []types.GenerationRanges); ok {
 		r0 = rf(gen, indices)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]types.TokenRanges)
+			r0 = ret.Get(0).([]types.GenerationRanges)
 		}
 	}
 

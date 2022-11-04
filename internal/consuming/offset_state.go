@@ -134,12 +134,12 @@ func (s *defaultOffsetState) GetAll(
 func (s *defaultOffsetState) getDefaultsForRange(start Token, end Token, clusterSize int) []Offset {
 	// TODO: Check what's stored for StartFromEarliest instead of starting at 0
 	// TODO: Get offset per each intersected range using the following logic
-		// For each one that intersects
-			// Get offset
-				// When exact match => panic
-				// When partial match => the sibling of that index version should be the one starting at 0
-				// When no match
-					// Navigate through the parent until the first one
+	// 	For each one that intersects
+	// 		Get offset
+	// 			When exact match => panic
+	// 			When partial match => the sibling of that index version should be the one starting at 0
+	// 			When no match
+	// 				Navigate through the parent until the first one
 
 	result := make([]Offset, 0)
 	rangesPerToken := RangeIndex(s.config.ConsumerRanges())
@@ -156,19 +156,75 @@ func (s *defaultOffsetState) getDefaultsForRange(start Token, end Token, cluster
 				continue
 			}
 
-			// TODO: Navigate through the parent until the first one
+			// Navigate through the parent until the first ones and set to zero
+			for _, genRanges := range s.firstGenerations(token, index, clusterSize) {
+				gen := genRanges.Generation
+				for _, genIndex := range genRanges.Indices {
+					result = append(result, Offset{
+						Token:       gen.Start,
+						Index:       genIndex,
+						Version:     gen.Version,
+						ClusterSize: clusterSize,
+						Offset:      0,
+						Source:      OffsetSource{},
+					})
+				}
+			}
 		}
 	}
 	return result
 }
 
-// Navigates through parents until it gets the first
-func (s *defaultOffsetState) firstGenerations(token Token, index RangeIndex, clusterSize int) map[GenId][]TokenRanges {
-	// TODO: IMPLEMENT
-	// for {
+// Navigates through parents until it gets the first, returning an unique set of generations alongside its ranges
+func (s *defaultOffsetState) firstGenerations(token Token, index RangeIndex, clusterSize int) []GenerationRanges {
+	gen, err := s.discoverer.GetTokenHistory(token, clusterSize)
+	utils.PanicIfErr(err, "Generation history could not be retrieved")
 
-	// }
-	return nil
+	if gen == nil {
+		return nil
+	}
+
+	queue := make([]GenerationRanges, 0)
+	parents := s.discoverer.ParentRanges(gen, []RangeIndex{index})
+	if len(parents) == 0 {
+		return nil
+	}
+
+	queue = append(queue, parents...)
+	roots := make(map[GenId]map[RangeIndex]bool, 0)
+	rootsGen := make(map[GenId]*Generation, 0)
+	for len(queue) > 0 {
+		item := queue[0]
+		queue = queue[1:]
+		parents := s.discoverer.ParentRanges(item.Generation, item.Indices)
+		if len(parents) == 0 {
+			// Append to the root
+			gen := item.Generation
+			rootsGen[gen.Id()] = gen
+			indices, found := roots[gen.Id()]
+			if !found {
+				indices = make(map[RangeIndex]bool)
+				roots[gen.Id()] = indices
+			}
+			for _, i := range item.Indices {
+				indices[i] = true
+			}
+			continue
+		}
+		queue = append(queue, parents...)
+	}
+
+	// Adapt the format to return
+	result := make([]GenerationRanges, 0, len(roots))
+	for genId, indicesMap := range roots {
+		indices := make([]RangeIndex, 0, len(indicesMap))
+		for k := range indicesMap {
+			indices = append(indices, k)
+		}
+		result = append(result, GenerationRanges{Generation: rootsGen[genId], Indices: indices})
+	}
+
+	return result
 }
 
 // Retrieves the offsets for the given range

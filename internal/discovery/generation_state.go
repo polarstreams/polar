@@ -56,7 +56,7 @@ type GenerationState interface {
 
 	// Gets the parent token and range for any given token+range based on the generation information
 	// For example: T3/0 -> T0/2
-	ParentRanges(gen *Generation, indices []RangeIndex) []TokenRanges
+	ParentRanges(gen *Generation, indices []RangeIndex) []GenerationRanges
 }
 
 // Loads all generations from local storage
@@ -316,9 +316,9 @@ func (d *discoverer) SetAsCommitted(token1 Token, token2 *Token, tx UUID, origin
 	return nil
 }
 
-func (d *discoverer) ParentRanges(gen *Generation, indices []RangeIndex) []TokenRanges {
+func (d *discoverer) ParentRanges(gen *Generation, indices []RangeIndex) []GenerationRanges {
 	if gen == nil {
-		log.Panic().Msgf("Generation can not be nil when looking for parent ranges")
+		panic("Generation can not be nil when looking for parent ranges")
 	}
 	if len(gen.Parents) == 0 {
 		return nil
@@ -326,11 +326,16 @@ func (d *discoverer) ParentRanges(gen *Generation, indices []RangeIndex) []Token
 
 	currentToken := gen.Start
 	if len(gen.Parents) == 1 {
+		parentGen := d.GenerationInfo(gen.Parents[0])
+		if parentGen == nil {
+			log.Error().Msgf("Could not find generation info %s for reader projection", gen.Parents[0])
+			return nil
+		}
 		// Ranges are maintained
-		return []TokenRanges{{Token: currentToken, ClusterSize: gen.ClusterSize, Indices: indices}}
+		return []GenerationRanges{{Generation: parentGen, Indices: indices}}
 	}
 
-	tokens := make([]TokenRanges, 0)
+	tokens := make([]GenerationRanges, 0)
 	middleIndex := RangeIndex(d.config.ConsumerRanges()) / 2
 	for _, parentId := range gen.Parents {
 		// We've got to project the range indices
@@ -361,7 +366,7 @@ func (d *discoverer) ParentRanges(gen *Generation, indices []RangeIndex) []Token
 				parentIndices = append(parentIndices, (index-middleIndex)*2)
 				parentIndices = append(parentIndices, (index-middleIndex)*2+1)
 			}
-			tokens = append(tokens, TokenRanges{Token: t, ClusterSize: parentGen.ClusterSize, Indices: parentIndices})
+			tokens = append(tokens, GenerationRanges{Generation: parentGen, Indices: parentIndices})
 		}
 	}
 	return tokens

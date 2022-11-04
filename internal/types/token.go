@@ -23,6 +23,12 @@ type TokenRanges struct {
 	Indices     []RangeIndex
 }
 
+// Represents a point-in-time set of ranges
+type GenerationRanges struct {
+	Generation *Generation
+	Indices    []RangeIndex
+}
+
 const maxRingSize = 12288 // 3*math.Pow(2, 12)
 const chunkSizeUnit = math.MaxUint64 / maxRingSize
 
