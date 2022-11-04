@@ -284,7 +284,7 @@ func Intersects(startA, endA, startB, endB types.Token) bool {
 	}
 
 	if min == types.Token(math.MaxInt64) {
-		// Special case for the MaxInt64
+		// Special case for the last token
 		return min >= max
 	}
 

@@ -7,18 +7,11 @@ import (
 )
 
 type OffsetCommitType int
-type CompareResult int
 
 const (
 	OffsetCommitNone OffsetCommitType = iota
 	OffsetCommitLocal
 	OffsetCommitAll
-)
-
-const (
-	CompareEqual CompareResult = iota
-	CompareLessThan
-	CompareGreaterThan
 )
 
 const OffsetCompleted = math.MaxInt64
@@ -69,25 +62,11 @@ func (o *Offset) IsBrokerAssigned(leaderTokens []Token, clusterSize int) bool {
 	return false
 }
 
-func (o *Offset) Compare(other *Offset) CompareResult {
-	// TODO: REEVALUATE WHETHER IT SHOULD BE USED
-	if other == nil {
-		return CompareGreaterThan
+func (o *Offset) GenId() GenId {
+	return GenId{
+		Start:   o.Token,
+		Version: o.Version,
 	}
-
-	if o.Version < other.Version {
-		return CompareLessThan
-	}
-	if o.Version > other.Version {
-		return CompareGreaterThan
-	}
-	if o.Offset < other.Offset {
-		return CompareLessThan
-	}
-	if o.Offset > other.Offset {
-		return CompareGreaterThan
-	}
-	return CompareEqual
 }
 
 func (o *Offset) String() string {
@@ -111,12 +90,17 @@ type OffsetState interface {
 	Initializer
 	fmt.Stringer
 
-	// Gets the offset value for a given group and token.
+	// Gets the offset value for a given group and range.
 	// Returns nil when not found
 	//
 	// The caller MUST check whether the current broker can serve the data when ranges don't match
 	// The caller MUST check whether the consumer is assigned when ranges don't match
-	Get(group string, topic string, token Token, rangeIndex RangeIndex, clusterSize int) (offset *Offset, rangesMatch bool)
+	Get(group string, topic string, token Token, index RangeIndex, clusterSize int) (offset *Offset, rangesMatch bool)
+
+	// Gets offset values for a given group and range with defaults values.
+	//
+	// The caller MUST check whether the current broker can serve the data and that the consumer is assigned
+	GetAll(group string, topic string, token Token, rangeIndex RangeIndex, clusterSize int) []Offset
 
 	// Sets the known offset value in memory, optionally committing it to the data store
 	Set(group string, topic string, value Offset, commit OffsetCommitType) bool

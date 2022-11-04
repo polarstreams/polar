@@ -83,47 +83,141 @@ func (s *defaultOffsetState) Get(
 ) (offset *Offset, rangesMatch bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	offsetList, start, end := s.getOffsetRanges(group, topic, token, index, clusterSize)
+	length := len(offsetList)
+	if length == 0 {
+		return
+	}
 
+	item := offsetList[length-1]
+	rangesMatch = length == 1 && item.start == start && item.end == end
+	offset = &item.value
+	return offset, rangesMatch
+}
+
+// TODO: RENAME TO GetAllWithDefaults()
+func (s *defaultOffsetState) GetAll(
+	group string,
+	topic string,
+	token Token,
+	index RangeIndex,
+	clusterSize int,
+) []Offset {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	offsetList, start, end := s.getOffsetRanges(group, topic, token, index, clusterSize)
+
+	result := make([]Offset, len(offsetList))
+	if len(offsetList) == 0 || offsetList[0].start > start {
+		// We need to create the defaults for the beginning
+		toCreateEnd := end
+		if len(offsetList) > 0 {
+			toCreateEnd = offsetList[0].start
+		}
+		defaultOffsets := s.getDefaultsForRange(start, toCreateEnd, clusterSize)
+		result = append(result, defaultOffsets...)
+	}
+
+	for n, item := range offsetList {
+		result[n] = item.value
+	}
+
+	if len(offsetList) > 0 && offsetList[len(offsetList)-1].end < end {
+		toCreateStart := offsetList[len(offsetList)-1].end
+		defaultOffsets := s.getDefaultsForRange(toCreateStart, end, clusterSize)
+		result = append(result, defaultOffsets...)
+	}
+
+	return result
+}
+
+func (s *defaultOffsetState) getDefaultsForRange(start Token, end Token, clusterSize int) []Offset {
+	// TODO: Check what's stored for StartFromEarliest instead of starting at 0
+	// TODO: Get offset per each intersected range using the following logic
+		// For each one that intersects
+			// Get offset
+				// When exact match => panic
+				// When partial match => the sibling of that index version should be the one starting at 0
+				// When no match
+					// Navigate through the parent until the first one
+
+	result := make([]Offset, 0)
+	rangesPerToken := RangeIndex(s.config.ConsumerRanges())
+	// Get the tokens for the current size and intersect them
+	for i := 0; i < clusterSize; i++ {
+		//(get token at index and by range index)
+		token := GetTokenAtIndex(clusterSize, i)
+		if token > end {
+			break
+		}
+		for index := RangeIndex(0); index < rangesPerToken; index++ {
+			rangeStart, rangeEnd := RangeByTokenAndClusterSize(token, index, int(rangesPerToken), clusterSize)
+			if !utils.Intersects(start, end, rangeStart, rangeEnd) {
+				continue
+			}
+
+			// TODO: Navigate through the parent until the first one
+		}
+	}
+	return result
+}
+
+// Navigates through parents until it gets the first
+func (s *defaultOffsetState) firstGenerations(token Token, index RangeIndex, clusterSize int) map[GenId][]TokenRanges {
+	// TODO: IMPLEMENT
+	// for {
+
+	// }
+	return nil
+}
+
+// Retrieves the offsets for the given range
+//
+// The caller MUST hold the lock
+func (s *defaultOffsetState) getOffsetRanges(
+	group string,
+	topic string,
+	token Token,
+	index RangeIndex,
+	clusterSize int,
+) ([]*offsetRange, Token, Token) {
 	key := OffsetStoreKey{Group: group, Topic: topic}
 	list, found := s.offsetMap[key]
 	if !found {
-		return nil, false
+		return nil, 0, 0
 	}
 
 	start, end := RangeByTokenAndClusterSize(token, index, s.config.ConsumerRanges(), clusterSize)
 	offsetIndex := binarySearch(list, end)
-	endIsGreater := offsetIndex == len(list)
-	if endIsGreater {
-		offsetIndex--
+	foundGreaterRanges := offsetIndex < len(list)
+	if !foundGreaterRanges {
+		offsetIndex = len(list) - 1
 	}
 	item := list[offsetIndex]
-	rangesMatch = item.start == start && item.end == end
 
-	if rangesMatch {
-		return &item.value, rangesMatch
+	if item.start == start && item.end == end {
+		return []*offsetRange{&item}, start, end
 	}
 
 	// It might not be contained
 	if !utils.Intersects(item.start, item.end, start, end) {
-		return nil, false
+		return nil, 0, 0
 	}
 
-	// When its contained, return the first non-completed range
-	result := &list[offsetIndex].value
-	if endIsGreater {
-		result = nil
+	// When its contained, return all the matching ranges
+	result := make([]*offsetRange, 0, 2)
+	if foundGreaterRanges {
+		result = append(result, &list[offsetIndex])
 	}
 	for i := offsetIndex - 1; i >= 0; i-- {
 		item := list[i]
 		if !utils.Intersects(item.start, item.end, start, end) {
 			break
 		}
-		if item.value.Offset != OffsetCompleted {
-			result = &item.value
-		}
+		result = append(result, &item)
 	}
 
-	return result, rangesMatch
+	return result, start, end
 }
 
 // Returns the index of the first match where the end of the range is greater than or equal to the provided end.

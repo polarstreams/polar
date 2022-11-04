@@ -261,9 +261,13 @@ func (s *SegmentReader) storeOffset(lastCommit *time.Time, manual bool) {
 		*lastCommit = time.Now()
 		commitType = OffsetCommitAll
 	} else if s.MaxProducedOffset != nil && s.messageOffset >= *s.MaxProducedOffset {
-		log.Debug().Str("group", s.group).Msgf("Consumed all messages of a previous generation %s", &s.Topic)
-		commitType = OffsetCommitAll
-		value.Offset = OffsetCompleted
+		if s.messageOffset != OffsetCompleted {
+			s.messageOffset = OffsetCompleted // Signal that it has been completed
+			commitType = OffsetCommitAll
+			value.Offset = OffsetCompleted
+			log.Debug().Str("group", s.group).Msgf(
+				"Marking message offset as completed for a previous generation %s", &s.Topic)
+		}
 	}
 
 	if commitType == OffsetCommitAll {
@@ -271,6 +275,11 @@ func (s *SegmentReader) storeOffset(lastCommit *time.Time, manual bool) {
 	}
 
 	s.offsetState.Set(s.group, s.Topic.Name, value, commitType)
+}
+
+// Returns true when the offset state has been set as completed (previous generations only)
+func (s *SegmentReader) StoredOffsetAsCompleted() bool {
+	return s.messageOffset == OffsetCompleted
 }
 
 // Rewinds to the last known committed offset

@@ -35,6 +35,22 @@ func (_m *OffsetState) Get(group string, topic string, token types.Token, rangeI
 	return r0, r1
 }
 
+// GetAll provides a mock function with given fields: group, topic, token, rangeIndex, clusterSize
+func (_m *OffsetState) GetAll(group string, topic string, token types.Token, rangeIndex types.RangeIndex, clusterSize int) []types.Offset {
+	ret := _m.Called(group, topic, token, rangeIndex, clusterSize)
+
+	var r0 []types.Offset
+	if rf, ok := ret.Get(0).(func(string, string, types.Token, types.RangeIndex, int) []types.Offset); ok {
+		r0 = rf(group, topic, token, rangeIndex, clusterSize)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]types.Offset)
+		}
+	}
+
+	return r0
+}
+
 // Init provides a mock function with given fields:
 func (_m *OffsetState) Init() error {
 	ret := _m.Called()

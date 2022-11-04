@@ -18,8 +18,9 @@ type RangeIndex uint8
 
 // Represents slices of the token range between two tokens
 type TokenRanges struct {
-	Token   Token
-	Indices []RangeIndex
+	Token       Token
+	ClusterSize int
+	Indices     []RangeIndex
 }
 
 const maxRingSize = 12288 // 3*math.Pow(2, 12)
@@ -76,7 +77,7 @@ func absInt64(num Token) int64 {
 }
 
 // Gets the start and end of a range based on the token, range index and cluster size.
-// Not that for the last range, the end will be `MaxInt64`.
+// Note that for the last range, the end will be `MaxInt64`.
 func RangeByTokenAndClusterSize(token Token, index RangeIndex, rangesPerToken int, clusterSize int) (Token, Token) {
 	// Expressing the range size as a factor ONLY works if the rangesPerToken never change
 	// during the lifetime of a topic

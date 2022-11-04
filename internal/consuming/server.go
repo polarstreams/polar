@@ -435,12 +435,14 @@ func logsToServe(
 		return "", nil, nil
 	}
 
-	myOrdinal := topologyGetter.Topology().MyOrdinal()
+	topology := topologyGetter.Topology()
+	myOrdinal := topology.MyOrdinal()
 	leaderTokens := make([]TokenRanges, 0, len(tokenRanges))
 
 	for _, ranges := range tokenRanges {
 		gen := topologyGetter.Generation(ranges.Token)
 		if gen != nil && gen.Leader == myOrdinal {
+			ranges.ClusterSize = gen.ClusterSize
 			leaderTokens = append(leaderTokens, ranges)
 		}
 	}
