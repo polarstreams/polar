@@ -35,7 +35,7 @@ type Client interface {
 	GenerationsByParent(gen *Generation) ([]Generation, error)
 
 	// Gets the last two (more recent first) stored generation by start token
-	GetGenerationsByToken(token Token) ([]Generation, error)
+	GetGenerationsByToken(token Token, clusterSize int) ([]Generation, error)
 
 	// Gets the generation by token and version, returns nil when not found
 	GenerationInfo(token Token, version GenVersion) (*Generation, error)

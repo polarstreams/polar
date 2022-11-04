@@ -49,10 +49,10 @@ type GenerationState interface {
 	IsTokenInRange(token Token) bool
 
 	// Determines whether there's history matching the token
-	HasTokenHistory(token Token) (bool, error)
+	HasTokenHistory(token Token, clusterSize int) (bool, error)
 
 	// Gets the last known committed token from the local persistence
-	GetTokenHistory(token Token) (*Generation, error)
+	GetTokenHistory(token Token, clusterSize int) (*Generation, error)
 
 	// Gets the parent token and range for any given token+range based on the generation information
 	// For example: T3/0 -> T0/2
@@ -145,13 +145,13 @@ func (d *discoverer) IsTokenInRange(token Token) bool {
 	return false
 }
 
-func (d *discoverer) HasTokenHistory(token Token) (bool, error) {
-	result, err := d.localDb.GetGenerationsByToken(token)
+func (d *discoverer) HasTokenHistory(token Token, clusterSize int) (bool, error) {
+	result, err := d.localDb.GetGenerationsByToken(token, clusterSize)
 	return len(result) > 0, err
 }
 
-func (d *discoverer) GetTokenHistory(token Token) (*Generation, error) {
-	result, err := d.localDb.GetGenerationsByToken(token)
+func (d *discoverer) GetTokenHistory(token Token, clusterSize int) (*Generation, error) {
+	result, err := d.localDb.GetGenerationsByToken(token, clusterSize)
 	if len(result) == 0 {
 		return nil, err
 	}

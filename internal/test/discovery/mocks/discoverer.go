@@ -110,13 +110,13 @@ func (_m *Discoverer) GenerationProposed(token types.Token) (*types.Generation, 
 	return r0, r1
 }
 
-// GetTokenHistory provides a mock function with given fields: token
-func (_m *Discoverer) GetTokenHistory(token types.Token) (*types.Generation, error) {
-	ret := _m.Called(token)
+// GetTokenHistory provides a mock function with given fields: token, clusterSize
+func (_m *Discoverer) GetTokenHistory(token types.Token, clusterSize int) (*types.Generation, error) {
+	ret := _m.Called(token, clusterSize)
 
 	var r0 *types.Generation
-	if rf, ok := ret.Get(0).(func(types.Token) *types.Generation); ok {
-		r0 = rf(token)
+	if rf, ok := ret.Get(0).(func(types.Token, int) *types.Generation); ok {
+		r0 = rf(token, clusterSize)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*types.Generation)
@@ -124,8 +124,8 @@ func (_m *Discoverer) GetTokenHistory(token types.Token) (*types.Generation, err
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(types.Token) error); ok {
-		r1 = rf(token)
+	if rf, ok := ret.Get(1).(func(types.Token, int) error); ok {
+		r1 = rf(token, clusterSize)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -133,20 +133,20 @@ func (_m *Discoverer) GetTokenHistory(token types.Token) (*types.Generation, err
 	return r0, r1
 }
 
-// HasTokenHistory provides a mock function with given fields: token
-func (_m *Discoverer) HasTokenHistory(token types.Token) (bool, error) {
-	ret := _m.Called(token)
+// HasTokenHistory provides a mock function with given fields: token, clusterSize
+func (_m *Discoverer) HasTokenHistory(token types.Token, clusterSize int) (bool, error) {
+	ret := _m.Called(token, clusterSize)
 
 	var r0 bool
-	if rf, ok := ret.Get(0).(func(types.Token) bool); ok {
-		r0 = rf(token)
+	if rf, ok := ret.Get(0).(func(types.Token, int) bool); ok {
+		r0 = rf(token, clusterSize)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(types.Token) error); ok {
-		r1 = rf(token)
+	if rf, ok := ret.Get(1).(func(types.Token, int) error); ok {
+		r1 = rf(token, clusterSize)
 	} else {
 		r1 = ret.Error(1)
 	}

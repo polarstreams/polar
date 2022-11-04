@@ -224,7 +224,7 @@ func (o *generator) determineStartReason() startReason {
 
 	// Just to make sure, we query the next broker
 	// Maybe my local data was loss and the current broker is being replaced
-	if cond, err := o.gossiper.HasTokenHistoryForToken(topology.NextBroker().Ordinal, myToken); cond {
+	if cond, err := o.gossiper.HasTokenHistoryForToken(topology.NextBroker().Ordinal, myToken, topology.TotalBrokers()); cond {
 		return restarted
 	} else if err != nil {
 		log.Panic().Err(err).Msgf("Gossip query failed for token history")

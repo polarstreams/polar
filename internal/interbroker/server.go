@@ -237,8 +237,12 @@ func (g *gossiper) getTokenHasHistoryUrl(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		return err
 	}
+	clusterSize, err := strconv.Atoi(r.URL.Query().Get("clusterSize"))
+	if err != nil {
+		return err
+	}
 
-	result, err := g.discoverer.HasTokenHistory(Token(token))
+	result, err := g.discoverer.HasTokenHistory(Token(token), clusterSize)
 	if err != nil {
 		return err
 	}
@@ -254,8 +258,12 @@ func (g *gossiper) getTokenHistoryUrl(w http.ResponseWriter, r *http.Request, ps
 	if err != nil {
 		return err
 	}
+	clusterSize, err := strconv.Atoi(r.URL.Query().Get("clusterSize"))
+	if err != nil {
+		return err
+	}
 
-	gen, err := g.discoverer.GetTokenHistory(Token(token))
+	gen, err := g.discoverer.GetTokenHistory(Token(token), clusterSize)
 	if err != nil {
 		return err
 	}

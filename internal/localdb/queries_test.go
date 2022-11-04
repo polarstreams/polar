@@ -24,7 +24,7 @@ var _ = Describe("Client", func() {
 		It("Should retrieve an empty generations when no info is found", func() {
 			client := newTestClient()
 
-			result, err := client.GetGenerationsByToken(1000)
+			result, err := client.GetGenerationsByToken(1000, 3)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(BeEmpty())
 		})
@@ -51,7 +51,7 @@ var _ = Describe("Client", func() {
 				})
 			}
 
-			result, err := client.GetGenerationsByToken(Token(start))
+			result, err := client.GetGenerationsByToken(Token(start), 3)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(HaveLen(2))
 			Expect([]GenVersion{result[0].Version, result[1].Version}).To(Equal([]GenVersion{10, 9}))
@@ -445,7 +445,7 @@ func expectTransactionStored(c *client, gen Generation) {
 }
 
 func expectToMatchStored(c *client, gen Generation) {
-	result, err := c.GetGenerationsByToken(gen.Start)
+	result, err := c.GetGenerationsByToken(gen.Start, gen.ClusterSize)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(result).To(HaveLen(1))
 	Expect(result[0]).To(Equal(gen))

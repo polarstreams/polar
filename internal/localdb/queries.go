@@ -28,7 +28,7 @@ func (c *client) prepareQueries() {
 
 	c.queries.selectGenerationsByToken = c.prepare(fmt.Sprintf(`
 		SELECT %s FROM generations
-		WHERE start_token = ? ORDER BY start_token, version DESC LIMIT 2`, generationColumns))
+		WHERE start_token = ? AND cluster_size = ? ORDER BY start_token, version DESC LIMIT 2`, generationColumns))
 
 	c.queries.selectGenerationsByParent = c.prepare(fmt.Sprintf(`
 		SELECT %s FROM generations
@@ -96,8 +96,8 @@ func (c *client) setCurrentSchemaVersion() error {
 	return err
 }
 
-func (c *client) GetGenerationsByToken(token Token) ([]Generation, error) {
-	rows, err := c.queries.selectGenerationsByToken.Query(int64(token))
+func (c *client) GetGenerationsByToken(token Token, clusterSize int) ([]Generation, error) {
+	rows, err := c.queries.selectGenerationsByToken.Query(int64(token), clusterSize)
 	if err != nil {
 		return nil, err
 	}
