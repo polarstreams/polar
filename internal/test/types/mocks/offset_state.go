@@ -65,22 +65,6 @@ func (_m *OffsetState) Init() error {
 	return r0
 }
 
-// MinOffset provides a mock function with given fields: topic, token, index
-func (_m *OffsetState) MinOffset(topic string, token types.Token, index types.RangeIndex) *types.Offset {
-	ret := _m.Called(topic, token, index)
-
-	var r0 *types.Offset
-	if rf, ok := ret.Get(0).(func(string, types.Token, types.RangeIndex) *types.Offset); ok {
-		r0 = rf(topic, token, index)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*types.Offset)
-		}
-	}
-
-	return r0
-}
-
 // ProducerOffsetLocal provides a mock function with given fields: topic
 func (_m *OffsetState) ProducerOffsetLocal(topic *types.TopicDataId) (int64, error) {
 	ret := _m.Called(topic)

@@ -78,7 +78,7 @@ type OffsetState interface {
 	fmt.Stringer
 
 	// Gets the offset value for a given group and range.
-	// Returns nil when not found
+	// Returns nil, false when not found
 	//
 	// The caller MUST check whether the current broker can serve the data when ranges don't match
 	// The caller MUST check whether the consumer is assigned when ranges don't match
@@ -94,7 +94,4 @@ type OffsetState interface {
 
 	// Reads the local max producer offset from disk
 	ProducerOffsetLocal(topic *TopicDataId) (int64, error)
-
-	// Get the lowest offset value of any group for a given topic+token+index
-	MinOffset(topic string, token Token, index RangeIndex) *Offset
 }

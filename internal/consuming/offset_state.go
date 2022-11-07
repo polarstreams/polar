@@ -714,8 +714,3 @@ func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
 func (s *defaultOffsetState) ProducerOffsetLocal(topic *TopicDataId) (int64, error) {
 	return data.ReadProducerOffset(topic, s.config)
 }
-
-func (s *defaultOffsetState) MinOffset(topic string, token Token, index RangeIndex) *Offset {
-	// TODO: CHECK WHETHER IT CAN BE REMOVED OR IMPLEMENT
-	return nil
-}

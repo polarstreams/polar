@@ -26,8 +26,7 @@ func (f *replicationReaderFactory) GetOrCreate(
 	offsetState OffsetState,
 ) data.ReplicationReader {
 	reader, _, _ := f.readers.LoadOrStore(*topic, func() (interface{}, error) {
-		minOffset := offsetState.MinOffset(topic.Name, topic.Token, topic.RangeIndex)
-		return newReplicationReader(*topic, topology, topicGen, f.gossiper, minOffset), nil
+		return newReplicationReader(*topic, topology, topicGen, f.gossiper), nil
 	})
 	return reader.(data.ReplicationReader)
 }
