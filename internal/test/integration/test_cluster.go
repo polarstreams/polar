@@ -72,8 +72,10 @@ func (b *TestBroker) Start() {
 		logPretty = "-pretty"
 	}
 
+	err = os.RemoveAll(fmt.Sprintf("./home%d", b.ordinal))
+	Expect(err).NotTo(HaveOccurred(), "Could not remove home%d directory", b.ordinal)
+
 	cmd := exec.Command("./barco.exe", "-debug", logPretty)
-	os.RemoveAll(fmt.Sprintf("./home%d", b.ordinal))
 
 	names := make([]string, 0)
 	brokerLength := 3
@@ -161,7 +163,7 @@ func (b *TestBroker) WaitForStart() *TestBroker {
 	case started = <-b.startChan:
 		log.Debug().Msgf("%s started", b.brokerName)
 	case <-timerChannel:
-		log.Debug().Msgf("%s start timed out", b.brokerName)
+		log.Error().Msgf("%s start timed out", b.brokerName)
 	}
 
 	if !started {
