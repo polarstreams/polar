@@ -447,6 +447,10 @@ func (s *defaultOffsetState) moveCompletedOffset(key OffsetStoreKey, value *Offs
 
 		list := s.offsetMap[key]
 		siblingIndex := binarySearch(list, siblingEnd)
+		if siblingIndex == len(list) {
+			// We couldn't find it
+			return
+		}
 		siblingOffset := list[siblingIndex]
 		if siblingOffset.start != siblingStart && siblingOffset.end != siblingEnd {
 			// We couldn't find the sibling, hopefully it will resolve itself in the future

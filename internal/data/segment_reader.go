@@ -264,7 +264,7 @@ func (s *SegmentReader) storeOffset(lastCommit *time.Time, manual bool) {
 	if time.Since(*lastCommit) >= s.config.AutoCommitInterval() || manual {
 		*lastCommit = time.Now()
 		commitType = OffsetCommitAll
-	} else if s.MaxProducedOffset != nil && s.messageOffset >= *s.MaxProducedOffset {
+	} else if s.MaxProducedOffset != nil && s.messageOffset > *s.MaxProducedOffset {
 		if s.messageOffset != OffsetCompleted {
 			s.messageOffset = OffsetCompleted // Signal that it has been completed
 			commitType = OffsetCommitAll
