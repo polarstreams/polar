@@ -108,3 +108,51 @@ func RangeByTokenAndClusterSize(token Token, index RangeIndex, rangesPerToken in
 	}
 	return start, end
 }
+
+func ProjectRangeByClusterSize(
+	token Token,
+	index RangeIndex,
+	rangesPerToken int,
+	clusterSize int,
+	newClusterSize int,
+) []*TokenRanges {
+	start, end := RangeByTokenAndClusterSize(token, index, rangesPerToken, clusterSize)
+	result := make([]*TokenRanges, 0)
+	var item *TokenRanges
+
+	for i := 0; i < newClusterSize; i++ {
+		newToken := GetTokenAtIndex(newClusterSize, i)
+		for newIndex := RangeIndex(0); newIndex < RangeIndex(rangesPerToken); newIndex++ {
+			newStart, newEnd := RangeByTokenAndClusterSize(newToken, newIndex, rangesPerToken, newClusterSize)
+			if Intersects(start, end, newStart, newEnd) {
+				if item == nil || item.Token != newToken {
+					item = &TokenRanges{
+						Token:       newToken,
+						ClusterSize: newClusterSize,
+						Indices:     []RangeIndex{newIndex},
+					}
+					result = append(result, item)
+				} else {
+					item.Indices = append(item.Indices, newIndex)
+				}
+			}
+		}
+	}
+	return result
+}
+
+func Intersects(startA, endA, startB, endB Token) bool {
+	min := endA
+	max := startB
+	if startA >= startB {
+		min = endB
+		max = startA
+	}
+
+	if min == Token(math.MaxInt64) {
+		// Special case for the last token
+		return min >= max
+	}
+
+	return min > max
+}

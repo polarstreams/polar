@@ -12,13 +12,13 @@ type OffsetState struct {
 	mock.Mock
 }
 
-// Get provides a mock function with given fields: group, topic, token, rangeIndex, clusterSize
-func (_m *OffsetState) Get(group string, topic string, token types.Token, rangeIndex types.RangeIndex, clusterSize int) (*types.Offset, bool) {
-	ret := _m.Called(group, topic, token, rangeIndex, clusterSize)
+// Get provides a mock function with given fields: group, topic, token, index, clusterSize
+func (_m *OffsetState) Get(group string, topic string, token types.Token, index types.RangeIndex, clusterSize int) (*types.Offset, bool) {
+	ret := _m.Called(group, topic, token, index, clusterSize)
 
 	var r0 *types.Offset
 	if rf, ok := ret.Get(0).(func(string, string, types.Token, types.RangeIndex, int) *types.Offset); ok {
-		r0 = rf(group, topic, token, rangeIndex, clusterSize)
+		r0 = rf(group, topic, token, index, clusterSize)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*types.Offset)
@@ -27,7 +27,7 @@ func (_m *OffsetState) Get(group string, topic string, token types.Token, rangeI
 
 	var r1 bool
 	if rf, ok := ret.Get(1).(func(string, string, types.Token, types.RangeIndex, int) bool); ok {
-		r1 = rf(group, topic, token, rangeIndex, clusterSize)
+		r1 = rf(group, topic, token, index, clusterSize)
 	} else {
 		r1 = ret.Get(1).(bool)
 	}
@@ -35,8 +35,8 @@ func (_m *OffsetState) Get(group string, topic string, token types.Token, rangeI
 	return r0, r1
 }
 
-// GetAll provides a mock function with given fields: group, topic, token, rangeIndex, clusterSize
-func (_m *OffsetState) GetAll(group string, topic string, token types.Token, rangeIndex types.RangeIndex, clusterSize int) []types.Offset {
+// GetAllWithDefaults provides a mock function with given fields: group, topic, token, rangeIndex, clusterSize
+func (_m *OffsetState) GetAllWithDefaults(group string, topic string, token types.Token, rangeIndex types.RangeIndex, clusterSize int) []types.Offset {
 	ret := _m.Called(group, topic, token, rangeIndex, clusterSize)
 
 	var r0 []types.Offset

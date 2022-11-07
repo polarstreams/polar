@@ -55,7 +55,8 @@ type GenerationState interface {
 	GetTokenHistory(token Token, clusterSize int) (*Generation, error)
 
 	// Gets the parent token and range for any given token+range based on the generation information
-	// For example: T3/0 -> T0/2
+	// For example: T3/0 -> T0/2.
+	// When there is no parent, it returns a nil slice
 	ParentRanges(gen *Generation, indices []RangeIndex) []GenerationRanges
 }
 

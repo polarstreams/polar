@@ -42,19 +42,4 @@ var _ = Describe("utils", func() {
 			}
 		})
 	})
-
-	Describe("Intersects", func() {
-		It("should return whether ranges intersect", func() {
-			Expect(Intersects(0, 10, 5, 15)).To(BeTrue())
-			Expect(Intersects(0, 10, 0, 10)).To(BeTrue())
-			Expect(Intersects(50, 100, 10, 60)).To(BeTrue())
-			Expect(Intersects(50, 100, 10, 100)).To(BeTrue())
-			Expect(Intersects(300, 400, 10, 350)).To(BeTrue())
-
-			Expect(Intersects(0, 10, 20, 30)).To(BeFalse())
-			Expect(Intersects(0, 10, 10, 20)).To(BeFalse())
-			Expect(Intersects(200, 500, 10, 150)).To(BeFalse())
-			Expect(Intersects(200, 500, 0, 200)).To(BeFalse())
-		})
-	})
 })

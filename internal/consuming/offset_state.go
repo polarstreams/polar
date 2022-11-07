@@ -95,8 +95,7 @@ func (s *defaultOffsetState) Get(
 	return offset, rangesMatch
 }
 
-// TODO: RENAME TO GetAllWithDefaults()
-func (s *defaultOffsetState) GetAll(
+func (s *defaultOffsetState) GetAllWithDefaults(
 	group string,
 	topic string,
 	token Token,
@@ -107,40 +106,36 @@ func (s *defaultOffsetState) GetAll(
 	defer s.mu.RUnlock()
 	offsetList, start, end := s.getOffsetRanges(group, topic, token, index, clusterSize)
 
-	result := make([]Offset, len(offsetList))
+	result := make([]Offset, 0, len(offsetList))
 	if len(offsetList) == 0 || offsetList[0].start > start {
 		// We need to create the defaults for the beginning
 		toCreateEnd := end
 		if len(offsetList) > 0 {
 			toCreateEnd = offsetList[0].start
 		}
-		defaultOffsets := s.getDefaultsForRange(start, toCreateEnd, clusterSize)
+		defaultOffsets := s.getDefaultsForRange(start, toCreateEnd, clusterSize, offsetList)
 		result = append(result, defaultOffsets...)
 	}
 
-	for n, item := range offsetList {
-		result[n] = item.value
+	for _, item := range offsetList {
+		result = append(result, item.value)
 	}
 
 	if len(offsetList) > 0 && offsetList[len(offsetList)-1].end < end {
 		toCreateStart := offsetList[len(offsetList)-1].end
-		defaultOffsets := s.getDefaultsForRange(toCreateStart, end, clusterSize)
+		defaultOffsets := s.getDefaultsForRange(toCreateStart, end, clusterSize, offsetList)
 		result = append(result, defaultOffsets...)
 	}
 
 	return result
 }
 
-func (s *defaultOffsetState) getDefaultsForRange(start Token, end Token, clusterSize int) []Offset {
+// Gets a default offset for ranges that are not present.
+// When there are no siblings for that contained range, return the earliest parent.
+// When there are siblings, return at most a generation with the same cluster size,
+// as we shouldn't go back to past generations of different sizes.
+func (s *defaultOffsetState) getDefaultsForRange(start Token, end Token, clusterSize int, siblings []*offsetRange) []Offset {
 	// TODO: Check what's stored for StartFromEarliest instead of starting at 0
-	// TODO: Get offset per each intersected range using the following logic
-	// 	For each one that intersects
-	// 		Get offset
-	// 			When exact match => panic
-	// 			When partial match => the sibling of that index version should be the one starting at 0
-	// 			When no match
-	// 				Navigate through the parent until the first one
-
 	result := make([]Offset, 0)
 	rangesPerToken := RangeIndex(s.config.ConsumerRanges())
 	// Get the tokens for the current size and intersect them
@@ -152,19 +147,26 @@ func (s *defaultOffsetState) getDefaultsForRange(start Token, end Token, cluster
 		}
 		for index := RangeIndex(0); index < rangesPerToken; index++ {
 			rangeStart, rangeEnd := RangeByTokenAndClusterSize(token, index, int(rangesPerToken), clusterSize)
-			if !utils.Intersects(start, end, rangeStart, rangeEnd) {
+			if !Intersects(start, end, rangeStart, rangeEnd) {
 				continue
 			}
 
 			// Navigate through the parent until the first ones and set to zero
-			for _, genRanges := range s.firstGenerations(token, index, clusterSize) {
+			for _, genRanges := range s.firstGenerations(token, index, clusterSize, siblings) {
 				gen := genRanges.Generation
+
 				for _, genIndex := range genRanges.Indices {
+					rangeStart, rangeEnd := RangeByTokenAndClusterSize(gen.Start, genIndex, int(rangesPerToken), gen.ClusterSize)
+					if !Intersects(start, end, rangeStart, rangeEnd) {
+						// The first generation included parts that we weren't interested, move on
+						continue
+					}
+
 					result = append(result, Offset{
 						Token:       gen.Start,
 						Index:       genIndex,
 						Version:     gen.Version,
-						ClusterSize: clusterSize,
+						ClusterSize: gen.ClusterSize,
 						Offset:      0,
 						Source:      OffsetSource{},
 					})
@@ -172,11 +174,16 @@ func (s *defaultOffsetState) getDefaultsForRange(start Token, end Token, cluster
 			}
 		}
 	}
+
 	return result
 }
 
 // Navigates through parents until it gets the first, returning an unique set of generations alongside its ranges
-func (s *defaultOffsetState) firstGenerations(token Token, index RangeIndex, clusterSize int) []GenerationRanges {
+func (s *defaultOffsetState) firstGenerations(token Token, index RangeIndex, clusterSize int, siblings []*offsetRange) []GenerationRanges {
+	if len(siblings) > 0 {
+		return s.firstGenerationBySibling(token, index, clusterSize, siblings[0].value)
+	}
+
 	gen, err := s.discoverer.GetTokenHistory(token, clusterSize)
 	utils.PanicIfErr(err, "Generation history could not be retrieved")
 
@@ -184,13 +191,7 @@ func (s *defaultOffsetState) firstGenerations(token Token, index RangeIndex, clu
 		return nil
 	}
 
-	queue := make([]GenerationRanges, 0)
-	parents := s.discoverer.ParentRanges(gen, []RangeIndex{index})
-	if len(parents) == 0 {
-		return nil
-	}
-
-	queue = append(queue, parents...)
+	queue := []GenerationRanges{{Generation: gen, Indices: []RangeIndex{index}}}
 	roots := make(map[GenId]map[RangeIndex]bool, 0)
 	rootsGen := make(map[GenId]*Generation, 0)
 	for len(queue) > 0 {
@@ -227,6 +228,46 @@ func (s *defaultOffsetState) firstGenerations(token Token, index RangeIndex, clu
 	return result
 }
 
+// Navigates up through a sibling offset, until the cluster size changes
+func (s *defaultOffsetState) firstGenerationBySibling(
+	token Token,
+	index RangeIndex,
+	clusterSize int,
+	siblingOffset Offset,
+) []GenerationRanges {
+	root := s.discoverer.GenerationInfo(siblingOffset.GenId())
+	if root == nil {
+		return nil
+	}
+	if root.ClusterSize != siblingOffset.ClusterSize {
+		panic("Invalid offset data")
+	}
+	expectedClusterSize := root.ClusterSize
+	if len(root.Parents) == 1 {
+		// Navigate up until the cluster size changes
+		for len(root.Parents) > 0 {
+			parentGen := s.discoverer.GenerationInfo(root.Parents[0])
+			if parentGen == nil || parentGen.ClusterSize != expectedClusterSize {
+				break
+			}
+			root = parentGen
+		}
+	}
+
+	if clusterSize == expectedClusterSize {
+		return []GenerationRanges{{Generation: root, Indices: []RangeIndex{index}}}
+	}
+	// Translate ranges into that cluster size using actual ranges
+	result := make([]GenerationRanges, 0)
+	projected := ProjectRangeByClusterSize(token, index, s.config.ConsumerRanges(), clusterSize, expectedClusterSize)
+	for _, tr := range projected {
+		for _, i := range tr.Indices {
+			result = append(result, GenerationRanges{Generation: root, Indices: []RangeIndex{i}})
+		}
+	}
+	return result
+}
+
 // Retrieves the offsets for the given range
 //
 // The caller MUST hold the lock
@@ -237,13 +278,13 @@ func (s *defaultOffsetState) getOffsetRanges(
 	index RangeIndex,
 	clusterSize int,
 ) ([]*offsetRange, Token, Token) {
+	start, end := RangeByTokenAndClusterSize(token, index, s.config.ConsumerRanges(), clusterSize)
 	key := OffsetStoreKey{Group: group, Topic: topic}
 	list, found := s.offsetMap[key]
 	if !found {
-		return nil, 0, 0
+		return nil, start, end
 	}
 
-	start, end := RangeByTokenAndClusterSize(token, index, s.config.ConsumerRanges(), clusterSize)
 	offsetIndex := binarySearch(list, end)
 	foundGreaterRanges := offsetIndex < len(list)
 	if !foundGreaterRanges {
@@ -256,8 +297,8 @@ func (s *defaultOffsetState) getOffsetRanges(
 	}
 
 	// It might not be contained
-	if !utils.Intersects(item.start, item.end, start, end) {
-		return nil, 0, 0
+	if !Intersects(item.start, item.end, start, end) {
+		return nil, start, end
 	}
 
 	// When its contained, return all the matching ranges
@@ -265,12 +306,13 @@ func (s *defaultOffsetState) getOffsetRanges(
 	if foundGreaterRanges {
 		result = append(result, &list[offsetIndex])
 	}
+	// result = append([]int{i}, result...)
 	for i := offsetIndex - 1; i >= 0; i-- {
 		item := list[i]
-		if !utils.Intersects(item.start, item.end, start, end) {
+		if !Intersects(item.start, item.end, start, end) {
 			break
 		}
-		result = append(result, &item)
+		result = append([]*offsetRange{&item}, result...)
 	}
 
 	return result, start, end
@@ -473,7 +515,7 @@ func (s *defaultOffsetState) setMap(key OffsetStoreKey, value *Offset) bool {
 		return true
 	}
 
-	if !utils.Intersects(item.start, item.end, start, end) {
+	if !Intersects(item.start, item.end, start, end) {
 		// Insert when it does not intersect
 		rangeToInsert := offsetRange{
 			start: start,
@@ -506,7 +548,7 @@ func overlappingIndices(list []offsetRange, offsetIndex int, start Token, end To
 	result := make([]int, 0)
 	for i := offsetIndex; i >= 0; i-- {
 		item := list[i]
-		if !utils.Intersects(item.start, item.end, start, end) {
+		if !Intersects(item.start, item.end, start, end) {
 			break
 		}
 		result = append([]int{i}, result...)

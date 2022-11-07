@@ -97,10 +97,10 @@ type OffsetState interface {
 	// The caller MUST check whether the consumer is assigned when ranges don't match
 	Get(group string, topic string, token Token, index RangeIndex, clusterSize int) (offset *Offset, rangesMatch bool)
 
-	// Gets offset values for a given group and range with defaults values.
+	// Gets offset values in order for a given group and range with defaults values.
 	//
 	// The caller MUST check whether the current broker can serve the data and that the consumer is assigned
-	GetAll(group string, topic string, token Token, rangeIndex RangeIndex, clusterSize int) []Offset
+	GetAllWithDefaults(group string, topic string, token Token, rangeIndex RangeIndex, clusterSize int) []Offset
 
 	// Sets the known offset value in memory, optionally committing it to the data store
 	Set(group string, topic string, value Offset, commit OffsetCommitType) bool

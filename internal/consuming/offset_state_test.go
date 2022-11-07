@@ -50,7 +50,7 @@ var _ = Describe("defaultOffsetState", func() {
 		Offset:      5050,
 	}
 
-	Describe("Get()", func() {
+	Context("With some offset ranges for Get() and GetAllWithDefaults()", func() {
 		config := new(cMocks.Config)
 		config.On("ConsumerRanges").Return(consumerRanges)
 		startC12_T0_2, endC12_T0_2 := RangeByTokenAndClusterSize(t0, 2, consumerRanges, 12)
@@ -71,78 +71,179 @@ var _ = Describe("defaultOffsetState", func() {
 			config:    config,
 		}
 
-		It("should return nil when topic and group is not found", func() {
-			value, rangesMatch := s.Get(group, "t2", t0, 1, 3)
-			Expect(value).To(BeNil())
-			Expect(rangesMatch).To(BeFalse())
+		Describe("Get()", func() {
+			It("should return nil when topic and group is not found", func() {
+				value, rangesMatch := s.Get(group, "t2", t0, 1, 3)
+				Expect(value).To(BeNil())
+				Expect(rangesMatch).To(BeFalse())
+			})
+
+			It("should return the offset when there's ranges match", func() {
+				// 3-broker cluster
+				value, rangesMatch := s.Get(group, topic, StartToken, 1, 3)
+				Expect(value).NotTo(BeNil())
+				Expect(rangesMatch).To(BeTrue())
+				Expect(*value).To(Equal(valueC3_T0_1))
+			})
+
+			It("should return nil when ranges don't intersect", func() {
+				value, rangesMatch := s.Get(group, "t2", StartToken, 3, 3)
+				Expect(value).To(BeNil())
+				Expect(rangesMatch).To(BeFalse())
+
+				value, rangesMatch = s.Get(group, "t2", GetTokenAtIndex(6, 1), 0, 6)
+				Expect(value).To(BeNil())
+				Expect(rangesMatch).To(BeFalse())
+			})
+
+			It("should return nil when there are ranges with smaller end", func() {
+				offsetMap := map[OffsetStoreKey][]offsetRange{
+					key: {
+						{start: startC12_T0_2, end: endC12_T0_2, value: valueC12_T0_2},
+					},
+				}
+
+				s := &defaultOffsetState{
+					offsetMap: offsetMap,
+					config:    config,
+				}
+
+				value, rangesMatch := s.Get(group, topic, t2C3, 0, 3)
+				Expect(value).To(BeNil())
+				Expect(rangesMatch).To(BeFalse())
+			})
+
+			It("should return the offset when there's range is contained", func() {
+				// 6-broker cluster
+				value, rangesMatch := s.Get(group, topic, StartToken, 3, 6)
+				Expect(value).NotTo(BeNil())
+				Expect(rangesMatch).To(BeFalse(), "The range must not match")
+				Expect(*value).To(Equal(valueC3_T0_1), "The returned value is still valueC3_T0_1")
+
+				value, rangesMatch = s.Get(group, topic, StartToken, 2, 6)
+				Expect(value).NotTo(BeNil())
+				Expect(rangesMatch).To(BeFalse(), "The range must not match")
+				Expect(*value).To(Equal(valueC3_T0_1), "The returned value is still valueC3_T0_1")
+			})
+
+			It("should return any of the previous offsets when the cluster is smaller than offset", func() {
+				// 6-broker cluster
+				value, rangesMatch := s.Get(group, topic, StartToken, 1, 6)
+				Expect(value).NotTo(BeNil())
+				Expect(rangesMatch).To(BeFalse(), "The range must not match")
+				Expect(*value).To(Equal(valueC12_T0_3), "The returned value is one of the smaller ranges")
+			})
+
+			It("should work with the last range", func() {
+				value, rangesMatch := s.Get(group, topic, t2C3, 3, 3)
+				Expect(value).NotTo(BeNil())
+				Expect(rangesMatch).To(BeTrue(), "The range must match")
+				Expect(*value).To(Equal(valueC3_T2_3), "The returned value should be the last offset")
+
+				value, rangesMatch = s.Get(group, topic, GetTokenAtIndex(6, 5), 3, 6)
+				Expect(value).NotTo(BeNil())
+				Expect(rangesMatch).To(BeFalse(), "The range must not match")
+				Expect(*value).To(Equal(valueC3_T2_3), "The returned value should be the last offset")
+			})
 		})
 
-		It("should return the offset when there's ranges match", func() {
-			// 3-broker cluster
-			value, rangesMatch := s.Get(group, topic, StartToken, 1, 3)
-			Expect(value).NotTo(BeNil())
-			Expect(rangesMatch).To(BeTrue())
-			Expect(*value).To(Equal(valueC3_T0_1))
-		})
+		Describe("GetAllWithDefaults()", func() {
+			It("should return all existing offsets for the range", func() {
+				values := s.GetAllWithDefaults(group, topic, t0, 2, 12)
+				Expect(values).To(Equal([]Offset{offsetMap[key][0].value}), "Should return existing C12_T0_2")
 
-		It("should return nil when ranges don't intersect", func() {
-			value, rangesMatch := s.Get(group, "t2", StartToken, 3, 3)
-			Expect(value).To(BeNil())
-			Expect(rangesMatch).To(BeFalse())
+				values = s.GetAllWithDefaults(group, topic, t0, 3, 12)
+				Expect(values).To(Equal([]Offset{offsetMap[key][1].value}), "Should return existing C12_T0_3")
 
-			value, rangesMatch = s.Get(group, "t2", GetTokenAtIndex(6, 1), 0, 6)
-			Expect(value).To(BeNil())
-			Expect(rangesMatch).To(BeFalse())
-		})
+				values = s.GetAllWithDefaults(group, topic, t0, 1, 6)
+				Expect(values).To(Equal([]Offset{offsetMap[key][0].value, offsetMap[key][1].value}),
+					"Should return existing C12_T0_2 and C12_T0_3")
+			})
 
-		It("should return nil when there are ranges with smaller end", func() {
-			offsetMap := map[OffsetStoreKey][]offsetRange{
-				key: {
-					{start: startC12_T0_2, end: endC12_T0_2, value: valueC12_T0_2},
-				},
-			}
+			It("should complete existing ranges with sibling defaults", func() {
+				t6C12 := GetTokenAtIndex(12, 1)
+				t3C6 := GetTokenAtIndex(6, 1)
 
-			s := &defaultOffsetState{
-				offsetMap: offsetMap,
-				config:    config,
-			}
+				siblingGen := &Generation{
+					Start:       t0,
+					End:         t6C12,
+					Version:     3,
+					ClusterSize: 12,
+					Parents:     []GenId{{Start: t0, Version: 2}},
+				}
+				parentGen := &Generation{
+					Start:       t0,
+					End:         t6C12,
+					Version:     2,
+					ClusterSize: 12, // Parent gen with cluster size = 12
+					Parents:     []GenId{{Start: t0, Version: 1}},
+				}
+				initialGen := &Generation{
+					Start:       t0,
+					End:         t3C6,
+					Version:     1,
+					ClusterSize: 6, // Initial gen with cluster size = 6
+					Parents:     []GenId{},
+				}
 
-			value, rangesMatch := s.Get(group, topic, t2C3, 0, 3)
-			Expect(value).To(BeNil())
-			Expect(rangesMatch).To(BeFalse())
-		})
+				discoverer := new(dMocks.Discoverer)
+				discoverer.On("GenerationInfo", GenId{Start: t0, Version: 3}).Return(siblingGen)
+				discoverer.On("GenerationInfo", GenId{Start: t0, Version: 2}).Return(parentGen)
+				discoverer.On("GenerationInfo", GenId{Start: t0, Version: 1}).Return(initialGen)
+				discoverer.On("ParentRanges", siblingGen, []RangeIndex{0}).Return(nil)
+				s.discoverer = discoverer
 
-		It("should return the offset when there's range is contained", func() {
-			// 6-broker cluster
-			value, rangesMatch := s.Get(group, topic, StartToken, 3, 6)
-			Expect(value).NotTo(BeNil())
-			Expect(rangesMatch).To(BeFalse(), "The range must not match")
-			Expect(*value).To(Equal(valueC3_T0_1), "The returned value is still valueC3_T0_1")
+				values := s.GetAllWithDefaults(group, topic, t0, 0, 3)
+				Expect(values).To(Equal([]Offset{
+					{
+						Version:     parentGen.Version,
+						Token:       parentGen.Start,
+						ClusterSize: parentGen.ClusterSize,
+						Offset:      0,
+						Index:       0,
+					}, {
+						Version:     parentGen.Version,
+						Token:       parentGen.Start,
+						ClusterSize: parentGen.ClusterSize,
+						Offset:      0,
+						Index:       1,
+					},
+					offsetMap[key][0].value,
+					offsetMap[key][1].value,
+				}), "Should return existing a default, C12_T0_2 and C12_T0_3")
+			})
 
-			value, rangesMatch = s.Get(group, topic, StartToken, 2, 6)
-			Expect(value).NotTo(BeNil())
-			Expect(rangesMatch).To(BeFalse(), "The range must not match")
-			Expect(*value).To(Equal(valueC3_T0_1), "The returned value is still valueC3_T0_1")
-		})
+			It("should return the first generation for ranges without offset", func() {
+				const index = 2
+				parentGen := &Generation{
+					Start:       t0,
+					End:         t1C3,
+					Version:     4,
+					ClusterSize: 3,
+				}
+				latestGen := &Generation{
+					Start:       t0,
+					End:         t1C3,
+					Version:     5,
+					ClusterSize: 3,
+					Parents:     []GenId{parentGen.Id()},
+				}
+				discoverer := new(dMocks.Discoverer)
+				discoverer.On("GetTokenHistory", t0, 3).Return(latestGen, nil)
+				discoverer.On("ParentRanges", latestGen, []RangeIndex{index}).Return(
+					[]GenerationRanges{{Generation: parentGen, Indices: []RangeIndex{index}}})
+				discoverer.On("ParentRanges", parentGen, []RangeIndex{index}).Return(nil)
+				s.discoverer = discoverer
 
-		It("should return any of the previous offsets when the cluster is smaller than offset", func() {
-			// 6-broker cluster
-			value, rangesMatch := s.Get(group, topic, StartToken, 1, 6)
-			Expect(value).NotTo(BeNil())
-			Expect(rangesMatch).To(BeFalse(), "The range must not match")
-			Expect(*value).To(Equal(valueC12_T0_2), "The returned value is one of the smaller ranges")
-		})
-
-		It("should work with the last range", func() {
-			value, rangesMatch := s.Get(group, topic, t2C3, 3, 3)
-			Expect(value).NotTo(BeNil())
-			Expect(rangesMatch).To(BeTrue(), "The range must match")
-			Expect(*value).To(Equal(valueC3_T2_3), "The returned value should be the last offset")
-
-			value, rangesMatch = s.Get(group, topic, GetTokenAtIndex(6, 5), 3, 6)
-			Expect(value).NotTo(BeNil())
-			Expect(rangesMatch).To(BeFalse(), "The range must not match")
-			Expect(*value).To(Equal(valueC3_T2_3), "The returned value should be the last offset")
+				values := s.GetAllWithDefaults(group, topic, t0, 2, 3)
+				Expect(values).To(Equal([]Offset{{
+					Version:     parentGen.Version,
+					ClusterSize: 3,
+					Offset:      0,
+					Token:       t0,
+					Index:       2,
+				}}), "Should return existing a default")
+			})
 		})
 	})
 
