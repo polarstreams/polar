@@ -210,7 +210,7 @@ func (q *groupReadQueue) refreshReaders() {
 					continue
 				}
 				if maxOffset == offsetNoData {
-					log.Error().Msgf("Unexpected no data found for open reader in previous generation")
+					log.Error().Msgf("Unexpected no data found for open reader in previous generation %s", topicId)
 				}
 				reader.MaxProducedOffset = &maxOffset
 			}
@@ -511,6 +511,7 @@ func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (int64, erro
 			value, err := q.gossiper.ReadProducerOffset(ordinal, topicId)
 			if err != nil {
 				if err == GossipGetNotFound {
+					log.Debug().Msgf("Producer offset not found on peer B%d for %s", ordinal, topicId)
 					c <- notFound
 				} else {
 					log.Warn().Err(err).Msgf("Producer offset could not be retrieved from peer B%d for %s", ordinal, topicId)
