@@ -49,19 +49,6 @@ func NewOffset(topic *TopicDataId, clusterSize int, source GenId, value int64) O
 	}
 }
 
-// Checks whether a consumer that is assigned the provided range can read a past offset.
-// Used when ranges don't match
-func (o *Offset) IsAssignedToConsumer(currentToken Token, currentIndex RangeIndex, clusterSize int) bool {
-	// checks whether the current token&index contains the offset's token&index
-	// TODO: IMPLEMENT
-	return false
-}
-
-func (o *Offset) IsBrokerAssigned(leaderTokens []Token, clusterSize int) bool {
-	// TODO: IMPLEMENT
-	return false
-}
-
 func (o *Offset) GenId() GenId {
 	return GenId{
 		Start:   o.Token,
@@ -99,7 +86,7 @@ type OffsetState interface {
 
 	// Gets offset values in order for a given group and range with defaults values.
 	//
-	// The caller MUST check whether the current broker can serve the data and that the consumer is assigned
+	// The caller MUST check whether the current broker can serve the data and that the consumer is assigned.
 	GetAllWithDefaults(group string, topic string, token Token, rangeIndex RangeIndex, clusterSize int) []Offset
 
 	// Sets the known offset value in memory, optionally committing it to the data store

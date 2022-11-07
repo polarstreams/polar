@@ -341,6 +341,29 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 					continue
 				}
 
+				offsetList := q.offsetState.GetAllWithDefaults(q.group, topic, t.Token, index, t.ClusterSize)
+				for _, offset := range offsetList {
+					if offset.Offset == OffsetCompleted {
+						continue
+					}
+					key := newReaderKey(offset.Token, offset.Index, offset.ClusterSize)
+					reader, found := topicReaders[key]
+					if found {
+						// TODO: TRACK WITH A MAP TO AVOID DUPLICATES
+						result = append(result, reader)
+						continue
+					}
+
+					// We don't have a reader for this key and group, create one
+					reader = q.createReader(topic, offset, currentGen)
+					if reader == nil {
+						continue
+					}
+
+					topicReaders[key] = reader
+					result = append(result, reader)
+				}
+
 				// TODO: IMPLEMENT
 				// get ranges offsets
 				// when there isn't an offset, use reset policy
@@ -363,54 +386,30 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 
 func (q *groupReadQueue) createReader(
 	topic string,
-	token Token,
-	index RangeIndex,
-	clusterSize int,
+	offset Offset,
 	source *Generation,
 ) *SegmentReader {
 	// Check that previous tokens (scaled down), whether the reader can ignored because all the data has been consumed
-	if token != source.Start {
-		// Joined tokens, calculate the index change
-		// The source index starts at the middle of the range
-		sourceIndex := RangeIndex(q.config.ConsumerRanges())/2 + index/2
-		sourceTokenOffset, _ := q.offsetState.Get(q.group, topic, source.Start, sourceIndex, clusterSize)
-		if sourceTokenOffset != nil && sourceTokenOffset.GenId() == source.Id() {
-			// The offset for the source token is on the last generation, we can ignore this previous token
-			return nil
-		}
-	}
+	// if token != source.Start {
+	// 	// Joined tokens, calculate the index change
+	// 	// The source index starts at the middle of the range
+	// 	sourceIndex := RangeIndex(q.config.ConsumerRanges())/2 + index/2
+	// 	sourceTokenOffset, _ := q.offsetState.Get(q.group, topic, source.Start, sourceIndex, clusterSize)
+	// 	if sourceTokenOffset != nil && sourceTokenOffset.GenId() == source.Id() {
+	// 		// The offset for the source token is on the last generation, we can ignore this previous token
+	// 		return nil
+	// 	}
+	// }
 
-	// TODO: IMPLEMENT new ranges by calling IsBrokerAssigned() and IsConsumerAssigned()
-	offset, _ := q.offsetState.Get(q.group, topic, token, index, clusterSize)
-	log.Debug().Msgf("May create for group %s, token %d/%d and topic '%s' with offset %s", q.group, token, index, topic, offset)
-
-	if offset == nil {
-		// We have no information of this group
-		//TODO: Verify that we have loaded from other brokers
-
-		offset = &Offset{
-			Offset:  0,
-			Version: 1,
-			Source:  NewOffsetSource(source.Id()),
-		}
-	}
-
-	if offset.Offset == OffsetCompleted {
-		// Probably waiting for the reader generation to be moved
-		return nil
-	}
-
-	readerVersion := offset.Version
 	topicId := TopicDataId{
 		Name:       topic,
-		Token:      token,
-		RangeIndex: index,
-		Version:    readerVersion,
+		Token:      offset.Token,
+		RangeIndex: offset.Index,
+		Version:    offset.Version,
 	}
 	topicGen := q.topologyGetter.GenerationInfo(topicId.GenId())
 	if topicGen == nil {
-		log.Error().Msgf("Generation %s could not be retrieved to create a reader", topicId.GenId())
-		return nil
+		log.Panic().Msgf("Generation %s could not be retrieved to create a reader", topicId.GenId())
 	}
 
 	var maxProducedOffset *int64 = nil
@@ -427,22 +426,22 @@ func (q *groupReadQueue) createReader(
 			log.Info().Msgf("No data was produced for %s, moving offset", &topicId)
 
 			// Mark as completed
-			offset := NewOffset(&topicId, topicGen.ClusterSize, source.Id(), OffsetCompleted)
+			offset := NewOffset(&topicId, offset.ClusterSize, source.Id(), OffsetCompleted)
 			q.offsetState.Set(q.group, topicId.Name, offset, OffsetCommitAll)
 			return nil
 		}
 		maxProducedOffset = &value
 	}
 
-	isLeader := true
+	wasLeader := true
 	topology := q.topologyGetter.Topology()
 
 	if topicGen.Leader != topology.MyOrdinal() {
-		isLeader = false
+		wasLeader = false
 	}
 
 	var replicationReader ReplicationReader
-	if isLeader {
+	if wasLeader {
 		log.Info().Msgf("Creating reader for group %s and topic %s", q.group, &topicId)
 	} else {
 		log.Info().Msgf("Creating reader for group %s and topic %s as follower", q.group, &topicId)
@@ -451,7 +450,7 @@ func (q *groupReadQueue) createReader(
 
 	reader, err := NewSegmentReader(
 		q.group,
-		isLeader,
+		wasLeader,
 		replicationReader,
 		topicId,
 		topicGen.ClusterSize,
