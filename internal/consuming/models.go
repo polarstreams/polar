@@ -180,8 +180,17 @@ func writeRecordBody(bodyLength int, writer *jsonwriter.Writer, reader *zstd.Dec
 
 // Presents a map key for readers by token range
 type readerKey struct {
-	token      Token
-	rangeIndex RangeIndex
+	token       Token
+	rangeIndex  RangeIndex
+	clusterSize int
+}
+
+func newReaderKey(token Token, index RangeIndex, clusterSize int) readerKey {
+	return readerKey{
+		token:       token,
+		rangeIndex:  index,
+		clusterSize: clusterSize,
+	}
 }
 
 type recordHeader struct {

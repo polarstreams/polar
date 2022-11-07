@@ -24,7 +24,7 @@ var _ = Describe("Client", func() {
 		It("Should retrieve an empty generations when no info is found", func() {
 			client := newTestClient()
 
-			result, err := client.GetGenerationsByToken(1000)
+			result, err := client.GetGenerationsByToken(1000, 3)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(BeEmpty())
 		})
@@ -51,7 +51,7 @@ var _ = Describe("Client", func() {
 				})
 			}
 
-			result, err := client.GetGenerationsByToken(Token(start))
+			result, err := client.GetGenerationsByToken(Token(start), 3)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(HaveLen(2))
 			Expect([]GenVersion{result[0].Version, result[1].Version}).To(Equal([]GenVersion{10, 9}))
@@ -332,18 +332,34 @@ var _ = Describe("Client", func() {
 	})
 
 	Describe("SaveOffset()", func() {
+		getStoredOffset := func(client *client, kv OffsetStoreKeyValue) (Offset, string) {
+			const query = `
+				SELECT token, range_index, cluster_size, version, offset, source FROM offsets
+				WHERE group_name = ? AND topic = ? AND token = ? AND range_index = ?`
+			obtained := Offset{}
+			var sourceString string
+			err := client.db.
+				QueryRow(query, kv.Key.Group, kv.Key.Topic, kv.Value.Token, kv.Value.Index).
+				Scan(&obtained.Token, &obtained.Index, &obtained.ClusterSize, &obtained.Version, &obtained.Offset,
+					&sourceString)
+			Expect(err).NotTo(HaveOccurred())
+			obtained.Source = offsetSourceFromString(sourceString)
+			return obtained, sourceString
+		}
+
 		It("should insert a record in offsets table", func() {
 			client := newTestClient()
 			key := OffsetStoreKey{
-				Group:      "group1",
-				Topic:      "topic1",
-				Token:      -123,
-				RangeIndex: 7,
+				Group: "group1",
+				Topic: "topic1",
 			}
 			value := Offset{
-				Offset:  1001,
-				Version: 3,
-				Source:  GenId{Start: -123, Version: 4},
+				Version:     3,
+				ClusterSize: 6,
+				Offset:      1001,
+				Token:       -123,
+				Index:       1,
+				Source:      NewOffsetSource(GenId{Start: -123, Version: 4}),
 			}
 			kv := OffsetStoreKeyValue{
 				Key:   key,
@@ -353,17 +369,8 @@ var _ = Describe("Client", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify stored
-			query := `
-				SELECT version, offset, source FROM offsets
-				WHERE group_name = ? AND topic = ? AND token = ? AND range_index = ?`
-			obtained := Offset{}
-			var sourceString string
-			err = client.db.
-				QueryRow(query, key.Group, key.Topic, key.Token, key.RangeIndex).
-				Scan(&obtained.Version, &obtained.Offset, &sourceString)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(sourceString).To(Equal("{\"start\":-123,\"version\":4}"))
-			obtained.Source = genIdFromString(sourceString)
+			obtained, sourceString := getStoredOffset(client, kv)
+			Expect(sourceString).To(ContainSubstring("{\"start\":-123,\"version\":4}"))
 			Expect(obtained).To(Equal(value))
 
 			// Quick test that can be upserted multiple times
@@ -378,15 +385,14 @@ var _ = Describe("Client", func() {
 		It("should store max int64", func() {
 			client := newTestClient()
 			key := OffsetStoreKey{
-				Group:      "group1",
-				Topic:      "topic1",
-				Token:      math.MinInt64,
-				RangeIndex: 2,
+				Group: "group1",
+				Topic: "topic1",
 			}
 			value := Offset{
 				Offset:  OffsetCompleted,
 				Version: 2,
-				Source:  GenId{Start: math.MinInt64, Version: 4},
+				Token:   112233,
+				Source:  NewOffsetSource(GenId{Start: math.MinInt64, Version: 4}),
 			}
 			kv := OffsetStoreKeyValue{
 				Key:   key,
@@ -395,18 +401,7 @@ var _ = Describe("Client", func() {
 			err := client.SaveOffset(&kv)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Verify stored
-			query := `
-				SELECT version, offset, source FROM offsets
-				WHERE group_name = ? AND topic = ? AND token = ? AND range_index = ?`
-			obtained := Offset{}
-			var sourceString string
-
-			err = client.db.
-				QueryRow(query, key.Group, key.Topic, key.Token, key.RangeIndex).
-				Scan(&obtained.Version, &obtained.Offset, &sourceString)
-			Expect(err).NotTo(HaveOccurred())
-			obtained.Source = genIdFromString(sourceString)
+			obtained, _ := getStoredOffset(client, kv)
 			Expect(obtained).To(Equal(value))
 			Expect(client.Offsets()).To(ContainElement(kv))
 		})
@@ -450,7 +445,7 @@ func expectTransactionStored(c *client, gen Generation) {
 }
 
 func expectToMatchStored(c *client, gen Generation) {
-	result, err := c.GetGenerationsByToken(gen.Start)
+	result, err := c.GetGenerationsByToken(gen.Start, gen.ClusterSize)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(result).To(HaveLen(1))
 	Expect(result[0]).To(Equal(gen))

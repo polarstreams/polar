@@ -54,20 +54,20 @@ func (_m *Gossiper) GetGenerations(ordinal int, token types.Token) interbroker.G
 	return r0
 }
 
-// HasTokenHistoryForToken provides a mock function with given fields: ordinal, token
-func (_m *Gossiper) HasTokenHistoryForToken(ordinal int, token types.Token) (bool, error) {
-	ret := _m.Called(ordinal, token)
+// HasTokenHistoryForToken provides a mock function with given fields: ordinal, token, clusterSize
+func (_m *Gossiper) HasTokenHistoryForToken(ordinal int, token types.Token, clusterSize int) (bool, error) {
+	ret := _m.Called(ordinal, token, clusterSize)
 
 	var r0 bool
-	if rf, ok := ret.Get(0).(func(int, types.Token) bool); ok {
-		r0 = rf(ordinal, token)
+	if rf, ok := ret.Get(0).(func(int, types.Token, int) bool); ok {
+		r0 = rf(ordinal, token, clusterSize)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(int, types.Token) error); ok {
-		r1 = rf(ordinal, token)
+	if rf, ok := ret.Get(1).(func(int, types.Token, int) error); ok {
+		r1 = rf(ordinal, token, clusterSize)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -199,13 +199,13 @@ func (_m *Gossiper) ReadProducerOffset(ordinal int, topic *types.TopicDataId) (i
 	return r0, r1
 }
 
-// ReadTokenHistory provides a mock function with given fields: ordinal, token
-func (_m *Gossiper) ReadTokenHistory(ordinal int, token types.Token) (*types.Generation, error) {
-	ret := _m.Called(ordinal, token)
+// ReadTokenHistory provides a mock function with given fields: ordinal, token, clusterSize
+func (_m *Gossiper) ReadTokenHistory(ordinal int, token types.Token, clusterSize int) (*types.Generation, error) {
+	ret := _m.Called(ordinal, token, clusterSize)
 
 	var r0 *types.Generation
-	if rf, ok := ret.Get(0).(func(int, types.Token) *types.Generation); ok {
-		r0 = rf(ordinal, token)
+	if rf, ok := ret.Get(0).(func(int, types.Token, int) *types.Generation); ok {
+		r0 = rf(ordinal, token, clusterSize)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*types.Generation)
@@ -213,8 +213,8 @@ func (_m *Gossiper) ReadTokenHistory(ordinal int, token types.Token) (*types.Gen
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(int, types.Token) error); ok {
-		r1 = rf(ordinal, token)
+	if rf, ok := ret.Get(1).(func(int, types.Token, int) error); ok {
+		r1 = rf(ordinal, token, clusterSize)
 	} else {
 		r1 = ret.Error(1)
 	}

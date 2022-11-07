@@ -87,6 +87,18 @@ var _ = Describe("Token", func() {
 		})
 	})
 
+	Describe("RangeByTokenAndClusterSize()", func() {
+		It("should have fixed values", func() {
+			start0, end0_3 := RangeByTokenAndClusterSize(StartToken, 0, 4, 3)
+			Expect(start0).To(Equal(StartToken))
+			Expect(end0_3).To(Equal(Token(-7686143364045646848)))
+			start1_6, end1_6 := RangeByTokenAndClusterSize(StartToken, 1, 4, 6)
+			Expect(end1_6).To(Equal(end0_3),
+				"The end of range 0 of a 3-broker cluster matches end of range 1 in a 6-broker cluster")
+			Expect(start1_6).To(Equal(Token(-8454757700450211328)))
+		})
+	})
+
 	Describe("HashToken()", func() {
 		It("Should return the expected values", func() {
 			// Taken from Cassandra token() function
@@ -101,6 +113,21 @@ var _ = Describe("Token", func() {
 			for _, item := range values {
 				Expect(HashToken(item.text)).To(Equal(Token(item.token)))
 			}
+		})
+	})
+
+	Describe("Intersects", func() {
+		It("should return whether ranges intersect", func() {
+			Expect(Intersects(0, 10, 5, 15)).To(BeTrue())
+			Expect(Intersects(0, 10, 0, 10)).To(BeTrue())
+			Expect(Intersects(50, 100, 10, 60)).To(BeTrue())
+			Expect(Intersects(50, 100, 10, 100)).To(BeTrue())
+			Expect(Intersects(300, 400, 10, 350)).To(BeTrue())
+
+			Expect(Intersects(0, 10, 20, 30)).To(BeFalse())
+			Expect(Intersects(0, 10, 10, 20)).To(BeFalse())
+			Expect(Intersects(200, 500, 10, 150)).To(BeFalse())
+			Expect(Intersects(200, 500, 0, 200)).To(BeFalse())
 		})
 	})
 })

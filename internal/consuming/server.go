@@ -435,12 +435,14 @@ func logsToServe(
 		return "", nil, nil
 	}
 
-	myOrdinal := topologyGetter.Topology().MyOrdinal()
+	topology := topologyGetter.Topology()
+	myOrdinal := topology.MyOrdinal()
 	leaderTokens := make([]TokenRanges, 0, len(tokenRanges))
 
 	for _, ranges := range tokenRanges {
 		gen := topologyGetter.Generation(ranges.Token)
 		if gen != nil && gen.Leader == myOrdinal {
+			ranges.ClusterSize = gen.ClusterSize
 			leaderTokens = append(leaderTokens, ranges)
 		}
 	}
@@ -478,8 +480,8 @@ func (c *consumer) OnOffsetFromPeer(kv *OffsetStoreKeyValue) {
 	log.Debug().
 		Str("group", kv.Key.Group).
 		Str("topic", kv.Key.Topic).
-		Msgf("Received offset from peer for token %d/%d", kv.Key.Token, kv.Key.RangeIndex)
-	c.offsetState.Set(kv.Key.Group, kv.Key.Topic, kv.Key.Token, kv.Key.RangeIndex, kv.Value, OffsetCommitLocal)
+		Msgf("Received offset from peer for token %d/%d", kv.Value.Token, kv.Value.Index)
+	c.offsetState.Set(kv.Key.Group, kv.Key.Topic, kv.Value, OffsetCommitLocal)
 }
 
 func (c *consumer) OnRegisterFromPeer(id string, group string, topics []string) error {

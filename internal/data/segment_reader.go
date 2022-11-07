@@ -29,6 +29,7 @@ type SegmentReader struct {
 	isLeader              bool // Determines whether the current broker was the leader of the generation we are reading from
 	replicationReader     ReplicationReader
 	Topic                 TopicDataId
+	TopicRangeClusterSize int
 	SourceVersion         GenId // The version in which this reader was created, a consumer might be on Gen=v3 but the current is v4. In this case, source would be v4 and topic.Version = v3
 	offsetState           OffsetState
 	MaxProducedOffset     *int64 // When set, it determines the last offset produced for this topicId for an old generation, inclusive
@@ -40,6 +41,7 @@ type SegmentReader struct {
 	skipFromFile          int64 // The number of bytes to skip after reading from file (to seek with alignment)
 	readingFromReplica    bool
 	lastFullSeek          int64
+	stoppedReceiving      bool
 }
 
 // Returns a log file reader.
@@ -54,6 +56,7 @@ func NewSegmentReader(
 	isLeader bool,
 	replicationReader ReplicationReader,
 	topic TopicDataId,
+	topicRangeClusterSize int,
 	sourceVersion GenId,
 	initialOffset int64,
 	offsetState OffsetState,
@@ -63,18 +66,19 @@ func NewSegmentReader(
 	// From the same base folder, the SegmentReader will continue reading through the files in order
 	basePath := config.DatalogPath(&topic)
 	s := &SegmentReader{
-		config:            config,
-		basePath:          basePath,
-		Items:             make(chan ReadItem, 16),
-		headerBuf:         make([]byte, chunkHeaderSize),
-		Topic:             topic,
-		group:             group,
-		isLeader:          isLeader,
-		replicationReader: replicationReader,
-		SourceVersion:     sourceVersion,
-		messageOffset:     initialOffset,
-		offsetState:       offsetState,
-		MaxProducedOffset: maxProducedOffset,
+		config:                config,
+		basePath:              basePath,
+		Items:                 make(chan ReadItem, 16),
+		headerBuf:             make([]byte, chunkHeaderSize),
+		Topic:                 topic,
+		TopicRangeClusterSize: topicRangeClusterSize,
+		group:                 group,
+		isLeader:              isLeader,
+		replicationReader:     replicationReader,
+		SourceVersion:         sourceVersion,
+		messageOffset:         initialOffset,
+		offsetState:           offsetState,
+		MaxProducedOffset:     maxProducedOffset,
 	}
 
 	if err := s.initRead(true); err != nil {
@@ -114,8 +118,11 @@ func (s *SegmentReader) read() {
 				item.SetResult(fmt.Errorf("Manual commit was ignored"), nil)
 				continue
 			}
-			if s.resetOffsetToLastCommitted() {
+			if reset, err := s.resetOffsetToLastCommitted(); reset {
 				reader.Reset(emptyBuffer)
+			} else if err != nil {
+				item.SetResult(nil, NewEmptyChunk(s.messageOffset))
+				break
 			}
 		} else {
 			s.storeOffset(lastCommit, item.CommitOnly())
@@ -246,55 +253,57 @@ func (s *SegmentReader) handleFileGap(offsetGap *int64, reader *bytes.Reader, bu
 func (s *SegmentReader) storeOffset(lastCommit *time.Time, manual bool) {
 	commitType := OffsetCommitLocal
 	value := Offset{
-		Offset:  s.messageOffset,
-		Version: s.Topic.Version,
-		Source:  s.SourceVersion,
+		Token:       s.Topic.Token,
+		Index:       s.Topic.RangeIndex,
+		Version:     s.Topic.Version,
+		ClusterSize: s.TopicRangeClusterSize,
+		Offset:      s.messageOffset,
+		Source:      NewOffsetSource(s.SourceVersion),
 	}
 
 	if time.Since(*lastCommit) >= s.config.AutoCommitInterval() || manual {
 		*lastCommit = time.Now()
 		commitType = OffsetCommitAll
-	} else if s.MaxProducedOffset != nil && s.messageOffset >= *s.MaxProducedOffset {
-		log.Debug().Str("group", s.group).Msgf("Consumed all messages of a previous generation %s", &s.Topic)
-		commitType = OffsetCommitAll
-		value.Offset = OffsetCompleted
+	} else if s.MaxProducedOffset != nil && s.messageOffset > *s.MaxProducedOffset {
+		if s.messageOffset != OffsetCompleted {
+			s.messageOffset = OffsetCompleted // Signal that it has been completed
+			commitType = OffsetCommitAll
+			value.Offset = OffsetCompleted
+			log.Debug().Str("group", s.group).Msgf(
+				"Marking message offset as completed for a previous generation %s", &s.Topic)
+		}
 	}
 
 	if commitType == OffsetCommitAll {
 		log.Debug().Str("group", s.group).Msgf("Setting offset for %s on all replicas: %s", &s.Topic, &value)
 	}
 
-	s.offsetState.Set(s.group, s.Topic.Name, s.Topic.Token, s.Topic.RangeIndex, value, commitType)
+	s.offsetState.Set(s.group, s.Topic.Name, value, commitType)
+}
+
+// Returns true when the offset state has been set as completed (previous generations only)
+func (s *SegmentReader) StoredOffsetAsCompleted() bool {
+	return s.messageOffset == OffsetCompleted
 }
 
 // Rewinds to the last known committed offset
-func (s *SegmentReader) resetOffsetToLastCommitted() bool {
+func (s *SegmentReader) resetOffsetToLastCommitted() (bool, error) {
 	if s.segmentFile == nil {
 		// It was not initialized yet, it's OK
-		return false
+		return false, nil
 	}
 
-	offset := s.offsetState.Get(s.group, s.Topic.Name, s.Topic.Token, s.Topic.RangeIndex)
-	if offset == nil {
-		offset = &Offset{
-			Offset:  0,
-			Version: s.Topic.Version,
-			Source:  s.SourceVersion,
-		}
-	}
+	offset, rangesMatch := s.offsetState.Get(
+		s.group, s.Topic.Name, s.Topic.Token, s.Topic.RangeIndex, s.TopicRangeClusterSize)
 
-	if offset.Version != s.Topic.Version {
-		log.Error().Msgf("Unexpected offset version for group %s and topic %s", s.group, &s.Topic)
-		offset = &Offset{
-			Offset:  0,
-			Version: s.Topic.Version,
-			Source:  s.SourceVersion,
-		}
+	if !rangesMatch || offset.ClusterSize != s.TopicRangeClusterSize || offset.GenId() != s.Topic.GenId() {
+		// Signal that the offset moved ahead of this reader generation, close
+		return false, fmt.Errorf("Offset moved ahead")
 	}
 
 	s.segmentFile = nil
 	s.messageOffset = offset.Offset
-	return true
+	return true, nil
 }
 
 // Tries open the initial file and seek the correct position, returning an error when there's an
@@ -518,12 +527,26 @@ func (s *SegmentReader) pollFile(buf []byte, remainderIndex int) ([]byte, error)
 // closes the current file and saves the current state
 func (s *SegmentReader) close(err error) {
 	log.Info().Msgf("Closing segment reader for topic: %s", s.Topic.String())
-	if err != nil {
-		for item := range s.Items {
-			// TODO: Make sure to close channel after receiving an error
-			item.SetResult(err, nil)
+
+	remaining := true
+	for remaining {
+		select {
+		case item := <-s.Items:
+			if item != nil {
+				item.SetResult(err, nil)
+			}
+		default:
+			remaining = false
 		}
 	}
+	s.stoppedReceiving = true
+}
+
+// Determines that the reader has stopped polling the channel, no further ReadItems will be processed.
+//
+// It signals that either the current offset info changed in a way that generations don't match, the during an offset
+func (s *SegmentReader) HasStoppedReceiving() bool {
+	return s.stoppedReceiving
 }
 
 // Reads the following chunks until finding the one with expected start offset

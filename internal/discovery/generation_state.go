@@ -49,10 +49,15 @@ type GenerationState interface {
 	IsTokenInRange(token Token) bool
 
 	// Determines whether there's history matching the token
-	HasTokenHistory(token Token) (bool, error)
+	HasTokenHistory(token Token, clusterSize int) (bool, error)
 
 	// Gets the last known committed token from the local persistence
-	GetTokenHistory(token Token) (*Generation, error)
+	GetTokenHistory(token Token, clusterSize int) (*Generation, error)
+
+	// Gets the parent token and range for any given token+range based on the generation information
+	// For example: T3/0 -> T0/2.
+	// When there is no parent, it returns a nil slice
+	ParentRanges(gen *Generation, indices []RangeIndex) []GenerationRanges
 }
 
 // Loads all generations from local storage
@@ -141,13 +146,13 @@ func (d *discoverer) IsTokenInRange(token Token) bool {
 	return false
 }
 
-func (d *discoverer) HasTokenHistory(token Token) (bool, error) {
-	result, err := d.localDb.GetGenerationsByToken(token)
+func (d *discoverer) HasTokenHistory(token Token, clusterSize int) (bool, error) {
+	result, err := d.localDb.GetGenerationsByToken(token, clusterSize)
 	return len(result) > 0, err
 }
 
-func (d *discoverer) GetTokenHistory(token Token) (*Generation, error) {
-	result, err := d.localDb.GetGenerationsByToken(token)
+func (d *discoverer) GetTokenHistory(token Token, clusterSize int) (*Generation, error) {
+	result, err := d.localDb.GetGenerationsByToken(token, clusterSize)
 	if len(result) == 0 {
 		return nil, err
 	}
@@ -310,6 +315,62 @@ func (d *discoverer) SetAsCommitted(token1 Token, token2 *Token, tx UUID, origin
 		delete(d.genProposed, *token2)
 	}
 	return nil
+}
+
+func (d *discoverer) ParentRanges(gen *Generation, indices []RangeIndex) []GenerationRanges {
+	if gen == nil {
+		panic("Generation can not be nil when looking for parent ranges")
+	}
+	if len(gen.Parents) == 0 {
+		return nil
+	}
+
+	currentToken := gen.Start
+	if len(gen.Parents) == 1 {
+		parentGen := d.GenerationInfo(gen.Parents[0])
+		if parentGen == nil {
+			log.Error().Msgf("Could not find generation info %s for reader projection", gen.Parents[0])
+			return nil
+		}
+		// Ranges are maintained
+		return []GenerationRanges{{Generation: parentGen, Indices: indices}}
+	}
+
+	tokens := make([]GenerationRanges, 0)
+	middleIndex := RangeIndex(d.config.ConsumerRanges()) / 2
+	for _, parentId := range gen.Parents {
+		// We've got to project the range indices
+		t := parentId.Start
+		parentGen := d.GenerationInfo(parentId)
+		if parentGen == nil {
+			log.Error().Msgf("Could not find generation info %s for reader projection", parentId)
+			continue
+		}
+		for _, index := range indices {
+			parentIndices := make([]RangeIndex, 0)
+			if t == currentToken {
+				if index >= middleIndex {
+					// This range is projected into the following range of the second token
+					continue
+				}
+
+				// For example: range T0/1, gets projected into T0/2 and T0/2 w/ four con consumer ranges
+				parentIndices = append(parentIndices, index*2)
+				parentIndices = append(parentIndices, index*2+1)
+			} else {
+				if index < middleIndex {
+					// This range is projected into the previous range of the first token
+					continue
+				}
+
+				// For example: range T0/3, gets projected into T3/2 and T3/3
+				parentIndices = append(parentIndices, (index-middleIndex)*2)
+				parentIndices = append(parentIndices, (index-middleIndex)*2+1)
+			}
+			tokens = append(tokens, GenerationRanges{Generation: parentGen, Indices: parentIndices})
+		}
+	}
+	return tokens
 }
 
 func (d *discoverer) RepairCommitted(gen *Generation) error {

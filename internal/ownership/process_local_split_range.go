@@ -37,7 +37,7 @@ func (o *generator) processLocalSplitRange(m *localSplitRangeGenMessage) creatio
 
 	log.Info().Msgf("Processing token range split T%d-T%d", topology.MyOrdinal(), nextBrokers[1].Ordinal)
 
-	version := o.lastKnownVersion(newToken, nextBrokers) + 1
+	version := o.lastKnownVersion(newToken, topology.TotalBrokers(), nextBrokers) + 1
 	log.Debug().Msgf("Identified v%d for T%d (%d)", version, newBrokerOrdinal, newToken)
 
 	// Use the same transaction id for both generations
@@ -206,10 +206,10 @@ func (o *generator) getLocalTx(token Token) *uuid.UUID {
 type splitProposeResult struct {
 }
 
-func (o *generator) lastKnownVersion(token Token, peers []BrokerInfo) GenVersion {
+func (o *generator) lastKnownVersion(token Token, clusterSize int, peers []BrokerInfo) GenVersion {
 	version := GenVersion(0)
 	// As I'm the only one
-	if gen, err := o.discoverer.GetTokenHistory(token); err != nil {
+	if gen, err := o.discoverer.GetTokenHistory(token, clusterSize); err != nil {
 		log.Panic().Err(err).Msgf("Error retrieving token history")
 	} else if gen != nil {
 		version = gen.Version
@@ -221,7 +221,7 @@ func (o *generator) lastKnownVersion(token Token, peers []BrokerInfo) GenVersion
 		c := make(chan GenVersion)
 		peerVersions = append(peerVersions, c)
 		go func() {
-			gen, err := o.gossiper.ReadTokenHistory(broker.Ordinal, token)
+			gen, err := o.gossiper.ReadTokenHistory(broker.Ordinal, token, clusterSize)
 			if err != nil {
 				log.Err(err).Msgf("Error retrieving token history from B%d", broker.Ordinal)
 			}

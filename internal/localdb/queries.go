@@ -28,7 +28,7 @@ func (c *client) prepareQueries() {
 
 	c.queries.selectGenerationsByToken = c.prepare(fmt.Sprintf(`
 		SELECT %s FROM generations
-		WHERE start_token = ? ORDER BY start_token, version DESC LIMIT 2`, generationColumns))
+		WHERE start_token = ? AND cluster_size = ? ORDER BY start_token, version DESC LIMIT 2`, generationColumns))
 
 	c.queries.selectGenerationsByParent = c.prepare(fmt.Sprintf(`
 		SELECT %s FROM generations
@@ -52,11 +52,11 @@ func (c *client) prepareQueries() {
 		`INSERT INTO transactions (tx, origin, timestamp, status) VALUES (?, ?, ?, ?)`)
 
 	c.queries.insertOffset = c.prepare(
-		`REPLACE INTO offsets (group_name, topic, token, range_index, version, offset, source)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		`REPLACE INTO offsets (group_name, topic, token, range_index, cluster_size, version, offset, source)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	c.queries.selectOffsets = c.prepare(
-		`SELECT group_name, topic, token, range_index, version, offset, source FROM offsets`)
+		`SELECT group_name, topic, token, range_index, cluster_size, version, offset, source FROM offsets`)
 }
 
 func (c *client) prepare(query string) *sql.Stmt {
@@ -96,8 +96,8 @@ func (c *client) setCurrentSchemaVersion() error {
 	return err
 }
 
-func (c *client) GetGenerationsByToken(token Token) ([]Generation, error) {
-	rows, err := c.queries.selectGenerationsByToken.Query(int64(token))
+func (c *client) GetGenerationsByToken(token Token, clusterSize int) ([]Generation, error) {
+	rows, err := c.queries.selectGenerationsByToken.Query(int64(token), clusterSize)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (c *client) SaveOffset(kv *OffsetStoreKeyValue) error {
 	// sqlite does not support uint64 values with high bit set
 	_, err := c.queries.
 		insertOffset.
-		Exec(key.Group, key.Topic, key.Token, key.RangeIndex, value.Version, value.Offset, genIdToString(value.Source))
+		Exec(key.Group, key.Topic, kv.Value.Token, kv.Value.Index, kv.Value.ClusterSize, value.Version, value.Offset, offsetSourceToString(value.Source))
 	return err
 }
 
@@ -256,12 +256,12 @@ func (c *client) Offsets() ([]OffsetStoreKeyValue, error) {
 	for rows.Next() {
 		kv := OffsetStoreKeyValue{}
 		err = rows.Scan(
-			&kv.Key.Group, &kv.Key.Topic, &kv.Key.Token, &kv.Key.RangeIndex, &kv.Value.Version, &kv.Value.Offset,
+			&kv.Key.Group, &kv.Key.Topic, &kv.Value.Token, &kv.Value.Index, &kv.Value.ClusterSize, &kv.Value.Version, &kv.Value.Offset,
 			&sourceString)
 		if err != nil {
 			return result, err
 		}
-		kv.Value.Source = genIdFromString(sourceString)
+		kv.Value.Source = offsetSourceFromString(sourceString)
 		result = append(result, kv)
 	}
 	return result, nil
@@ -282,14 +282,20 @@ func parentsToString(parents []GenId) string {
 	return string(bytes)
 }
 
-func genIdFromString(stringValue string) GenId {
-	var result GenId
+func genIdToString(id GenId) string {
+	bytes, err := json.Marshal(id)
+	utils.PanicIfErr(err, "Unexpected error when serializing GenId")
+	return string(bytes)
+}
+
+func offsetSourceFromString(stringValue string) OffsetSource {
+	var result OffsetSource
 	utils.PanicIfErr(json.Unmarshal([]byte(stringValue), &result), "Unexpected error when deserializing GenId")
 	return result
 }
 
-func genIdToString(id GenId) string {
-	bytes, err := json.Marshal(id)
-	utils.PanicIfErr(err, "Unexpected error when serializing GenId")
+func offsetSourceToString(s OffsetSource) string {
+	bytes, err := json.Marshal(s)
+	utils.PanicIfErr(err, "Unexpected error when serializing OffsetSource")
 	return string(bytes)
 }

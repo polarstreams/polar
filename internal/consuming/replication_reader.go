@@ -26,14 +26,7 @@ func newReplicationReader(
 	topology *TopologyInfo,
 	gen *Generation,
 	gossiper interbroker.Gossiper,
-	minOffset *Offset,
 ) *replicationReader {
-	offset := int64(0)
-	if minOffset != nil && minOffset.Version < topic.Version {
-		// The replication reader is valid for this generation only, default to zero otherwise
-		offset = minOffset.Offset
-	}
-
 	// Set the peers that need to be involved in the streaming of file structure
 	peers := make([]int, 0, 2)
 	if gen.Leader != topology.MyOrdinal() {
@@ -49,7 +42,7 @@ func newReplicationReader(
 		topic:    &topic,
 		peers:    peers,
 		gossiper: gossiper,
-		offset:   offset,
+		offset:   0, // We read the file names, starting at offset zero
 	}
 
 	return r

@@ -107,10 +107,10 @@ type GenerationGossiper interface {
 	IsTokenRangeCovered(ordinal int, token Token) (bool, error)
 
 	// HasTokenHistoryForToken determines whether the broker has any history matching the token
-	HasTokenHistoryForToken(ordinal int, token Token) (bool, error)
+	HasTokenHistoryForToken(ordinal int, token Token, clusterSize int) (bool, error)
 
 	// Gets the last known generation (not necessary the active one) of a given start token
-	ReadTokenHistory(ordinal int, token Token) (*Generation, error)
+	ReadTokenHistory(ordinal int, token Token, clusterSize int) (*Generation, error)
 
 	// Compare and sets the generation value to the proposed/accepted state
 	SetGenerationAsProposed(ordinal int, newGen *Generation, newGen2 *Generation, expectedTx *UUID) error
@@ -197,8 +197,10 @@ func (g *gossiper) IsTokenRangeCovered(ordinal int, token Token) (bool, error) {
 	return result, err
 }
 
-func (g *gossiper) HasTokenHistoryForToken(ordinal int, token Token) (bool, error) {
-	r, err := g.requestGet(ordinal, fmt.Sprintf(conf.GossipTokenHasHistoryUrl, token))
+func (g *gossiper) HasTokenHistoryForToken(ordinal int, token Token, clusterSize int) (bool, error) {
+
+	url := fmt.Sprintf("%s?clusterSize=%d", fmt.Sprintf(conf.GossipTokenHasHistoryUrl, token), clusterSize)
+	r, err := g.requestGet(ordinal, url)
 	if err != nil {
 		return false, err
 	}
@@ -208,8 +210,9 @@ func (g *gossiper) HasTokenHistoryForToken(ordinal int, token Token) (bool, erro
 	return result, err
 }
 
-func (g *gossiper) ReadTokenHistory(ordinal int, token Token) (*Generation, error) {
-	r, err := g.requestGet(ordinal, fmt.Sprintf(conf.GossipTokenGetHistoryUrl, token))
+func (g *gossiper) ReadTokenHistory(ordinal int, token Token, clusterSize int) (*Generation, error) {
+	url := fmt.Sprintf("%s?clusterSize=%d", fmt.Sprintf(conf.GossipTokenGetHistoryUrl, token), clusterSize)
+	r, err := g.requestGet(ordinal, url)
 	if err != nil {
 		return nil, err
 	}

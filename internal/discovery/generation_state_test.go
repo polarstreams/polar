@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 
 	. "github.com/barcostreams/barco/internal/test"
+	cMocks "github.com/barcostreams/barco/internal/test/conf/mocks"
 	"github.com/barcostreams/barco/internal/test/localdb/mocks"
 	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/google/uuid"
@@ -131,6 +132,69 @@ var _ = Describe("GenerationState", func() {
 		XIt("should replace existing generations when accepting multiple")
 	})
 
+	Describe("ParentRanges()", func() {
+		config := new(cMocks.Config)
+		config.On("ConsumerRanges").Return(4)
+		t3 := Token(-6148914691236517888)
+
+		It("should return the same range when single parent", func() {
+			gen := &Generation{
+				Start:       StartToken,
+				Version:     2,
+				ClusterSize: 3,
+				Parents: []GenId{{
+					Start:   StartToken,
+					Version: 1,
+				}},
+			}
+			parentGen := Generation{Start: gen.Parents[0].Start, Version: gen.Version - 1, ClusterSize: 3}
+
+			dbClient := new(mocks.Client)
+			dbClient.On("GenerationInfo", mock.Anything, mock.Anything).Return(&parentGen, nil)
+			s := NewDiscoverer(config, dbClient).(*discoverer)
+
+			Expect(s.ParentRanges(gen, []RangeIndex{1})).
+				To(Equal([]GenerationRanges{{Generation: &parentGen, Indices: []RangeIndex{1}}}))
+			Expect(s.ParentRanges(gen, []RangeIndex{3})).
+				To(Equal([]GenerationRanges{{Generation: &parentGen, Indices: []RangeIndex{3}}}))
+		})
+
+		It("should project range when multiple parents when using 4 ranges", func() {
+			gen := &Generation{
+				Start:       StartToken,
+				Version:     2,
+				ClusterSize: 3,
+				Parents: []GenId{{
+					Start:   StartToken,
+					Version: 1,
+				}, {
+					Start:   t3,
+					Version: 1,
+				}},
+			}
+			parent1Gen := Generation{Start: StartToken, ClusterSize: 6}
+			parent2Gen := Generation{Start: t3, ClusterSize: 6}
+
+			dbClient := new(mocks.Client)
+			dbClient.On("GenerationInfo", StartToken, mock.Anything).Return(&parent1Gen, nil)
+			dbClient.On("GenerationInfo", t3, mock.Anything).Return(&parent2Gen, nil)
+			s := NewDiscoverer(config, dbClient).(*discoverer)
+
+			Expect(s.ParentRanges(gen, []RangeIndex{0})).
+				To(Equal([]GenerationRanges{{Generation: &parent1Gen, Indices: []RangeIndex{0, 1}}}))
+
+			Expect(s.ParentRanges(gen, []RangeIndex{1})).
+				To(Equal([]GenerationRanges{{Generation: &parent1Gen, Indices: []RangeIndex{2, 3}}}))
+
+			// Next token
+			Expect(s.ParentRanges(gen, []RangeIndex{2})).
+				To(Equal([]GenerationRanges{{Generation: &parent2Gen, Indices: []RangeIndex{0, 1}}}))
+
+			Expect(s.ParentRanges(gen, []RangeIndex{3})).
+				To(Equal([]GenerationRanges{{Generation: &parent2Gen, Indices: []RangeIndex{2, 3}}}))
+		})
+	})
+
 	Describe("SetAsCommitted()", func() {
 		It("should store committed and delete proposed", func() {
 			s := state()
@@ -176,8 +240,6 @@ var _ = Describe("GenerationState", func() {
 			err := s.SetAsCommitted(gen.Start, nil, Must(NewRandom()), 4)
 			Expect(err).To(MatchError("Transaction does not match"))
 		})
-
-		XIt("should commit multiple")
 	})
 })
 

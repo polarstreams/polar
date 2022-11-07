@@ -47,5 +47,6 @@ const migration1 = `
 `
 
 const migration2 = `
-	ALTER TABLE generations ADD cluster_size int NOT NULL DEFAULT 3;
+ALTER TABLE generations ADD cluster_size int NOT NULL DEFAULT 3;
+ALTER TABLE offsets ADD cluster_size int NOT NULL DEFAULT 3;
 `
