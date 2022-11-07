@@ -118,7 +118,7 @@ func (o *generator) processLocalFailover(m *localFailoverGenMessage) creationErr
 		log.Err(err).Msg("Set as committed locally failed (probably local db related)")
 		return newCreationError("Set as committed locally failed")
 	}
-	o.gossiper.SetAsCommitted(peerFollower, gen.Start, nil, gen.Tx)
+	_ = o.gossiper.SetAsCommitted(peerFollower, gen.Start, nil, gen.Tx)
 
 	return nil
 }

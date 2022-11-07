@@ -12,6 +12,7 @@ import (
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/metrics"
 	. "github.com/barcostreams/barco/internal/types"
+	"github.com/barcostreams/barco/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -280,23 +281,24 @@ func (s *SegmentWriter) writeToBuffer(item SegmentChunk) {
 	}
 
 	// Write head
-	binary.Write(s.buffer, conf.Endianness, flags)
-	binary.Write(s.buffer, conf.Endianness, uint32(len(compressedBody)))
-	binary.Write(s.buffer, conf.Endianness, item.StartOffset())
-	binary.Write(s.buffer, conf.Endianness, item.RecordLength())
+	utils.PanicIfErr(binary.Write(s.buffer, conf.Endianness, flags), "Error writing flags to buffer")
+	utils.PanicIfErr(binary.Write(s.buffer, conf.Endianness, uint32(len(compressedBody))), "Error writing body length")
+	utils.PanicIfErr(binary.Write(s.buffer, conf.Endianness, item.StartOffset()), "Error writing start offset")
+	utils.PanicIfErr(binary.Write(s.buffer, conf.Endianness, item.RecordLength()), "Error writing record length")
 
 	// Calculate head checksum and write it
 	head := s.buffer.Bytes()[headStartIndex:]
-	binary.Write(s.buffer, conf.Endianness, crc32.ChecksumIEEE(head))
+	utils.PanicIfErr(binary.Write(s.buffer, conf.Endianness, crc32.ChecksumIEEE(head)), "Error writing checksum")
 
 	// Write body
-	s.buffer.Write(compressedBody)
+	_, err := s.buffer.Write(compressedBody)
+	utils.PanicIfErr(err, "Unexpected error writing compressed body to buffer")
 }
 
 func (c *SegmentWriter) flushTimer() {
 	defer func() {
 		// Channel might be closed in the future, move on
-		recover()
+		_ = recover()
 	}()
 
 	for {

@@ -46,6 +46,11 @@ var (
 		Help: "The total number of re-routed messages received by the broker",
 	})
 
+	InterbrokerDataMissedWrites = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "barco_interbroker_missed_writes_total",
+		Help: "The total number of messages that couldn't be written because the timeout elapsed",
+	})
+
 	SegmentFlushBytes = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "barco_segment_flushed_bytes",
 		Help:    "The amount of bytes flushed to disk",

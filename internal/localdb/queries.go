@@ -198,7 +198,9 @@ func (c *client) CommitGeneration(gen1 *Generation, gen2 *Generation) error {
 	}
 
 	// The rollback will be ignored if the tx has been committed
-	defer tx.Rollback()
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
 	insertGenStatement := tx.StmtContext(context.TODO(), c.queries.insertGeneration)
 	insertTxStatement := tx.StmtContext(context.TODO(), c.queries.insertTransaction)

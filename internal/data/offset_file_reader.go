@@ -19,7 +19,7 @@ func ReadProducerOffset(topicId *TopicDataId, config conf.DatalogConfig) (int64,
 		return 0, err
 	}
 	defer file.Close()
-	buf := makeAlignedBuffer(alignmentSize)
+	buf := make([]byte, offsetFileSize)
 	if _, err = file.Read(buf); err != nil {
 		return 0, err
 	}
@@ -31,8 +31,12 @@ func ReadProducerOffset(topicId *TopicDataId, config conf.DatalogConfig) (int64,
 	// Calculate the expected checksum
 	expectedChecksum := crc32.ChecksumIEEE(buffer.Bytes()[:8])
 
-	binary.Read(buffer, conf.Endianness, &storedOffset)
-	binary.Read(buffer, conf.Endianness, &storedChecksum)
+	if err := binary.Read(buffer, conf.Endianness, &storedOffset); err != nil {
+		return 0, err
+	}
+	if err := binary.Read(buffer, conf.Endianness, &storedChecksum); err != nil {
+		return 0, err
+	}
 
 	if expectedChecksum != storedChecksum {
 		return 0, fmt.Errorf("Checksum does not match for producer file offset at %s", basePath)

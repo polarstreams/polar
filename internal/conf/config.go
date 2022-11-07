@@ -22,24 +22,26 @@ const (
 )
 
 const (
-	envHome                    = "BARCO_HOME"
-	envListenOnAllAddresses    = "BARCO_LISTEN_ON_ALL"
-	envGossipPort              = "BARCO_GOSSIP_PORT"
-	envGossipDataPort          = "BARCO_GOSSIP_DATA_PORT"
-	envSegmentFlushIntervalMs  = "BARCO_SEGMENT_FLUSH_INTERVAL_MS"
-	envLogRetentionDuration    = "BARCO_LOG_RETENTION_DURATION"
-	envMaxSegmentSize          = "BARCO_MAX_SEGMENT_FILE_SIZE"
-	envAllocationPoolSize      = "BARCO_ALLOCATION_POOL_SIZE"
-	envConsumerAddDelay        = "BARCO_CONSUMER_ADD_DELAY_MS"
-	envConsumerReadTimeout     = "BARCO_CONSUMER_READ_TIMEOUT_MS"
-	envConsumerRanges          = "BARCO_CONSUMER_RANGES"
-	envTopologyFilePollDelayMs = "BARCO_TOPOLOGY_FILE_POLL_DELAY_MS"
-	envShutdownDelaySecs       = "BARCO_SHUTDOWN_DELAY_SECS"
-	envDevMode                 = "BARCO_DEV_MODE"
-	envServiceName             = "BARCO_SERVICE_NAME"
-	envPodName                 = "BARCO_POD_NAME"
-	envPodNamespace            = "BARCO_POD_NAMESPACE"
-	EnvBarcoDebug              = "BARCO_DEBUG"
+	envHome                            = "BARCO_HOME"
+	envListenOnAllAddresses            = "BARCO_LISTEN_ON_ALL"
+	envGossipPort                      = "BARCO_GOSSIP_PORT"
+	envGossipDataPort                  = "BARCO_GOSSIP_DATA_PORT"
+	envSegmentFlushIntervalMs          = "BARCO_SEGMENT_FLUSH_INTERVAL_MS"
+	envLogRetentionDuration            = "BARCO_LOG_RETENTION_DURATION"
+	envReplicationTimeoutDuration      = "BARCO_REPLICATION_TIMEOUT_DURATION"
+	envReplicationWriteTimeoutDuration = "BARCO_REPLICATION_WRITE_TIMEOUT_DURATION"
+	envMaxSegmentSize                  = "BARCO_MAX_SEGMENT_FILE_SIZE"
+	envAllocationPoolSize              = "BARCO_ALLOCATION_POOL_SIZE"
+	envConsumerAddDelay                = "BARCO_CONSUMER_ADD_DELAY_MS"
+	envConsumerReadTimeout             = "BARCO_CONSUMER_READ_TIMEOUT_MS"
+	envConsumerRanges                  = "BARCO_CONSUMER_RANGES"
+	envTopologyFilePollDelayMs         = "BARCO_TOPOLOGY_FILE_POLL_DELAY_MS"
+	envShutdownDelaySecs               = "BARCO_SHUTDOWN_DELAY_SECS"
+	envDevMode                         = "BARCO_DEV_MODE"
+	envServiceName                     = "BARCO_SERVICE_NAME"
+	envPodName                         = "BARCO_POD_NAME"
+	envPodNamespace                    = "BARCO_POD_NAMESPACE"
+	EnvBarcoDebug                      = "BARCO_DEBUG"
 )
 
 // Port defaults
@@ -53,8 +55,10 @@ const (
 )
 
 const (
-	defaultLogRetention       = "168h" // 7 days
-	defaultAllocationPoolSize = 32 * MiB
+	defaultLogRetention            = "168h" // 7 days
+	defaultReplicationTimeout      = "1s"
+	defaultReplicationWriteTimeout = "500ms"
+	defaultAllocationPoolSize      = 32 * MiB
 )
 
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
@@ -132,6 +136,8 @@ type GossipConfig interface {
 	DatalogConfig
 	GossipPort() int
 	GossipDataPort() int
+	ReplicationTimeout() time.Duration
+	ReplicationWriteTimeout() time.Duration
 	// MaxDataBodyLength is the maximum size of an interbroker data body
 	MaxDataBodyLength() int
 }
@@ -140,17 +146,21 @@ func NewConfig(devMode bool) Config {
 	hostName, _ := os.Hostname()
 	baseHostName, ordinal := parseHostName(hostName)
 	c := &config{
-		baseHostName: baseHostName,
-		devModeFlag:  devMode,
-		ordinal:      ordinal,
+		baseHostName:            baseHostName,
+		devModeFlag:             devMode,
+		ordinal:                 ordinal,
+		replicationTimeout:      parseDuration(envReplicationTimeoutDuration, defaultReplicationTimeout),
+		replicationWriteTimeout: parseDuration(envReplicationWriteTimeoutDuration, defaultReplicationWriteTimeout),
 	}
 	return c
 }
 
 type config struct {
-	baseHostName string
-	ordinal      int
-	devModeFlag  bool
+	baseHostName            string
+	ordinal                 int
+	devModeFlag             bool
+	replicationTimeout      time.Duration // Cache parsed to avoid doing it per call
+	replicationWriteTimeout time.Duration
 }
 
 func parseHostName(hostName string) (baseHostName string, ordinal int) {
@@ -182,6 +192,9 @@ func (c *config) Init() error {
 	value := env(envLogRetentionDuration, defaultLogRetention)
 	if _, err := time.ParseDuration(value); err != nil && value != "null" {
 		return fmt.Errorf("Log retention duration '%s' is not a valid value", value)
+	}
+	if c.replicationTimeout <= 0 || c.replicationWriteTimeout <= 0 || c.replicationWriteTimeout > c.replicationTimeout {
+		return fmt.Errorf("Invalid replication timeouts")
 	}
 
 	return nil
@@ -273,6 +286,14 @@ func (c *config) LogRetentionDuration() *time.Duration {
 	}
 
 	return &t
+}
+
+func (c *config) ReplicationTimeout() time.Duration {
+	return c.replicationTimeout
+}
+
+func (c *config) ReplicationWriteTimeout() time.Duration {
+	return c.replicationWriteTimeout
 }
 
 func (c *config) ShutdownDelay() time.Duration {
@@ -393,4 +414,13 @@ func SegmentIdFromName(fileName string) int64 {
 		panic(fmt.Sprintf("Invalid fileName '%s': %s", fileName, err.Error()))
 	}
 	return value
+}
+
+func parseDuration(envName, defaultValue string) time.Duration {
+	value := env(envName, defaultValue)
+	t, err := time.ParseDuration(value)
+	if err != nil {
+		panic(err)
+	}
+	return t
 }

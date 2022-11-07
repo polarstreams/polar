@@ -124,7 +124,7 @@ func assertStored(basePath string, segmentId int64, values []indexOffset) {
 	}
 	// Wait for the data to be stored in the file
 	for i := 0; i < maxWaits; i++ {
-		time.Sleep(20)
+		time.Sleep(20 * time.Millisecond)
 		name := fmt.Sprintf("%020d.index", segmentId)
 		b, err := os.ReadFile(filepath.Join(basePath, name))
 		if err == nil && len(b) == expectedFileLength {
@@ -158,9 +158,9 @@ func assertProducerOffsetStored(basePath string, expected uint64) {
 
 	// Wait for the data to be stored in the file
 	for i := 0; i < maxWaits; i++ {
-		time.Sleep(20)
+		time.Sleep(20 * time.Millisecond)
 		b, err := os.ReadFile(filepath.Join(basePath, conf.ProducerOffsetFileName))
-		if err == nil && len(b) == alignmentSize {
+		if err == nil && len(b) == offsetFileSize {
 			buffer := bytes.NewBuffer(b)
 			binary.Read(buffer, conf.Endianness, &storedOffset)
 			if storedOffset == expected {
@@ -170,7 +170,7 @@ func assertProducerOffsetStored(basePath string, expected uint64) {
 		}
 	}
 
-	Expect(blob).To(HaveLen(alignmentSize))
+	Expect(blob).To(HaveLen(offsetFileSize))
 	buffer := bytes.NewBuffer(blob)
 
 	var storedChecksum uint32

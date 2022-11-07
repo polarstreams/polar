@@ -14,6 +14,9 @@ import (
 var _ = Describe("SendToFollowers()", func() {
 	config := new(confMock.Config)
 	config.On("DevMode").Return(false)
+	config.On("ReplicationTimeout").Return(1 * time.Second)
+	config.On("ReplicationWriteTimeout").Return(500 * time.Millisecond)
+	config.On("DevMode").Return(false)
 
 	g := &gossiper{
 		config:      config,

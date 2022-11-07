@@ -73,7 +73,7 @@ var _ = Describe("Gossiper", func() {
 })
 
 func newTestTopology(length int, ordinal int) *TopologyInfo {
-	brokers := make([]BrokerInfo, length, length)
+	brokers := make([]BrokerInfo, length)
 	for i := 0; i < length; i++ {
 		brokers[i] = BrokerInfo{
 			IsSelf:   i == ordinal,
