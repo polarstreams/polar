@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/utils"
+	"github.com/barcostreams/barco/internal/metrics"
 	"github.com/rs/zerolog/log"
 )
 
@@ -154,7 +154,9 @@ func (c *dataConnection) readDataResponses(config conf.GossipConfig, closeHandle
 }
 
 func (c *dataConnection) writeDataRequests(config conf.GossipConfig, closeHandler func(string)) {
-	w := utils.NewBufferCap(config.MaxDataBodyLength() + headerSize + dataRequestMetaSize + conf.MaxTopicLength)
+	// Start a buffer without much capacity on purpose
+	// On larger clusters, no data should flow except for the neighboring brokers
+	w := new(bytes.Buffer)
 	header := header{Version: 1} // Reuse the header
 
 	for message := range c.cli.dataMessages {
@@ -162,17 +164,21 @@ func (c *dataConnection) writeDataRequests(config conf.GossipConfig, closeHandle
 		streamId := <-c.streamIds
 		header.StreamId = streamId
 		header.BodyLength = message.BodyLength()
-		// Each message represents a group of messages
-		message.Marshal(w, &header)
 
-		// After copying to the underlying buffer, we check whether we can use it
-		if message.Ctxt().Err() != nil {
-			// I can't use the message as it reached the deadline/was cancelled
-			// The message slice is out of date
+		// We marshal it first and then check if it can be sent
+		if err := message.Marshal(w, &header); err != nil {
+			log.Panic().Err(err).Msgf("Unexpected error when marshaling requests on the gossip data connection")
+		}
+
+		if !message.TrySetAsWritten() {
+			// We can't use the message as it reached the deadline/was cancelled and the buffer is out of date
 			c.streamIds <- streamId
+			metrics.InterbrokerDataMissedWrites.Inc()
+
 			//TODO: Use a more specific error
-			//TODO: Add metrics by data connection host: replicatedMissedWrites
-			message.SetResponse(newErrorResponse(message.Ctxt().Err().Error(), &header))
+			if err := message.SetResponse(newErrorResponse("CAS operation prevented write", &header)); err != nil {
+				log.Warn().Err(err).Msgf("Gossip data connection could not set the response")
+			}
 			continue
 		}
 

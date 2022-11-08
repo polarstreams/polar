@@ -16,6 +16,6 @@ const SegmentFileReadFlags = readFileFlags
 
 const IndexFileWriteFlags = SegmentFileWriteFlags
 
-const ProducerOffsetFileWriteFlags = os.O_CREATE | os.O_WRONLY | os.O_SYNC
+const ProducerOffsetFileWriteFlags = os.O_CREATE | os.O_WRONLY
 
 const ProducerOffsetFileReadFlags = readFileFlags

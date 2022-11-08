@@ -25,7 +25,7 @@ var indexItemSize = utils.BinarySize(indexOffset{})
 // Gets the known highest file offset from the index file that contains message offset
 func tryReadIndexFile(basePath string, filePrefix string, messageOffset int64) int64 {
 	// Use the OS page cache for reading index file
-	// as it will simplify the logic needed. The page cache usage should be neglegible for this
+	// as it will simplify the logic needed. The page cache usage should be negligible for this
 	// sporadic small files
 	indexFileName := filepath.Join(basePath, fmt.Sprintf("%s.%s", filePrefix, conf.IndexFileExtension))
 	file, err := os.Open(indexFileName)

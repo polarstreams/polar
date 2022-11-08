@@ -131,7 +131,7 @@ func (i *consumerResponseItem) MarshalJson(
 		// Use strings for int64 values
 		writer.KeyString("startOffset", strconv.FormatInt(i.chunk.StartOffset(), 10))
 		writer.Array("values", func() {
-			writeJsonRecords(writer, decoder, decoderBuffer)
+			_ = writeJsonRecords(writer, decoder, decoderBuffer)
 		})
 	})
 
@@ -153,7 +153,9 @@ func writeJsonRecords(
 			return err
 		}
 		writer.Separator()
-		writeRecordBody(int(header.Length), writer, reader, readBuffer)
+
+		// TODO: Handle error
+		_ = writeRecordBody(int(header.Length), writer, reader, readBuffer)
 	}
 }
 

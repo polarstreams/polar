@@ -95,7 +95,7 @@ func (s *SegmentReader) startReading() {
 
 	if !s.isLeader {
 		// Start early to initialize in the background
-		s.initRead(false)
+		_ = s.initRead(false)
 	}
 
 	s.read()
@@ -160,7 +160,7 @@ func (s *SegmentReader) read() {
 
 		if s.segmentFile == nil {
 			// Segment file might be nil when there was no data initially
-			s.initRead(false)
+			_ = s.initRead(false)
 			if s.segmentFile == nil {
 				continue
 			}
@@ -200,7 +200,8 @@ func (s *SegmentReader) consumeReadAhead(reader *bytes.Reader, buf []byte, remai
 		// There isn't enough data remaining for a chunk.
 		*remainderIndex = reader.Len()
 		// Drain the remaining reader and copy the bytes to the beginning of the buffer
-		reader.Read(buf)
+		_, err := reader.Read(buf)
+		utils.PanicIfErr(err, "Error reading from buffer")
 	}
 
 	return chunk, offsetGap
@@ -615,7 +616,8 @@ func (s *SegmentReader) readSingleChunk(reader *bytes.Reader) (int, SegmentChunk
 
 	if reader.Len() < int(header.BodyLength) {
 		// Rewind to the header position
-		reader.Seek(-int64(chunkHeaderSize), io.SeekCurrent)
+		_, err := reader.Seek(-int64(chunkHeaderSize), io.SeekCurrent)
+		utils.PanicIfErr(err, "Reader seek resulted in error")
 		return n, nil
 	}
 

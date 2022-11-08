@@ -465,6 +465,34 @@ func (_m *Config) ReadAheadSize() int {
 	return r0
 }
 
+// ReplicationTimeout provides a mock function with given fields:
+func (_m *Config) ReplicationTimeout() time.Duration {
+	ret := _m.Called()
+
+	var r0 time.Duration
+	if rf, ok := ret.Get(0).(func() time.Duration); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(time.Duration)
+	}
+
+	return r0
+}
+
+// ReplicationWriteTimeout provides a mock function with given fields:
+func (_m *Config) ReplicationWriteTimeout() time.Duration {
+	ret := _m.Called()
+
+	var r0 time.Duration
+	if rf, ok := ret.Get(0).(func() time.Duration); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(time.Duration)
+	}
+
+	return r0
+}
+
 // SegmentBufferSize provides a mock function with given fields:
 func (_m *Config) SegmentBufferSize() int {
 	ret := _m.Called()

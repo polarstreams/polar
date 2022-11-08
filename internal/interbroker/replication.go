@@ -2,6 +2,7 @@ package interbroker
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	. "github.com/barcostreams/barco/internal/types"
@@ -9,7 +10,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-const replicationTimeout = 1 * time.Second
 const streamFileTimeout = 10 * time.Second
 
 func (g *gossiper) SendToFollowers(
@@ -27,29 +27,22 @@ func (g *gossiper) SendToFollowers(
 		return fmt.Errorf("Peer clients are not loaded")
 	}
 
-	sent := 0
+	sent := make([]*chunkReplicationRequest, 0)
 	response := make(chan dataResponse, len(replicationInfo.Followers))
 
 	// The provided body is only valid for the lifetime of this call
-	// By using a context, we make sure the client doesn't use the
-	// body after this function returned (e.g. timed out or one of the replicas responded with success)
-	ctxt, cancel := context.WithTimeout(context.Background(), replicationTimeout)
-	defer cancel()
+	// We should  make sure the client doesn't use the body after this function returned
+	// (e.g. timed out or one of the replicas responded with success)
+	wg := sync.WaitGroup{}
 
-	request := &chunkReplicationRequest{
-		meta: dataRequestMeta{
-			SegmentId:    segmentId,
-			Token:        topic.Token,
-			GenVersion:   topic.Version,
-			RangeIndex:   topic.RangeIndex,
-			StartOffset:  chunk.StartOffset(),
-			RecordLength: chunk.RecordLength(),
-			TopicLength:  uint8(len(topic.Name)),
-		},
-		topic:    topic.Name,
-		ctxt:     ctxt,
-		data:     chunk.DataBlock(),
-		response: response,
+	meta := dataRequestMeta{
+		SegmentId:    segmentId,
+		Token:        topic.Token,
+		GenVersion:   topic.Version,
+		RangeIndex:   topic.RangeIndex,
+		StartOffset:  chunk.StartOffset(),
+		RecordLength: chunk.RecordLength(),
+		TopicLength:  uint8(len(topic.Name)),
 	}
 
 	for _, broker := range replicationInfo.Followers {
@@ -58,7 +51,16 @@ func (g *gossiper) SendToFollowers(
 			log.Error().Msgf("No data client found for B%d", broker.Ordinal)
 			continue
 		}
-		sent += 1
+
+		wg.Add(1)
+		request := &chunkReplicationRequest{
+			meta:     meta,
+			topic:    topic.Name,
+			data:     chunk.DataBlock(),
+			writeWg:  &wg,
+			response: response,
+		}
+		sent = append(sent, request)
 
 		// Capture it
 		requestChan := c.dataMessages
@@ -67,43 +69,80 @@ func (g *gossiper) SendToFollowers(
 		}()
 	}
 
-	if sent == 0 {
+	if len(sent) == 0 {
 		return fmt.Errorf("Chunk for topic %s (%d) could not be sent to replicas", topic.Name, segmentId)
 	}
 
+	timer := time.NewTimer(g.config.ReplicationTimeout())
+	writeTimer := time.NewTimer(g.config.ReplicationWriteTimeout())
+	lastResponseIndex := len(sent) - 1
+
 	// Return as soon there's a successful response
-	for i := 0; i < sent; i++ {
+	for i := 0; i < len(sent); i++ {
 		var r dataResponse
+		timedOut := false
 		select {
-		case <-ctxt.Done():
-			return ctxt.Err()
+		case <-timer.C:
+			timedOut = true
 		case r = <-response:
-			break
+			timer.Stop()
+		}
+
+		if timedOut {
+			// Cancel all request write
+			for _, r := range sent {
+				r.TrySetAsWritten()
+			}
+			return fmt.Errorf("Sending to followers timed out")
 		}
 
 		if eResponse, isError := r.(*errorResponse); isError {
-			if i < sent-1 {
+			err := fmt.Errorf("Received error when replicating: %s", eResponse.message)
+			log.Debug().Err(err).Msg("Data could not be replicated on a replica")
+
+			if i < lastResponseIndex {
 				// Let's wait for the next response
 				continue
 			}
 
-			err := fmt.Errorf("Received error when replicating: %s", eResponse.message)
-			log.Debug().Err(err).Msg("Data could not be replicated")
 			return err
 		}
 
-		if eResponse, ok := r.(*emptyResponse); ok && eResponse.op == chunkReplicationResponseOp {
-			return nil
-		} else {
-			if i < sent-1 {
+		eResponse, ok := r.(*emptyResponse)
+		if !ok || eResponse.op != chunkReplicationResponseOp {
+			log.Error().Interface("response", r).Msg("Unexpected response from data server")
+			if i < lastResponseIndex {
 				// Let's wait for the next response
 				continue
 			}
-
-			log.Error().Msg("Unexpected response from data server")
 			return fmt.Errorf("Invalid response from the data server")
 		}
+
+		// We have a valid response
+		if len(sent) > 1 && i < lastResponseIndex {
+			cancelTimer := make(chan bool, 1)
+			go func() {
+				select {
+				case <-cancelTimer:
+					return
+				case <-writeTimer.C:
+					break
+				}
+
+				// We should wait for the other requests to be written to the other replica
+				for _, r := range sent {
+					r.TrySetAsWritten()
+				}
+			}()
+
+			wg.Wait()
+			cancelTimer <- true
+		}
+
+		break
 	}
+
+	writeTimer.Stop()
 
 	return nil
 }
@@ -137,7 +176,6 @@ func (g *gossiper) StreamFile(
 			TopicLength:  uint8(len(topic.Name)),
 		},
 		topic:       topic.Name,
-		ctxt:        ctxt,
 		maxSize:     uint32(len(buf)),
 		responseBuf: buf,
 		response:    response,
@@ -145,6 +183,7 @@ func (g *gossiper) StreamFile(
 
 	lastError := "<empty>"
 
+	// Send to the peers serially, the first that succeeds returns
 	for _, ordinal := range peers {
 		c, ok := peerClients[ordinal]
 		if !ok {

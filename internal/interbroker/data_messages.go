@@ -3,11 +3,12 @@ package interbroker
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
 	"io"
+	"sync"
+	"sync/atomic"
 
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/types"
@@ -32,8 +33,11 @@ const (
 const messageVersion = 1
 
 type dataRequest interface {
-	Ctxt() context.Context
-	Marshal(w types.BufferBackedWriter, header *header)
+	// In a CAS operation, tries to mark the request as written (for the send portion) by the connection.
+	// It signals that the internal buffer can't be used to write by returning false.
+	TrySetAsWritten() bool
+
+	Marshal(w types.BufferBackedWriter, header *header) error
 	SetResponse(res dataResponse) error
 	BodyLength() uint32
 }
@@ -76,7 +80,8 @@ type chunkReplicationRequest struct {
 	data         []byte
 	response     chan dataResponse // response from replica
 	appendResult chan error        // result from append as a replica
-	ctxt         context.Context
+	wasWritten   atomic.Int32
+	writeWg      *sync.WaitGroup
 }
 
 func (r *chunkReplicationRequest) BodyLength() uint32 {
@@ -103,22 +108,37 @@ func (r *chunkReplicationRequest) SetResult(err error) {
 	r.appendResult <- err
 }
 
-func (r *chunkReplicationRequest) Ctxt() context.Context {
-	return r.ctxt
-}
-
 func (r *chunkReplicationRequest) SetResponse(res dataResponse) error {
 	r.response <- res
 	return nil
 }
 
-func (r *chunkReplicationRequest) Marshal(w types.BufferBackedWriter, header *header) {
+func (r *chunkReplicationRequest) Marshal(w types.BufferBackedWriter, header *header) error {
 	header.Op = chunkReplicationOp
 
-	writeHeader(w, header)
-	binary.Write(w, conf.Endianness, r.meta)
-	w.WriteString(r.topic)
-	w.Write(r.data)
+	if err := writeHeader(w, header); err != nil {
+		return err
+	}
+	if err := binary.Write(w, conf.Endianness, r.meta); err != nil {
+		return err
+	}
+	if _, err := w.WriteString(r.topic); err != nil {
+		return err
+	}
+	if _, err := w.Write(r.data); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *chunkReplicationRequest) TrySetAsWritten() bool {
+	if !r.wasWritten.CompareAndSwap(0, 1) {
+		return false
+	}
+
+	// Mark it as written
+	r.writeWg.Done()
+	return true
 }
 
 func (r *chunkReplicationRequest) topicId() types.TopicDataId {
@@ -140,19 +160,28 @@ type fileStreamRequest struct {
 	// Fields exclusively used by the client
 	response    chan dataResponse // channel for the response for the client
 	responseBuf []byte            // The buffer to be filled with the response body
-	ctxt        context.Context
 }
 
-func (r *fileStreamRequest) Marshal(w types.BufferBackedWriter, header *header) {
+func (r *fileStreamRequest) Marshal(w types.BufferBackedWriter, header *header) error {
 	header.Op = fileStreamOp
-	writeHeader(w, header)
-	binary.Write(w, conf.Endianness, r.meta)
-	binary.Write(w, conf.Endianness, r.maxSize)
-	w.WriteString(r.topic)
+	if err := writeHeader(w, header); err != nil {
+		return err
+	}
+	if err := binary.Write(w, conf.Endianness, r.meta); err != nil {
+		return err
+	}
+	if err := binary.Write(w, conf.Endianness, r.maxSize); err != nil {
+		return err
+	}
+	if _, err := w.WriteString(r.topic); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (r *fileStreamRequest) Ctxt() context.Context {
-	return r.ctxt
+func (r *fileStreamRequest) TrySetAsWritten() bool {
+	// fileStreamRequest write don't expire as the request doesn't use an external buffer
+	return true
 }
 
 func (r *fileStreamRequest) BodyLength() uint32 {

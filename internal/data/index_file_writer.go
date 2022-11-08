@@ -76,9 +76,11 @@ func (w *indexFileWriter) writeLoop() {
 
 		if item.fileOffset-lastStoredFileOffset >= writeThreshold {
 			buffer.Reset()
-			binary.Write(buffer, conf.Endianness, item.offset)
-			binary.Write(buffer, conf.Endianness, item.fileOffset)
-			binary.Write(buffer, conf.Endianness, crc32.ChecksumIEEE(buffer.Bytes()))
+			utils.PanicIfErr(binary.Write(buffer, conf.Endianness, item.offset), "Error writing item.offset")
+			utils.PanicIfErr(binary.Write(buffer, conf.Endianness, item.fileOffset), "Error writing item.fileOffset")
+			utils.PanicIfErr(binary.Write(buffer, conf.Endianness, crc32.ChecksumIEEE(buffer.Bytes())),
+				"Error writing item.checksum")
+
 			if _, err := file.Write(buffer.Bytes()); err != nil {
 				log.Err(err).Msgf("There was an error writing to the index file on path %s", w.basePath)
 			} else {
