@@ -174,6 +174,22 @@ func (m *ConsumerState) CanConsume(id string) (string, []TokenRanges, []string) 
 	return info.Group, ranges, info.Topics
 }
 
+func (m *ConsumerState) OffsetPolicy(connId string) OffsetResetPolicy {
+	value := m.consumers.Load()
+
+	if value == nil {
+		return DefaultOffsetResetPolicy
+	}
+
+	consumers := value.(map[string]ConsumerInfo)
+	info, found := consumers[connId]
+	if !found {
+		return DefaultOffsetResetPolicy
+	}
+
+	return info.OnNewGroup
+}
+
 func (m *ConsumerState) Rebalance() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()

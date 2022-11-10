@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/data"
 	. "github.com/barcostreams/barco/internal/data"
 	"github.com/barcostreams/barco/internal/discovery"
 	"github.com/barcostreams/barco/internal/interbroker"
@@ -33,6 +34,7 @@ type groupReadQueue struct {
 	state          *ConsumerState
 	offsetState    OffsetState
 	topologyGetter discovery.TopologyGetter
+	datalog        data.Datalog
 	gossiper       interbroker.Gossiper
 	rrFactory      ReplicationReaderFactory
 	config         conf.ConsumerConfig
@@ -47,6 +49,7 @@ func newGroupReadQueue(
 	state *ConsumerState,
 	offsetState OffsetState,
 	topologyGetter discovery.TopologyGetter,
+	datalog data.Datalog,
 	gossiper interbroker.Gossiper,
 	rrFactory ReplicationReaderFactory,
 	config conf.ConsumerConfig,
@@ -62,6 +65,7 @@ func newGroupReadQueue(
 		state:          state,
 		offsetState:    offsetState,
 		topologyGetter: topologyGetter,
+		datalog:        datalog,
 		gossiper:       gossiper,
 		rrFactory:      rrFactory,
 		config:         config,
@@ -107,7 +111,7 @@ func (q *groupReadQueue) process() {
 		errors := make([]error, 0)
 
 		if len(responseItems) == 0 {
-			readers := q.getReaders(tokens, topics)
+			readers := q.getReaders(tokens, topics, q.state.OffsetPolicy(item.connId))
 			totalSize := 0
 
 			for i := 0; i < len(readers) && totalSize < q.config.ConsumerReadThreshold(); i++ {
@@ -328,7 +332,11 @@ func (q *groupReadQueue) closeReader(reader *SegmentReader) {
 }
 
 // Gets the readers, creating them if necessary
-func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) []*SegmentReader {
+func (q *groupReadQueue) getReaders(
+	tokenRanges []TokenRanges,
+	topics []string,
+	policy OffsetResetPolicy,
+) []*SegmentReader {
 	result := make([]*SegmentReader, 0, len(tokenRanges)*len(topics))
 
 	for _, t := range tokenRanges {
@@ -360,7 +368,7 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 					continue
 				}
 
-				offsetList := q.offsetState.GetAllWithDefaults(q.group, topic, t.Token, index, t.ClusterSize)
+				offsetList := q.offsetState.GetAllWithDefaults(q.group, topic, t.Token, index, t.ClusterSize, policy)
 				for _, offset := range offsetList {
 					if offset.Offset == OffsetCompleted {
 						continue
@@ -446,6 +454,7 @@ func (q *groupReadQueue) createReader(
 		offset.Offset,
 		q.offsetState,
 		maxProducedOffset,
+		q.datalog,
 		q.config)
 
 	if err != nil {

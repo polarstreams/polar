@@ -87,7 +87,13 @@ type OffsetState interface {
 	// Gets offset values in order for a given group and range with defaults values.
 	//
 	// The caller MUST check whether the current broker can serve the data and that the consumer is assigned.
-	GetAllWithDefaults(group string, topic string, token Token, rangeIndex RangeIndex, clusterSize int) []Offset
+	GetAllWithDefaults(
+		group string,
+		topic string,
+		token Token,
+		rangeIndex RangeIndex,
+		clusterSize int,
+		policy OffsetResetPolicy) []Offset
 
 	// Sets the known offset value in memory, optionally committing it to the data store
 	Set(group string, topic string, value Offset, commit OffsetCommitType) bool

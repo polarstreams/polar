@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+const defaultPolicy = DefaultOffsetResetPolicy
+
 var _ = Describe("defaultOffsetState", func() {
 	const consumerRanges = 4
 	const group = "g1"
@@ -149,13 +151,13 @@ var _ = Describe("defaultOffsetState", func() {
 
 		Describe("GetAllWithDefaults()", func() {
 			It("should return all existing offsets for the range", func() {
-				values := s.GetAllWithDefaults(group, topic, t0, 2, 12)
+				values := s.GetAllWithDefaults(group, topic, t0, 2, 12, defaultPolicy)
 				Expect(values).To(Equal([]Offset{offsetMap[key][0].value}), "Should return existing C12_T0_2")
 
-				values = s.GetAllWithDefaults(group, topic, t0, 3, 12)
+				values = s.GetAllWithDefaults(group, topic, t0, 3, 12, defaultPolicy)
 				Expect(values).To(Equal([]Offset{offsetMap[key][1].value}), "Should return existing C12_T0_3")
 
-				values = s.GetAllWithDefaults(group, topic, t0, 1, 6)
+				values = s.GetAllWithDefaults(group, topic, t0, 1, 6, defaultPolicy)
 				Expect(values).To(Equal([]Offset{offsetMap[key][0].value, offsetMap[key][1].value}),
 					"Should return existing C12_T0_2 and C12_T0_3")
 			})
@@ -193,7 +195,7 @@ var _ = Describe("defaultOffsetState", func() {
 				discoverer.On("ParentRanges", siblingGen, []RangeIndex{0}).Return(nil)
 				s.discoverer = discoverer
 
-				values := s.GetAllWithDefaults(group, topic, t0, 0, 3)
+				values := s.GetAllWithDefaults(group, topic, t0, 0, 3, defaultPolicy)
 				Expect(values).To(Equal([]Offset{
 					{
 						Version:     parentGen.Version,
@@ -235,7 +237,7 @@ var _ = Describe("defaultOffsetState", func() {
 				discoverer.On("ParentRanges", parentGen, []RangeIndex{index}).Return(nil)
 				s.discoverer = discoverer
 
-				values := s.GetAllWithDefaults(group, topic, t0, 2, 3)
+				values := s.GetAllWithDefaults(group, topic, t0, 2, 3, defaultPolicy)
 				Expect(values).To(Equal([]Offset{{
 					Version:     parentGen.Version,
 					ClusterSize: 3,

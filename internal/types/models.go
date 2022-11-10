@@ -31,9 +31,9 @@ func (b *BrokerInfo) String() string {
 // ConsumerGroup contains info about a single group of consumers.
 // It's used as an interbroker message to send snapshot of the local view of consumers to other brokers.
 type ConsumerGroup struct {
-	Name   string   `json:"name"`
-	Ids    []string `json:"ids"`
-	Topics []string `json:"topics"`
+	Name       string            `json:"name"`
+	Ids        []string          `json:"ids"`
+	Topics     []string          `json:"topics"`
 }
 
 // BrokerIndex represents the position of a broker in the current broker list.
@@ -68,6 +68,15 @@ type SegmentChunk interface {
 	StartOffset() int64
 	RecordLength() uint32
 }
+
+type OffsetResetPolicy int
+
+const (
+	StartFromEarliest OffsetResetPolicy = iota
+	StartFromLatest
+)
+
+const DefaultOffsetResetPolicy = StartFromEarliest
 
 // TopologyInfo represents a snapshot of the current placement of the brokers
 type TopologyInfo struct {

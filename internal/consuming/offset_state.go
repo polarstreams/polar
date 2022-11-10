@@ -101,6 +101,7 @@ func (s *defaultOffsetState) GetAllWithDefaults(
 	token Token,
 	index RangeIndex,
 	clusterSize int,
+	policy OffsetResetPolicy,
 ) []Offset {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
