@@ -45,6 +45,9 @@ type Datalog interface {
 	// Releases the stream buffer
 	ReleaseStreamBuffer(buf []byte)
 
+	// Gets the max producer offset from local
+	ReadProducerOffset(topicId *TopicDataId) (int64, error)
+
 	// Gets a sorted list of offsets representing the name of the segment files, where the offset is less than maxOffset
 	SegmentFileList(topic *TopicDataId, maxOffset int64) ([]int64, error)
 }
@@ -181,6 +184,11 @@ func (d *datalog) ReadFileFrom(
 		}
 	}
 }
+
+func (d *datalog) ReadProducerOffset(topicId *TopicDataId) (int64, error) {
+	return readProducerOffset(topicId, d.config)
+}
+
 
 // Returns a slice of the given buffer containing the chunks when completed is true.
 // When completed is false, it returns the remaining

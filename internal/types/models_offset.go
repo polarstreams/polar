@@ -98,6 +98,6 @@ type OffsetState interface {
 	// Sets the known offset value in memory, optionally committing it to the data store
 	Set(group string, topic string, value Offset, commit OffsetCommitType) bool
 
-	// Reads the local max producer offset from disk
-	ProducerOffsetLocal(topic *TopicDataId) (int64, error)
+	// Reads the local max producer offset from local and peers
+	MaxProducedOffset(topicId *TopicDataId) (int64, error)
 }

@@ -2,6 +2,7 @@ package consuming
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"sync"
 
@@ -26,6 +27,7 @@ type offsetRange struct {
 func newDefaultOffsetState(
 	localDb localdb.Client,
 	discoverer discovery.TopologyGetter,
+	datalog data.Datalog,
 	gossiper interbroker.Gossiper,
 	config conf.ConsumerConfig,
 ) OffsetState {
@@ -34,6 +36,7 @@ func newDefaultOffsetState(
 		commitChan: make(chan *OffsetStoreKeyValue, 64),
 		localDb:    localDb,
 		gossiper:   gossiper,
+		datalog:    datalog,
 		discoverer: discoverer,
 		config:     config,
 	}
@@ -48,6 +51,7 @@ type defaultOffsetState struct {
 	commitChan chan *OffsetStoreKeyValue // We need to commit offset in order
 	localDb    localdb.Client
 	gossiper   interbroker.Gossiper
+	datalog    data.Datalog
 	discoverer discovery.TopologyGetter
 	config     conf.ConsumerConfig
 }
@@ -114,7 +118,7 @@ func (s *defaultOffsetState) GetAllWithDefaults(
 		if len(offsetList) > 0 {
 			toCreateEnd = offsetList[0].start
 		}
-		defaultOffsets := s.getDefaultsForRange(start, toCreateEnd, clusterSize, offsetList)
+		defaultOffsets := s.getDefaultsForRange(start, toCreateEnd, clusterSize, offsetList, policy)
 		result = append(result, defaultOffsets...)
 	}
 
@@ -124,7 +128,7 @@ func (s *defaultOffsetState) GetAllWithDefaults(
 
 	if len(offsetList) > 0 && offsetList[len(offsetList)-1].end < end {
 		toCreateStart := offsetList[len(offsetList)-1].end
-		defaultOffsets := s.getDefaultsForRange(toCreateStart, end, clusterSize, offsetList)
+		defaultOffsets := s.getDefaultsForRange(toCreateStart, end, clusterSize, offsetList, policy)
 		result = append(result, defaultOffsets...)
 	}
 
@@ -135,13 +139,18 @@ func (s *defaultOffsetState) GetAllWithDefaults(
 // When there are no siblings for that contained range, return the earliest parent.
 // When there are siblings, return at most a generation with the same cluster size,
 // as we shouldn't go back to past generations of different sizes.
-func (s *defaultOffsetState) getDefaultsForRange(start Token, end Token, clusterSize int, siblings []*offsetRange) []Offset {
+func (s *defaultOffsetState) getDefaultsForRange(
+	start Token,
+	end Token,
+	clusterSize int,
+	siblings []*offsetRange,
+	policy OffsetResetPolicy,
+) []Offset {
 	// TODO: Check what's stored for StartFromEarliest instead of starting at 0
 	result := make([]Offset, 0)
 	rangesPerToken := RangeIndex(s.config.ConsumerRanges())
 	// Get the tokens for the current size and intersect them
 	for i := 0; i < clusterSize; i++ {
-		//(get token at index and by range index)
 		token := GetTokenAtIndex(clusterSize, i)
 		if token > end {
 			break
@@ -168,7 +177,7 @@ func (s *defaultOffsetState) getDefaultsForRange(start Token, end Token, cluster
 						Index:       genIndex,
 						Version:     gen.Version,
 						ClusterSize: gen.ClusterSize,
-						Offset:      0,
+						Offset:      0, // TODO: Get earliest segment
 						Source:      OffsetSource{},
 					})
 				}
@@ -716,6 +725,99 @@ func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
 	}
 }
 
-func (s *defaultOffsetState) ProducerOffsetLocal(topic *TopicDataId) (int64, error) {
-	return data.ReadProducerOffset(topic, s.config)
+func (s *defaultOffsetState) MaxProducedOffset(topicId *TopicDataId) (int64, error) {
+	gen := s.discoverer.GenerationInfo(topicId.GenId())
+	if gen == nil {
+		log.Warn().Msgf("Past generation could not be retrieved %s", topicId.GenId())
+		// Attempt to get the info from local storage
+		return s.datalog.ReadProducerOffset(topicId)
+	}
+
+	topology := s.discoverer.Topology()
+	myOrdinal := topology.MyOrdinal()
+	peers := make([]int, 0)
+	for _, ordinal := range gen.Followers {
+		if ordinal != myOrdinal {
+			peers = append(peers, ordinal)
+		}
+	}
+
+	c := make(chan *int64)
+	notFound := new(int64)
+	*notFound = offsetNoData
+
+	// Get the values from the peers and local storage
+	go func() {
+		localValue, err := s.datalog.ReadProducerOffset(topicId)
+		if err != nil {
+			if os.IsNotExist(err) {
+				c <- notFound
+			} else {
+				log.Warn().Err(err).Msgf("Max producer offset could not be retrieved from local storage for %s", topicId)
+				c <- nil
+			}
+		} else {
+			c <- &localValue
+		}
+	}()
+
+	for _, ordinalValue := range peers {
+		// Closure will capture it
+		ordinal := ordinalValue
+		go func() {
+			if ordinal >= len(topology.Brokers) {
+				if s.gossiper.IsHostUp(ordinal) {
+					// Optimistically attempt to get the info from the broker that is leaving the cluster
+					value, err := s.gossiper.ReadProducerOffset(ordinal, topicId)
+					if err == nil {
+						c <- &value
+						return
+					}
+				}
+				c <- notFound
+				return
+			}
+			value, err := s.gossiper.ReadProducerOffset(ordinal, topicId)
+			if err != nil {
+				if err == GossipGetNotFound {
+					log.Debug().Msgf("Producer offset not found on peer B%d for %s", ordinal, topicId)
+					c <- notFound
+				} else {
+					log.Warn().Err(err).Msgf("Producer offset could not be retrieved from peer B%d for %s", ordinal, topicId)
+					c <- nil
+				}
+			} else {
+				c <- &value
+			}
+		}()
+	}
+
+	var result *int64 = nil
+	notFoundCount := 0
+
+	for i := 0; i < len(peers)+1; i++ {
+		value := <-c
+		if value == notFound {
+			notFoundCount++
+			continue
+		}
+		if value != nil {
+			if result == nil || *result < *value {
+				result = value
+			}
+		}
+	}
+
+	if result == nil {
+		if notFoundCount == len(peers)+1 {
+			// We can safely assume that no data was produced for this token+range
+			return offsetNoData, nil
+		}
+
+		message := fmt.Sprintf("Max producer offset could not be retrieved from peers or local for %s", topicId)
+		log.Warn().Msgf(message)
+		return 0, fmt.Errorf(message)
+	}
+
+	return *result, nil
 }

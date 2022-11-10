@@ -297,7 +297,7 @@ func (g *gossiper) getProducerOffset(w http.ResponseWriter, r *http.Request, ps 
 		Version:    GenVersion(version),
 	}
 
-	value, err := data.ReadProducerOffset(&topicId, g.config)
+	value, err := g.datalog.ReadProducerOffset(&topicId)
 	if err != nil {
 		if os.IsNotExist(err) {
 			w.WriteHeader(http.StatusNoContent)

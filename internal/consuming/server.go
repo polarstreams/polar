@@ -77,7 +77,7 @@ func NewConsumer(
 		localDb:        localDb,
 		rrFactory:      newReplicationReaderFactory(gossiper),
 		state:          NewConsumerState(config, topologyGetter),
-		offsetState:    newDefaultOffsetState(localDb, topologyGetter, gossiper, config),
+		offsetState:    newDefaultOffsetState(localDb, topologyGetter, datalog, gossiper, config),
 		readQueues:     NewCopyOnWriteMap(),
 		addDebouncer:   Debounce(addDelay, 0),
 	}

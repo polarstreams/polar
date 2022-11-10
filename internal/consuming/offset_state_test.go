@@ -1,10 +1,13 @@
 package consuming
 
 import (
+	"fmt"
 	"time"
 
 	cMocks "github.com/barcostreams/barco/internal/test/conf/mocks"
 	dMocks "github.com/barcostreams/barco/internal/test/discovery/mocks"
+	dataMocks "github.com/barcostreams/barco/internal/test/data/mocks"
+	iMocks "github.com/barcostreams/barco/internal/test/interbroker/mocks"
 	dbMocks "github.com/barcostreams/barco/internal/test/localdb/mocks"
 	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/onsi/ginkgo"
@@ -676,6 +679,54 @@ var _ = Describe("defaultOffsetState", func() {
 			startC3T0_1, endC3T0_1 := RangeByTokenAndClusterSize(t0, 1, consumerRanges, 3)
 			Expect(s.offsetMap[key]).To(HaveLen(1))
 			Expect(s.offsetMap[key][0]).To(Equal(offsetRange{start: startC3T0_1, end: endC3T0_1, value: valueT0new}))
+		})
+	})
+
+	Describe("MaxProducedOffset()", func() {
+		It("should get the max produced offset from local", func() {
+			gen := Generation{Followers: []int{2, 0}}
+			expected := int64(123)
+			topology := newTestTopology(3, 1)
+
+			datalog := new(dataMocks.Datalog)
+			datalog.On("ReadProducerOffset", mock.Anything).Return(expected, nil)
+			gossiper := new(iMocks.Gossiper)
+			gossiper.On("ReadProducerOffset", mock.Anything, mock.Anything).Return(int64(0), fmt.Errorf("Fake error"))
+			discoverer := new(dMocks.Discoverer)
+			discoverer.On("GenerationInfo", mock.Anything, mock.Anything).Return(&gen, nil)
+			discoverer.On("Topology").Return(&topology)
+
+			s := defaultOffsetState{
+				datalog:    datalog,
+				gossiper:   gossiper,
+				discoverer: discoverer,
+			}
+			obtained, err := s.MaxProducedOffset(&TopicDataId{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(obtained).To(Equal(expected))
+		})
+
+		It("should get the max produced offset from peers", func ()  {
+			expected := int64(12345)
+			topology := newTestTopology(3, 1)
+
+			datalog := new(dataMocks.Datalog)
+			datalog.On("ReadProducerOffset", mock.Anything).Return(expected-10, nil)
+			gossiper := new(iMocks.Gossiper)
+			gossiper.On("ReadProducerOffset", mock.Anything, mock.Anything).Return(expected, nil)
+			discoverer := new(dMocks.Discoverer)
+			discoverer.On("GenerationInfo", mock.Anything, mock.Anything).
+				Return(&Generation{Followers: []int{2, 0}}, nil)
+			discoverer.On("Topology").Return(&topology)
+
+			s := defaultOffsetState{
+				datalog:    datalog,
+				gossiper:   gossiper,
+				discoverer: discoverer,
+			}
+			obtained, err := s.MaxProducedOffset(&TopicDataId{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(obtained).To(Equal(expected))
 		})
 	})
 })
