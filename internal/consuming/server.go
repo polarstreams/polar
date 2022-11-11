@@ -43,6 +43,7 @@ const (
 	topicsQueryKey   = "topic"
 	groupQueryKey    = "group"
 	commitQueryKey   = "commit"
+	offsetResetKey   = "onNewGroup"
 )
 
 const consumerGroupDefault = "default"
@@ -210,6 +211,12 @@ func (c *consumer) putRegister(
 		info.Id = consumerId
 		info.Group = r.URL.Query().Get(groupQueryKey)
 		info.Topics = r.URL.Query()[topicsQueryKey]
+
+		if policy, err := types.ParseOffsetResetPolicy(r.URL.Query().Get(offsetResetKey)); err != nil {
+			return types.NewHttpError(http.StatusBadRequest, "Invalid offset reset policy value")
+		} else {
+			info.OnNewGroup = policy
+		}
 
 		if existingTc, existingInfo := c.state.TrackedConsumerById(consumerId); existingTc != nil {
 			if IfEmpty(info.Group, consumerGroupDefault) != existingInfo.Group ||

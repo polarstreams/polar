@@ -69,15 +69,6 @@ type SegmentChunk interface {
 	RecordLength() uint32
 }
 
-type OffsetResetPolicy int
-
-const (
-	StartFromEarliest OffsetResetPolicy = iota
-	StartFromLatest
-)
-
-const DefaultOffsetResetPolicy = StartFromEarliest
-
 // TopologyInfo represents a snapshot of the current placement of the brokers
 type TopologyInfo struct {
 	Brokers        []BrokerInfo        // Brokers ordered by index (e.g. 0,3,1,4,2,5)

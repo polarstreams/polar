@@ -83,6 +83,25 @@ type OffsetStoreKeyValue struct {
 	Value Offset         `json:"value"`
 }
 
+type OffsetResetPolicy int
+
+const (
+	StartFromEarliest OffsetResetPolicy = iota
+	StartFromLatest
+)
+
+const DefaultOffsetResetPolicy = StartFromEarliest
+
+func ParseOffsetResetPolicy(text string) (OffsetResetPolicy, error) {
+	if text == "startFromEarliest" {
+		return StartFromEarliest, nil
+	}
+	if text == "startFromLatest" {
+		return StartFromLatest, nil
+	}
+	return 0, fmt.Errorf("Invalid offset reset policy string value")
+}
+
 // Represents a local view of the consumer group offsets
 type OffsetState interface {
 	Initializer
