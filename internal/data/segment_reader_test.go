@@ -329,7 +329,7 @@ var _ = Describe("SegmentReader", func() {
 				}).
 				Return(true)
 			offsetState.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-			Return(&mockedOffset, true)
+				Return(&mockedOffset, true)
 
 			s := &SegmentReader{
 				datalog:     NewDatalog(config),
@@ -534,7 +534,6 @@ func newTestReader() *SegmentReader {
 		offsetState: offsetState,
 		headerBuf:   make([]byte, chunkHeaderSize),
 		isLeader:    true,
-
 	}
 }
 

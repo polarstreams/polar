@@ -49,6 +49,17 @@ func NewOffset(topic *TopicDataId, clusterSize int, source GenId, value int64) O
 	}
 }
 
+func NewDefaultOffset(topic *TopicDataId, clusterSize int, value int64) Offset {
+	return Offset{
+		Token:       topic.Token,
+		Index:       topic.RangeIndex,
+		Version:     topic.Version,
+		ClusterSize: clusterSize,
+		Offset:      value,
+		Source:      OffsetSource{},
+	}
+}
+
 func (o *Offset) GenId() GenId {
 	return GenId{
 		Start:   o.Token,
@@ -98,6 +109,8 @@ type OffsetState interface {
 	// Sets the known offset value in memory, optionally committing it to the data store
 	Set(group string, topic string, value Offset, commit OffsetCommitType) bool
 
-	// Reads the local max producer offset from local and peers
+	// Returns the max produced offset from local and peers.
+	// When it can not be found, it returns a negative value.
+	// When there's an unexpected  error on local and peers, it returns an error
 	MaxProducedOffset(topicId *TopicDataId) (int64, error)
 }

@@ -369,6 +369,7 @@ func (q *groupReadQueue) getReaders(
 				offsetList := q.offsetState.GetAllWithDefaults(q.group, topic, t.Token, index, t.ClusterSize, policy)
 				for _, offset := range offsetList {
 					if offset.Offset == OffsetCompleted {
+						// It will eventually get moved
 						continue
 					}
 					key := newReaderKey(offset.Token, offset.Index, offset.ClusterSize)
