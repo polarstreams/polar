@@ -285,7 +285,6 @@ func (c *consumer) addConnectionAndRebalance(
 	}
 
 	consumerInfo.Group = IfEmpty(consumerInfo.Group, consumerGroupDefault)
-	log.Debug().Msgf("--Adding consumer %+v", consumerInfo)
 	added, length := c.state.AddConnection(tc, consumerInfo)
 	if !added {
 		return nil

@@ -357,8 +357,6 @@ func (g *gossiper) postConsumerGroupInfoHandler(w http.ResponseWriter, r *http.R
 		return err
 	}
 
-	log.Debug().Msgf("--Received peer consumer info %+v", message.Groups)
-
 	// Use the registered listener
 	g.consumerInfoListener.OnConsumerInfoFromPeer(message.Origin, message.Groups)
 	return nil

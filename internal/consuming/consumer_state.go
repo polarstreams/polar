@@ -12,7 +12,6 @@ import (
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/discovery"
 	. "github.com/barcostreams/barco/internal/types"
-	"github.com/rs/zerolog/log"
 )
 
 const staleInfoThreshold = 5 * time.Minute
@@ -200,8 +199,6 @@ func (m *ConsumerState) Rebalance() bool {
 	// In the meantime, this is not a hot path and shouldn't affect performance
 	consumers := map[consumerKey]ConsumerInfo{}
 	groupBuilders := make(map[string]*groupInfoBuilder) // groups by group name
-
-	log.Debug().Msgf("--Rebalancing with connections %+v", m.connections)
 
 	// From the local connections, create the consumer groups
 	for _, info := range m.connections {

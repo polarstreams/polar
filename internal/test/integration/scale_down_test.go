@@ -51,7 +51,7 @@ var _ = Describe("Scale down with a non-reusable cluster", func() {
 		b5.WaitForStart().WaitForVersion1()
 
 		client := NewTestClient(nil)
-		client.RegisterAsConsumer(6, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
+		client.RegisterAsConsumer(6, `{"id": "c1", "group": "g1", "topics": ["abc"], "onNewGroup": 1}`)
 
 		// Produced a message in gen v1
 		expectOk(client.ProduceJson(0, "abc", `{"hello": "world_before_0_0"}`, partitionKeyT0Range))
