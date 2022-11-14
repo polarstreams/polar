@@ -303,13 +303,13 @@ var _ = Describe("defaultOffsetState", func() {
 						Token:      nextGen.Start,
 						RangeIndex: 0,
 						Version:    nextGen.Version,
-					}, mock.Anything).Return(offsetRange0, nil)
+					}, mock.Anything).Return(offsetRange0-1, nil)
 					datalog.On("ReadProducerOffset", &TopicDataId{
 						Name:       topic,
 						Token:      nextGen.Start,
 						RangeIndex: 1,
 						Version:    nextGen.Version,
-					}, mock.Anything).Return(offsetRange1, nil)
+					}, mock.Anything).Return(offsetRange1-1, nil)
 					s.datalog = datalog
 
 					values := s.GetAllWithDefaults(group, topic, t0, 0, 3, StartFromLatest)
@@ -356,7 +356,7 @@ var _ = Describe("defaultOffsetState", func() {
 						Token:      gen.Start,
 						RangeIndex: index,
 						Version:    gen.Version,
-					}, mock.Anything).Return(expected, nil)
+					}, mock.Anything).Return(expected-1, nil)
 					s.datalog = datalog
 					s.discoverer = discoverer
 

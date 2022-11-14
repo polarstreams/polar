@@ -227,7 +227,8 @@ func (s *defaultOffsetState) defaultOffsetValue(
 			// It's an old generation, mark the offset as completed
 			value = OffsetCompleted
 		} else if maxProduced, _ := s.MaxProducedOffset(topicId); maxProduced > 0 {
-			value = maxProduced
+			// The offset should be the next value to read
+			value = maxProduced+1
 		}
 	}
 

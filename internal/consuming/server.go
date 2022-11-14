@@ -211,11 +211,15 @@ func (c *consumer) putRegister(
 		info.Id = consumerId
 		info.Group = r.URL.Query().Get(groupQueryKey)
 		info.Topics = r.URL.Query()[topicsQueryKey]
+		info.OnNewGroup = DefaultOffsetResetPolicy
+		offsetResetValue := r.URL.Query().Get(offsetResetKey)
 
-		if policy, err := types.ParseOffsetResetPolicy(r.URL.Query().Get(offsetResetKey)); err != nil {
-			return types.NewHttpError(http.StatusBadRequest, "Invalid offset reset policy value")
-		} else {
-			info.OnNewGroup = policy
+		if offsetResetValue != "" {
+			if policy, err := types.ParseOffsetResetPolicy(offsetResetValue); err != nil {
+				return types.NewHttpError(http.StatusBadRequest, "Invalid offset reset policy value")
+			} else {
+				info.OnNewGroup = policy
+			}
 		}
 
 		if existingTc, existingInfo := c.state.TrackedConsumerById(consumerId); existingTc != nil {
@@ -244,13 +248,19 @@ func (c *consumer) putRegister(
 		return err
 	}
 
+	log.Info().
+		Strs("topics", info.Topics).
+		Bool("startFromLatest", info.OnNewGroup == StartFromLatest).
+		Msgf("Registered new consumer with id %s and group %s", info.Id, info.Group)
+
 	if statelessConsumer {
 		// Auto register in peers
 		peers := c.topologyGetter.Topology().Peers()
 		if len(peers) > 0 {
 			// Ignore dev mode
 			err := AnyError(CollectErrors(InParallel(len(peers), func(i int) error {
-				return c.gossiper.SendConsumerRegister(peers[i].Ordinal, info.Id, info.Group, info.Topics)
+				return c.gossiper.SendConsumerRegister(
+					peers[i].Ordinal, info.Id, info.Group, info.Topics, info.OnNewGroup)
 			})))
 
 			if err != nil {
@@ -275,6 +285,7 @@ func (c *consumer) addConnectionAndRebalance(
 	}
 
 	consumerInfo.Group = IfEmpty(consumerInfo.Group, consumerGroupDefault)
+	log.Debug().Msgf("--Adding consumer %+v", consumerInfo)
 	added, length := c.state.AddConnection(tc, consumerInfo)
 	if !added {
 		return nil
@@ -360,7 +371,9 @@ func (c *consumer) postPoll(
 		return nil
 	}
 
-	log.Debug().Msgf("Received consumer client poll from '%s'", id)
+	log.Debug().
+		Interface("query", r.URL.Query()).
+		Msgf("Received consumer client poll from '%s'", id)
 	groupReadQueue := c.getOrCreateReadQueue(group)
 
 	format := compressedBinaryFormat
@@ -495,11 +508,12 @@ func (c *consumer) OnOffsetFromPeer(kv *OffsetStoreKeyValue) {
 	c.offsetState.Set(kv.Key.Group, kv.Key.Topic, kv.Value, OffsetCommitLocal)
 }
 
-func (c *consumer) OnRegisterFromPeer(id string, group string, topics []string) error {
+func (c *consumer) OnRegisterFromPeer(id string, group string, topics []string, onNewGroup OffsetResetPolicy) error {
 	consumerInfo := ConsumerInfo{
-		Id:     id,
-		Group:  group,
-		Topics: topics,
+		Id:         id,
+		Group:      group,
+		Topics:     topics,
+		OnNewGroup: onNewGroup,
 	}
 
 	if tc, existingInfo := c.state.TrackedConsumerById(id); tc != nil {

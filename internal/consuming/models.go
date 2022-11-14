@@ -80,6 +80,22 @@ func (r *segmentReadItem) result() (err error, chunk SegmentChunk) {
 	return <-r.errorResult, <-r.chunkResult
 }
 
+type groupInfoBuilder struct {
+	name       string
+	topics     StringSet
+	keys       StringSet
+	onNewGroup OffsetResetPolicy
+}
+
+func newGroupInfoBuilder(group string, onNewGroup OffsetResetPolicy) *groupInfoBuilder {
+	return &groupInfoBuilder{
+		name:       group,
+		topics:     make(map[string]bool),
+		keys:       make(map[string]bool),
+		onNewGroup: onNewGroup,
+	}
+}
+
 // Represents a single response item from a poll request
 type consumerResponseItem struct {
 	chunk SegmentChunk

@@ -29,9 +29,10 @@ type ConsumerGroupInfoMessage struct {
 }
 
 type ConsumerRegisterMessage struct {
-	Id     string   `json:"id"`
-	Group  string   `json:"group"`
-	Topics []string `json:"topics"`
+	Id         string            `json:"id"`
+	Group      string            `json:"group"`
+	Topics     []string          `json:"topics"`
+	OnNewGroup OffsetResetPolicy `json:"onNewGroup"`
 }
 
 type TopicFileStructureMessage struct {

@@ -47,9 +47,9 @@ var _ = Describe("ConsumerState", func() {
 		When("consumers of the same group have different topics", func() {
 			It("should merge topics", func() {
 				state := newConsumerState(brokerLength)
-				id1 := addConnection(state, "a", "g1", "tA")
-				id2 := addConnection(state, "b", "g1", "tB")
-				id3 := addConnection(state, "c", "g1", "tA", "tC")
+				id1 := addConnection(state, "a", "g1", DefaultOffsetResetPolicy, "tA")
+				id2 := addConnection(state, "b", "g1", DefaultOffsetResetPolicy, "tB")
+				id3 := addConnection(state, "c", "g1", DefaultOffsetResetPolicy, "tA", "tC")
 
 				state.Rebalance()
 				expectedTopics := []string{"tA", "tB", "tC"}
@@ -72,10 +72,10 @@ var _ = Describe("ConsumerState", func() {
 		When("multiple connections have the same id", func() {
 			It("should merge the consumer info", func() {
 				state := newConsumerState(brokerLength)
-				id1a := addConnection(state, "a", "g1", "topic1")
-				id1b := addConnection(state, "a", "g1", "topic1")
-				id2 := addConnection(state, "b", "g1", "topic1")
-				id3 := addConnection(state, "c", "g1", "topic1")
+				id1a := addConnection(state, "a", "g1", StartFromEarliest, "topic1")
+				id1b := addConnection(state, "a", "g1", StartFromEarliest, "topic1")
+				id2 := addConnection(state, "b", "g1", StartFromEarliest, "topic1")
+				id3 := addConnection(state, "c", "g1", StartFromEarliest, "topic1")
 
 				rebalanced := state.Rebalance()
 				Expect(rebalanced).To(BeTrue())
@@ -92,14 +92,15 @@ var _ = Describe("ConsumerState", func() {
 				Expect(state.GetInfoForPeers()[0].Name).To(Equal("g1"))
 				Expect(state.GetInfoForPeers()[0].Topics).To(ConsistOf("topic1"))
 				Expect(state.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "b", "c"))
+				Expect(state.GetInfoForPeers()[0].OnNewGroup).To(Equal(StartFromEarliest))
 			})
 
 			It("should return true/false depending when there's a change in consumer topology", func() {
 				state := newConsumerState(brokerLength)
-				id1a := addConnection(state, "a", "g1", "topic1")
-				id1b := addConnection(state, "a", "g1", "topic1")
-				id2 := addConnection(state, "b", "g1", "topic1")
-				id3 := addConnection(state, "c", "g1", "topic1")
+				id1a := addConnection(state, "a", "g1", DefaultOffsetResetPolicy, "topic1")
+				id1b := addConnection(state, "a", "g1", DefaultOffsetResetPolicy, "topic1")
+				id2 := addConnection(state, "b", "g1", DefaultOffsetResetPolicy, "topic1")
+				id3 := addConnection(state, "c", "g1", DefaultOffsetResetPolicy, "topic1")
 
 				rebalanced := state.Rebalance()
 				Expect(rebalanced).To(BeTrue())
@@ -120,19 +121,20 @@ var _ = Describe("ConsumerState", func() {
 				_, tokens1, _ = state.CanConsume(id1a)
 				Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
 
-				id1b = addConnection(state, "a", "g1", "topic1")
+				id1b = addConnection(state, "a", "g1", DefaultOffsetResetPolicy, "topic1")
 				rebalanced = state.Rebalance()
 				Expect(rebalanced).To(BeFalse()) // No change
 
 				// Add a new consumer to group g1
-				addConnection(state, "d", "g1", "topic1", "topic2")
+				addConnection(state, "d", "g1", DefaultOffsetResetPolicy, "topic1", "topic2")
 				rebalanced = state.Rebalance()
 				Expect(rebalanced).To(BeTrue()) // There's a change
 
 				// Add a new group g2
-				addConnection(state, "e", "g2", "topic1")
+				addConnection(state, "e", "g2", DefaultOffsetResetPolicy, "topic1")
 				rebalanced = state.Rebalance()
 				Expect(rebalanced).To(BeTrue()) // There's a change
+				Expect(state.GetInfoForPeers()[0].OnNewGroup).To(Equal(DefaultOffsetResetPolicy))
 			})
 		})
 
@@ -140,9 +142,9 @@ var _ = Describe("ConsumerState", func() {
 			When("before the remove delay", func() {
 				It("should still include it", func() {
 					state := newConsumerState(brokerLength)
-					id1 := addConnection(state, "a", "g1", "topic1")
-					id2 := addConnection(state, "b", "g1", "topic1")
-					id3 := addConnection(state, "c", "g1", "topic1")
+					id1 := addConnection(state, "a", "g1", StartFromEarliest, "topic1")
+					id2 := addConnection(state, "b", "g1", StartFromEarliest, "topic1")
+					id3 := addConnection(state, "c", "g1", StartFromEarliest, "topic1")
 
 					// Remove b
 					state.RemoveConnection(id2)
@@ -163,6 +165,7 @@ var _ = Describe("ConsumerState", func() {
 					Expect(state.GetInfoForPeers()[0].Topics).To(ConsistOf("topic1"))
 					// b should still be there
 					Expect(state.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "b", "c"))
+					Expect(state.GetInfoForPeers()[0].OnNewGroup).To(Equal(StartFromEarliest))
 				})
 			})
 
@@ -170,9 +173,9 @@ var _ = Describe("ConsumerState", func() {
 				It("should not include it", func() {
 					state := newConsumerState(brokerLength)
 					state.removeDelay = 2 * time.Millisecond
-					id1 := addConnection(state, "a", "g1", "topic1")
-					id2 := addConnection(state, "b", "g1", "topic1")
-					id3 := addConnection(state, "c", "g1", "topic1")
+					id1 := addConnection(state, "a", "g1", DefaultOffsetResetPolicy, "topic1")
+					id2 := addConnection(state, "b", "g1", DefaultOffsetResetPolicy, "topic1")
+					id3 := addConnection(state, "c", "g1", DefaultOffsetResetPolicy, "topic1")
 
 					// Remove b
 					state.RemoveConnection(id2)
@@ -194,8 +197,36 @@ var _ = Describe("ConsumerState", func() {
 					// b should be gone
 					Expect(state.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "c"))
 					Expect(state.GetInfoForPeers()[0].Topics).To(ConsistOf("topic1"))
+					Expect(state.GetInfoForPeers()[0].OnNewGroup).To(Equal(DefaultOffsetResetPolicy))
 				})
 			})
+		})
+
+		It("should merge info from local and peers", func() {
+			state := newConsumerState(brokerLength)
+			id1 := addConnection(state, "a", "g1", StartFromLatest, "tA")
+			state.peerGroups = map[int]peerGroupInfo{
+				1: {
+					groups: []ConsumerGroup{
+						{
+							Name:       "g1",
+							Ids:        []string{"b"},
+							Topics:     []string{"tB"},
+							OnNewGroup: StartFromLatest,
+						},
+					},
+					timestamp: time.Now(),
+				},
+			}
+
+			state.Rebalance()
+			expectedTopics := []string{"tA", "tB"}
+			assertTopics(state, expectedTopics, id1)
+
+			Expect(state.GetInfoForPeers()).To(HaveLen(1))
+			Expect(state.GetInfoForPeers()[0].Name).To(Equal("g1"))
+			Expect(state.GetInfoForPeers()[0].Topics).To(ConsistOf(expectedTopics))
+			Expect(state.GetInfoForPeers()[0].Ids).To(ConsistOf("a", "b"))
 		})
 	})
 })
@@ -384,13 +415,14 @@ func assertTopics(state *ConsumerState, topics []string, consumerIds ...string) 
 	}
 }
 
-func addConnection(state *ConsumerState, consumerId string, group string, topics ...string) string {
+func addConnection(state *ConsumerState, id string, group string, policy OffsetResetPolicy, topics ...string) string {
 	tc := newTrackedConsumerHandler(&fakes.Connection{})
 	tc.TrackAsConnectionBound()
 	state.AddConnection(tc, ConsumerInfo{
-		Id:     consumerId,
-		Group:  group,
-		Topics: topics,
+		Id:         id,
+		Group:      group,
+		Topics:     topics,
+		OnNewGroup: policy,
 	})
 	return tc.Id()
 }

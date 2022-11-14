@@ -93,6 +93,7 @@ func (q *groupReadQueue) process() {
 		}
 
 		group, tokens, topics := logsToServe(q.state, q.topologyGetter, item.connId)
+		log.Debug().Msgf("--polling from %s, tokens %v", item.connId, tokens)
 		if group != q.group {
 			// There was a change in topology, tell the client to poll again
 			utils.NoContentResponse(item.writer, 0)
@@ -337,6 +338,8 @@ func (q *groupReadQueue) getReaders(
 ) []*SegmentReader {
 	result := make([]*SegmentReader, 0, len(tokenRanges)*len(topics))
 
+	log.Debug().Msgf("--Getting readers for group %s", q.group)
+
 	for _, t := range tokenRanges {
 		currentGen := q.topologyGetter.Generation(t.Token)
 		if currentGen == nil {
@@ -366,6 +369,7 @@ func (q *groupReadQueue) getReaders(
 					continue
 				}
 
+				log.Debug().Msgf("--Creating readers for group %s with policy %d", q.group, policy)
 				offsetList := q.offsetState.GetAllWithDefaults(q.group, topic, t.Token, index, t.ClusterSize, policy)
 				for _, offset := range offsetList {
 					if offset.Offset == OffsetCompleted {
