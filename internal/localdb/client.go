@@ -2,6 +2,7 @@ package localdb
 
 import (
 	"database/sql"
+	"strings"
 	"sync/atomic"
 
 	"github.com/barcostreams/barco/internal/conf"
@@ -73,7 +74,9 @@ func (c *client) Init() error {
 	c.db = db
 
 	for _, q := range migrationQueries {
-		if _, err := db.Exec(q); err != nil {
+		_, err := db.Exec(q)
+		// When the container restarts, the `ALTER TABLE ...` command generates the error: `duplicate column name: cluster_size`.
+		if err != nil && !strings.Contains(err.Error(), "duplicate column name: cluster_size") {
 			return err
 		}
 	}
