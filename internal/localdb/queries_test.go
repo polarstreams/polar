@@ -20,6 +20,17 @@ func TestDbClient(t *testing.T) {
 }
 
 var _ = Describe("Client", func() {
+	Describe("Init()", func() {
+		It("should support running multiple times", func() {
+			client := NewClient(&testConfig{}).(*client)
+			err := client.Init()
+			Expect(client.Init()).NotTo(HaveOccurred())
+
+			// Running a second time
+			err = client.Init()
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
 	Describe("GetGenerationPerToken()", func() {
 		It("Should retrieve an empty generations when no info is found", func() {
 			client := newTestClient()
