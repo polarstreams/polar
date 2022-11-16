@@ -58,6 +58,11 @@ func NewTestBroker(ordinal int, options ...*TestBrokerOptions) *TestBroker {
 		brokerName: fmt.Sprintf("Broker%d", ordinal),
 		options:    brokerOptions,
 	}
+
+	// Clean the home directory of the new broker
+	err := os.RemoveAll(fmt.Sprintf("./home%d", b.ordinal))
+	Expect(err).NotTo(HaveOccurred(), "Could not remove home%d directory", b.ordinal)
+
 	b.Start()
 	return &b
 }
@@ -67,13 +72,9 @@ func (b *TestBroker) Start() {
 	Expect(err).NotTo(HaveOccurred(), "Build failed: %s", string(buildOutput))
 
 	logPretty := ""
-
 	if os.Getenv("BARCO_TEST_LOG_PRETTY") == "true" {
 		logPretty = "-pretty"
 	}
-
-	err = os.RemoveAll(fmt.Sprintf("./home%d", b.ordinal))
-	Expect(err).NotTo(HaveOccurred(), "Could not remove home%d directory", b.ordinal)
 
 	cmd := exec.Command("./barco.exe", "-debug", logPretty)
 
@@ -109,7 +110,6 @@ func (b *TestBroker) Start() {
 	stderr, err := cmd.StderrPipe()
 	Expect(err).NotTo(HaveOccurred())
 
-	mu := sync.Mutex{}
 	const maxOutput = 200
 	b.output = make([]string, 0, maxOutput)
 
@@ -129,12 +129,12 @@ func (b *TestBroker) Start() {
 				b.startChan <- true
 			}
 
-			mu.Lock()
+			b.mu.Lock()
 			if len(b.output) >= maxOutput {
 				b.output = b.output[1:]
 			}
 			b.output = append(b.output, value)
-			mu.Unlock()
+			b.mu.Unlock()
 		}
 	}()
 
@@ -207,7 +207,11 @@ func (b *TestBroker) getOutput() []string {
 // Checks for output messages in the last n messages
 func (b *TestBroker) LookForErrors(nMessages int) {
 	output := b.getOutput()
-	output = output[len(output)-nMessages:]
+	startIndex := len(output)-nMessages
+	if startIndex < 0 {
+		startIndex = 0
+	}
+	output = output[startIndex:]
 	r, err := regexp.Compile(`\"level\":\"error\"`)
 	if err != nil {
 		log.Panic().Err(err).Msgf("Invalid search pattern")
@@ -241,6 +245,10 @@ func (b *TestBroker) StartShutdown() {
 func (b *TestBroker) Shutdown() {
 	b.StartShutdown()
 	b.WaitForShutdownOrKill()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	// Clear in case the TestBroker instance is reused (restarted)
+	b.output = b.output[:0]
 }
 
 func (b *TestBroker) Kill() error {
