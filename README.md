@@ -57,7 +57,7 @@ check out the [Contributing Guide](./CONTRIBUTING.md).
 ## Getting Started
 
 Producing and consuming messages from Barco is as simple as sending a HTTP request. Use your favorite HTTP client in
-your technology stack to send and retrieve events. Additionally, we also provide a [Go Client Library][go-client].
+your technology stack to send and receive events. Additionally, we also provide a [Go Client Library][go-client].
 
 ### Getting Started on Kubernetes
 
