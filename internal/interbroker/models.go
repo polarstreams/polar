@@ -26,7 +26,7 @@ type ConsumerInfoListener interface {
 	OnOffsetFromPeer(kv *OffsetStoreKeyValue)
 
 	// Invoked when a consumer should be registered as a result of a peer request
-	OnRegisterFromPeer(id string, group string, topics []string) error
+	OnRegisterFromPeer(id string, group string, topics []string, onNewGroup OffsetResetPolicy) error
 }
 
 type ReroutingListener interface {

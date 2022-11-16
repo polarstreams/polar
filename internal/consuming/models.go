@@ -23,9 +23,10 @@ import (
 
 // Represents a single consumer instance
 type ConsumerInfo struct {
-	Id     string   `json:"id"`    // A unique id within the consumer group
-	Group  string   `json:"group"` // A group unique id
-	Topics []string `json:"topics"`
+	Id         string            `json:"id"`    // A unique id within the consumer group
+	Group      string            `json:"group"` // A group unique id
+	Topics     []string          `json:"topics"`
+	OnNewGroup OffsetResetPolicy `json:"onNewGroup"`
 
 	// Only used internally
 	assignedTokens []Token
@@ -77,6 +78,22 @@ func (r *segmentReadItem) CommitOnly() bool {
 
 func (r *segmentReadItem) result() (err error, chunk SegmentChunk) {
 	return <-r.errorResult, <-r.chunkResult
+}
+
+type groupInfoBuilder struct {
+	name       string
+	topics     StringSet
+	keys       StringSet
+	onNewGroup OffsetResetPolicy
+}
+
+func newGroupInfoBuilder(group string, onNewGroup OffsetResetPolicy) *groupInfoBuilder {
+	return &groupInfoBuilder{
+		name:       group,
+		topics:     make(map[string]bool),
+		keys:       make(map[string]bool),
+		onNewGroup: onNewGroup,
+	}
 }
 
 // Represents a single response item from a poll request

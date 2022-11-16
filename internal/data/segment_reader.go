@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +23,7 @@ type SegmentReader struct {
 	Items                 chan ReadItem
 	basePath              string
 	headerBuf             []byte
+	datalog               Datalog
 	config                conf.DatalogConfig
 	group                 string
 	isLeader              bool // Determines whether the current broker was the leader of the generation we are reading from
@@ -61,11 +61,13 @@ func NewSegmentReader(
 	initialOffset int64,
 	offsetState OffsetState,
 	maxProducedOffset *int64,
+	datalog Datalog,
 	config conf.DatalogConfig,
 ) (*SegmentReader, error) {
 	// From the same base folder, the SegmentReader will continue reading through the files in order
 	basePath := config.DatalogPath(&topic)
 	s := &SegmentReader{
+		datalog:               datalog,
 		config:                config,
 		basePath:              basePath,
 		Items:                 make(chan ReadItem, 16),
@@ -357,8 +359,6 @@ func (s *SegmentReader) open(fileName string) error {
 //
 // It returns the file name, file offset and the error (when base path not found) with no side effect.
 func (s *SegmentReader) fullSeek(foreground bool) (string, int64, error) {
-	pattern := fmt.Sprintf("%s/*.%s", s.basePath, conf.SegmentFileExtension)
-
 	if !s.isLeader {
 		if foreground {
 			// Avoid blocking when creating a reader
@@ -375,11 +375,11 @@ func (s *SegmentReader) fullSeek(foreground bool) (string, int64, error) {
 	// Avoid spamming logs
 	shouldLog := time.Since(time.UnixMilli(atomic.LoadInt64(&s.lastFullSeek))) > 1*time.Minute
 	if shouldLog {
-		log.Info().Msgf("Looking for files matching the pattern %s", pattern)
+		log.Info().Msgf("Looking for files inside %s", s.basePath)
 		atomic.StoreInt64(&s.lastFullSeek, time.Now().UnixMilli())
 	}
 
-	entries, err := filepath.Glob(pattern)
+	entries, err := s.datalog.SegmentFileList(&s.Topic, s.messageOffset)
 	if err != nil {
 		log.Err(err).Msgf("There was an error listing files in %s while seeking", s.basePath)
 		return "", 0, err
@@ -392,24 +392,9 @@ func (s *SegmentReader) fullSeek(foreground bool) (string, int64, error) {
 		return "", 0, nil
 	}
 
-	sort.Strings(entries)
-
-	dlogFilePrefix := ""
-	for _, entry := range entries {
-		filePrefix := strings.Split(filepath.Base(entry), ".")[0]
-		startOffset, err := strconv.ParseInt(filePrefix, 10, 64)
-		if err != nil {
-			continue
-		}
-		if startOffset > s.messageOffset {
-			break
-		}
-		dlogFilePrefix = filePrefix
-	}
-
-	fileOffset := tryReadIndexFile(s.basePath, dlogFilePrefix, s.messageOffset)
-
-	return fmt.Sprintf("%s.%s", dlogFilePrefix, conf.SegmentFileExtension), fileOffset, nil
+	segmentId := entries[len(entries)-1]
+	fileOffset := tryReadIndexFile(s.basePath, conf.SegmentFilePrefix(segmentId), s.messageOffset)
+	return conf.SegmentFileName(segmentId), fileOffset, nil
 }
 
 func (s *SegmentReader) setStructureAsFollower() (bool, error) {

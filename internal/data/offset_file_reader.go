@@ -12,7 +12,7 @@ import (
 	. "github.com/barcostreams/barco/internal/types"
 )
 
-func ReadProducerOffset(topicId *TopicDataId, config conf.DatalogConfig) (int64, error) {
+func readProducerOffset(topicId *TopicDataId, config conf.DatalogConfig) (int64, error) {
 	basePath := config.DatalogPath(topicId)
 	file, err := os.OpenFile(filepath.Join(basePath, conf.ProducerOffsetFileName), conf.ProducerOffsetFileReadFlags, 0)
 	if err != nil {

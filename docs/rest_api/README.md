@@ -116,7 +116,8 @@ Registers a consumer in all the brokers, it's the first step in the read flow an
 | --- | ---- | ----------- |
 | `consumer_id` | `string` | A text value chosen by you to identify the consumer in the read flow. In general The application instance id or a random uuid are suited for the `consumer_id` value, as long as you reuse the id across the following requests of the read flow. |
 | `group` | `string` (optional)| The name of the consumer group, In most cases the application name is a good choice for consumer `group` name. Defaults to `"default"`. |
-| `topic` | `string[]` | The topics to subscribe to. In case it is more than one, you can send repeating the parameter key and value, for example: `?topic=a&topic=b` |
+| `topic` | `string[]` | The topics to subscribe to. In case it is more than one, you can send repeating the parameter key and value, for example: `?topic=a&topic=b`. |
+| `onNewGroup` | `string` | Determines the start offset when there's no information for a given consumer group. Possible values are `startFromLatest` (default) and `startFromEarliest`.|
 
 #### Example
 
@@ -222,6 +223,4 @@ Responds HTTP status `200 OK` when the Consumer API is ready on the broker.
 <!--Flow: loop logic: 409, ... -->
 <!--Read / idle timeout-->
 <!--Ordering (producing)-->
-<!--Connection pooling (recommended but not required)-->
-<!--Clients (recommended but not required)-->
 <!--Consumer flow Flow-->

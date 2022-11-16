@@ -61,38 +61,32 @@ var _ = Describe("SegmentReader", func() {
 		})
 
 		It("should continue reading the next file", func() {
-			config := new(mocks.Config)
-			config.On("ReadAheadSize").Return(2048)
-			config.On("AutoCommitInterval").Return(1 * time.Second)
-
 			dir, err := os.MkdirTemp("", "read_next_file*")
 			Expect(err).NotTo(HaveOccurred())
-			firstFile, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			config := newReaderConfig(dir)
+
+			firstFile, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
-			secondFile, err := os.Create(filepath.Join(dir, "00020.dlog"))
+			secondFile, err := os.Create(filepath.Join(dir, "00000000000000000020.dlog"))
 
 			// Write to the files
 			_, err = firstFile.Write(createTestChunk(512-chunkHeaderSize, 0, 20))
 			Expect(err).NotTo(HaveOccurred())
-
 			// buffer = createTestChunk(512-chunkHeaderSize, 50, 40)
 			_, err = secondFile.Write(createTestChunk(512*2-chunkHeaderSize, 20, 30))
 			Expect(err).NotTo(HaveOccurred())
 			_, err = secondFile.Write(createTestChunk(512-chunkHeaderSize, 50, 40))
 			Expect(err).NotTo(HaveOccurred())
-
 			firstFile.Sync()
 			secondFile.Sync()
-
 			s := newTestReader()
 			s.config = config
+			s.datalog = NewDatalog(config)
 			s.basePath = dir
-
 			go s.read()
 			defer firstFile.Close()
 			defer secondFile.Close()
 			defer close(s.Items)
-
 			item := newTestReadItem()
 			pollChunkOnce(s, item, 0)
 			pollChunkOnce(s, item, 512-chunkHeaderSize)
@@ -106,13 +100,11 @@ var _ = Describe("SegmentReader", func() {
 		})
 
 		It("should read alignment", func() {
-			config := new(mocks.Config)
-			config.On("ReadAheadSize").Return(1024)
-			config.On("AutoCommitInterval").Return(1 * time.Second)
-
 			dir, err := os.MkdirTemp("", "read_alignment*")
 			Expect(err).NotTo(HaveOccurred())
-			file, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			config := newReaderConfig(dir)
+
+			file, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file.Close()
 
@@ -130,6 +122,7 @@ var _ = Describe("SegmentReader", func() {
 			s := newTestReader()
 			s.config = config
 			s.basePath = dir
+			s.datalog = NewDatalog(config)
 
 			go s.read()
 			defer close(s.Items)
@@ -137,20 +130,19 @@ var _ = Describe("SegmentReader", func() {
 			item := newTestReadItem()
 			pollChunkOnce(s, item, 0)
 			pollChunkOnce(s, item, 510-chunkHeaderSize)
+
 			// First empty poll
-			pollChunkOnce(s, item, 0)
 			pollChunkOnce(s, item, 512*2-3-chunkHeaderSize)
+			pollChunkOnce(s, item, 0)
 			pollChunkOnce(s, item, 0)
 		})
 
 		It("should poll until there's new data", func() {
-			config := new(mocks.Config)
-			config.On("ReadAheadSize").Return(1024)
-			config.On("AutoCommitInterval").Return(1 * time.Second)
-
 			dir, err := os.MkdirTemp("", "poll_new_data*")
 			Expect(err).NotTo(HaveOccurred())
-			file, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			config := newReaderConfig(dir)
+
+			file, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file.Close()
 
@@ -165,6 +157,7 @@ var _ = Describe("SegmentReader", func() {
 			s := newTestReader()
 			s.config = config
 			s.basePath = dir
+			s.datalog = NewDatalog(config)
 
 			go s.read()
 			defer close(s.Items)
@@ -185,17 +178,15 @@ var _ = Describe("SegmentReader", func() {
 		})
 
 		It("should skip files with invalid names", func() {
-			config := new(mocks.Config)
-			config.On("ReadAheadSize").Return(2048)
-			config.On("AutoCommitInterval").Return(1 * time.Second)
-
 			dir, err := os.MkdirTemp("", "poll_gap_empty_file_*")
 			Expect(err).NotTo(HaveOccurred())
-			file1, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			config := newReaderConfig(dir)
+
+			file1, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			file2, err := os.Create(filepath.Join(dir, "invalid.dlog"))
 			Expect(err).NotTo(HaveOccurred())
-			file3, err := os.Create(filepath.Join(dir, "00050.dlog"))
+			file3, err := os.Create(filepath.Join(dir, "00000000000000000050.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file1.Close()
 			defer file2.Close()
@@ -210,6 +201,7 @@ var _ = Describe("SegmentReader", func() {
 			s := newTestReader()
 			s.config = config
 			s.basePath = dir
+			s.datalog = NewDatalog(config)
 
 			go s.read()
 			defer close(s.Items)
@@ -220,13 +212,11 @@ var _ = Describe("SegmentReader", func() {
 		})
 
 		It("should recognize gaps from chunks", func() {
-			config := new(mocks.Config)
-			config.On("ReadAheadSize").Return(2048)
-			config.On("AutoCommitInterval").Return(1 * time.Second)
-
 			dir, err := os.MkdirTemp("", "poll_stream_*")
 			Expect(err).NotTo(HaveOccurred())
-			file, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			config := newReaderConfig(dir)
+
+			file, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file.Close()
 
@@ -247,6 +237,7 @@ var _ = Describe("SegmentReader", func() {
 			s.replicationReader = rr
 			s.config = config
 			s.basePath = dir
+			s.datalog = NewDatalog(config)
 
 			go s.read()
 			defer close(s.Items)
@@ -262,17 +253,15 @@ var _ = Describe("SegmentReader", func() {
 		})
 
 		It("should recognize gaps from empty files", func() {
-			config := new(mocks.Config)
-			config.On("ReadAheadSize").Return(2048)
-			config.On("AutoCommitInterval").Return(1 * time.Second)
-
 			dir, err := os.MkdirTemp("", "poll_gap_empty_file_*")
 			Expect(err).NotTo(HaveOccurred())
-			file1, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			config := newReaderConfig(dir)
+
+			file1, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
-			emptyFile2, err := os.Create(filepath.Join(dir, "00020.dlog"))
+			emptyFile2, err := os.Create(filepath.Join(dir, "00000000000000000020.dlog"))
 			Expect(err).NotTo(HaveOccurred())
-			file3, err := os.Create(filepath.Join(dir, "00050.dlog"))
+			file3, err := os.Create(filepath.Join(dir, "00000000000000000050.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file1.Close()
 			defer emptyFile2.Close()
@@ -294,6 +283,7 @@ var _ = Describe("SegmentReader", func() {
 			s.replicationReader = rr
 			s.config = config
 			s.basePath = dir
+			s.datalog = NewDatalog(config)
 
 			go s.read()
 			defer close(s.Items)
@@ -308,13 +298,12 @@ var _ = Describe("SegmentReader", func() {
 		It("should reset when the origin changes", func() {
 			dir, err := os.MkdirTemp("", "reset_origin_*")
 			Expect(err).NotTo(HaveOccurred())
-			file1, err := os.Create(filepath.Join(dir, "00000.dlog"))
+			file1, err := os.Create(filepath.Join(dir, "00000000000000000000.dlog"))
 			Expect(err).NotTo(HaveOccurred())
-			file2, err := os.Create(filepath.Join(dir, "00050.dlog"))
+			file2, err := os.Create(filepath.Join(dir, "00000000000000000050.dlog"))
 			Expect(err).NotTo(HaveOccurred())
 			defer file1.Close()
 			defer file2.Close()
-
 			// Write a chunk, followed by an alignment buffer
 			_, err = file1.Write(createAlignedChunk(100, 0, 20))
 			Expect(err).NotTo(HaveOccurred())
@@ -322,18 +311,16 @@ var _ = Describe("SegmentReader", func() {
 			Expect(err).NotTo(HaveOccurred())
 			_, err = file2.Write(createAlignedChunk(300, 50, 50))
 			Expect(err).NotTo(HaveOccurred())
-
 			file1.Sync()
 			file2.Sync()
-
 			mockedOffset := Offset{
 				Offset:  20,
 				Version: 3,
 			}
 			setCalls := int64(0)
-			config := new(mocks.Config)
-			config.On("ReadAheadSize").Return(1 * conf.MiB)
+			config := newReaderConfig(dir)
 			config.On("AutoCommitInterval").Return(1 * time.Nanosecond) // Commit always
+
 			offsetState := new(tMocks.OffsetState)
 			offsetState.
 				On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -341,10 +328,11 @@ var _ = Describe("SegmentReader", func() {
 					atomic.AddInt64(&setCalls, 1)
 				}).
 				Return(true)
-
-			offsetState.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&mockedOffset, true)
+			offsetState.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				Return(&mockedOffset, true)
 
 			s := &SegmentReader{
+				datalog:     NewDatalog(config),
 				config:      config,
 				Items:       make(chan ReadItem, 16),
 				offsetState: offsetState,
@@ -358,15 +346,12 @@ var _ = Describe("SegmentReader", func() {
 				isLeader: true,
 				basePath: dir,
 			}
-
 			go s.read()
 			defer close(s.Items)
-
 			item1 := newTestReadItemWithOrigin(uuid.New().String())
 			pollChunk(s, item1, 100)
 			pollChunk(s, item1, 200)
 			pollChunk(s, item1, 300)
-
 			// New origin, it should go back to use the committed offset
 			item2 := newTestReadItemWithOrigin(uuid.New().String())
 			pollChunk(s, item2, 200)
@@ -539,16 +524,28 @@ func pollChunkOnce(s *SegmentReader, item *testReadItem, bodyLength int) {
 }
 
 func newTestReader() *SegmentReader {
-	config := new(mocks.Config)
-	config.On("ReadAheadSize").Return(1 * conf.MiB)
-	config.On("AutoCommitInterval").Return(1 * time.Second)
+	config := newReaderConfig("")
 	offsetState := new(tMocks.OffsetState)
 	offsetState.On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(true)
 	return &SegmentReader{
+		datalog:     NewDatalog(config),
 		config:      config,
 		Items:       make(chan ReadItem, 16),
 		offsetState: offsetState,
 		headerBuf:   make([]byte, chunkHeaderSize),
 		isLeader:    true,
 	}
+}
+
+func newReaderConfig(dir string) *mocks.Config {
+	config := new(mocks.Config)
+	config.On("ReadAheadSize").Return(1 * conf.MiB)
+	config.On("AutoCommitInterval").Return(1 * time.Second)
+	config.On("StreamBufferSize").Return(8 * 1024 * 1024)
+	config.On("LogRetentionDuration").Return(nil)
+	if dir != "" {
+		config.On("DatalogPath", mock.Anything).Return(dir)
+	}
+
+	return config
 }

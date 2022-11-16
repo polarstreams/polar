@@ -2,6 +2,8 @@ package consuming
 
 import (
 	"fmt"
+	"math"
+	"os"
 	"sort"
 	"sync"
 
@@ -26,6 +28,7 @@ type offsetRange struct {
 func newDefaultOffsetState(
 	localDb localdb.Client,
 	discoverer discovery.TopologyGetter,
+	datalog data.Datalog,
 	gossiper interbroker.Gossiper,
 	config conf.ConsumerConfig,
 ) OffsetState {
@@ -34,6 +37,7 @@ func newDefaultOffsetState(
 		commitChan: make(chan *OffsetStoreKeyValue, 64),
 		localDb:    localDb,
 		gossiper:   gossiper,
+		datalog:    datalog,
 		discoverer: discoverer,
 		config:     config,
 	}
@@ -48,6 +52,7 @@ type defaultOffsetState struct {
 	commitChan chan *OffsetStoreKeyValue // We need to commit offset in order
 	localDb    localdb.Client
 	gossiper   interbroker.Gossiper
+	datalog    data.Datalog
 	discoverer discovery.TopologyGetter
 	config     conf.ConsumerConfig
 }
@@ -101,6 +106,7 @@ func (s *defaultOffsetState) GetAllWithDefaults(
 	token Token,
 	index RangeIndex,
 	clusterSize int,
+	policy OffsetResetPolicy,
 ) []Offset {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -113,7 +119,7 @@ func (s *defaultOffsetState) GetAllWithDefaults(
 		if len(offsetList) > 0 {
 			toCreateEnd = offsetList[0].start
 		}
-		defaultOffsets := s.getDefaultsForRange(start, toCreateEnd, clusterSize, offsetList)
+		defaultOffsets := s.defaultsForRange(topic, start, toCreateEnd, clusterSize, offsetList, policy)
 		result = append(result, defaultOffsets...)
 	}
 
@@ -123,24 +129,36 @@ func (s *defaultOffsetState) GetAllWithDefaults(
 
 	if len(offsetList) > 0 && offsetList[len(offsetList)-1].end < end {
 		toCreateStart := offsetList[len(offsetList)-1].end
-		defaultOffsets := s.getDefaultsForRange(toCreateStart, end, clusterSize, offsetList)
+		defaultOffsets := s.defaultsForRange(topic, toCreateStart, end, clusterSize, offsetList, policy)
 		result = append(result, defaultOffsets...)
 	}
 
 	return result
 }
 
-// Gets a default offset for ranges that are not present.
-// When there are no siblings for that contained range, return the earliest parent.
-// When there are siblings, return at most a generation with the same cluster size,
+// Gets a default offset for ranges that are not present, depending on the policy.
+//
+// Starting on earliest:
+// - When there are no siblings for that contained range, return the earliest parent.
+// - When there are siblings, return at most a generation with the same cluster size,
 // as we shouldn't go back to past generations of different sizes.
-func (s *defaultOffsetState) getDefaultsForRange(start Token, end Token, clusterSize int, siblings []*offsetRange) []Offset {
-	// TODO: Check what's stored for StartFromEarliest instead of starting at 0
+//
+// Starting on latest:
+// - When there are no siblings, it retrieves the latest generation offsets.
+// - When there are siblings, it returns the last generation of the same cluster size.
+func (s *defaultOffsetState) defaultsForRange(
+	topic string,
+	start Token,
+	end Token,
+	clusterSize int,
+	siblings []*offsetRange,
+	policy OffsetResetPolicy,
+) []Offset {
 	result := make([]Offset, 0)
 	rangesPerToken := RangeIndex(s.config.ConsumerRanges())
+
 	// Get the tokens for the current size and intersect them
 	for i := 0; i < clusterSize; i++ {
-		//(get token at index and by range index)
 		token := GetTokenAtIndex(clusterSize, i)
 		if token > end {
 			break
@@ -151,25 +169,25 @@ func (s *defaultOffsetState) getDefaultsForRange(start Token, end Token, cluster
 				continue
 			}
 
-			// Navigate through the parent until the first ones and set to zero
-			for _, genRanges := range s.firstGenerations(token, index, clusterSize, siblings) {
+			// Navigate through the earliest/latest generation ranges
+			for _, genRanges := range s.genDefault(token, index, clusterSize, siblings, policy) {
 				gen := genRanges.Generation
 
 				for _, genIndex := range genRanges.Indices {
 					rangeStart, rangeEnd := RangeByTokenAndClusterSize(gen.Start, genIndex, int(rangesPerToken), gen.ClusterSize)
 					if !Intersects(start, end, rangeStart, rangeEnd) {
-						// The first generation included parts that we weren't interested, move on
+						// The first generation included parts that we are not interested in, move on
 						continue
 					}
 
-					result = append(result, Offset{
-						Token:       gen.Start,
-						Index:       genIndex,
-						Version:     gen.Version,
-						ClusterSize: gen.ClusterSize,
-						Offset:      0,
-						Source:      OffsetSource{},
-					})
+					topicId := &TopicDataId{
+						Name:       topic,
+						Token:      gen.Start,
+						RangeIndex: genIndex,
+						Version:    gen.Version,
+					}
+
+					result = append(result, s.defaultOffsetValue(topicId, gen.ClusterSize, policy))
 				}
 			}
 		}
@@ -178,10 +196,75 @@ func (s *defaultOffsetState) getDefaultsForRange(start Token, end Token, cluster
 	return result
 }
 
-// Navigates through parents until it gets the first, returning an unique set of generations alongside its ranges
-func (s *defaultOffsetState) firstGenerations(token Token, index RangeIndex, clusterSize int, siblings []*offsetRange) []GenerationRanges {
+// Gets earliest or latest generation ranges depending on the provided policy
+func (s *defaultOffsetState) genDefault(
+	token Token,
+	index RangeIndex,
+	clusterSize int,
+	siblings []*offsetRange,
+	policy OffsetResetPolicy,
+) []GenerationRanges {
+	if policy == StartFromEarliest {
+		return s.earliestGeneration(token, index, clusterSize, siblings)
+	}
+	return s.latestGeneration(token, index, clusterSize, siblings)
+}
+
+func (s *defaultOffsetState) defaultOffsetValue(
+	topicId *TopicDataId,
+	clusterSize int,
+	policy OffsetResetPolicy,
+) Offset {
+	value := int64(0)
+	if policy == StartFromEarliest {
+		list, _ := s.datalog.SegmentFileList(topicId, math.MaxInt64)
+		if len(list) > 0 {
+			value = list[0]
+		}
+	} else {
+		// Start from latest
+		if nextGens := s.discoverer.NextGeneration(topicId.GenId()); len(nextGens) > 0 {
+			// It's an old generation, mark the offset as completed
+			value = OffsetCompleted
+		} else if maxProduced, _ := s.MaxProducedOffset(topicId); maxProduced > 0 {
+			// The offset should be the next value to read
+			value = maxProduced + 1
+		}
+	}
+
+	return NewDefaultOffset(topicId, clusterSize, value)
+}
+
+// When there are no siblings, it retrieves the latest generation offsets
+// When there are siblings, it returns the last offset of the same generation
+func (s *defaultOffsetState) latestGeneration(
+	token Token,
+	index RangeIndex,
+	clusterSize int,
+	siblings []*offsetRange,
+) []GenerationRanges {
 	if len(siblings) > 0 {
-		return s.firstGenerationBySibling(token, index, clusterSize, siblings[0].value)
+		return s.latestGenerationBySibling(token, index, clusterSize, siblings[0].value)
+	}
+
+	// This should be the most common case
+	gen, err := s.discoverer.GetTokenHistory(token, clusterSize)
+	utils.PanicIfErr(err, "Generation history could not be retrieved")
+	if gen == nil {
+		return nil
+	}
+	return []GenerationRanges{{Generation: gen, Indices: []RangeIndex{index}}}
+}
+
+// Navigates through parents until it gets the first, returning an unique set of generations alongside its ranges
+func (s *defaultOffsetState) earliestGeneration(
+	token Token,
+	index RangeIndex,
+	clusterSize int,
+	siblings []*offsetRange,
+) []GenerationRanges {
+	if len(siblings) > 0 {
+		return s.earliestGenerationBySibling(token, index, clusterSize, siblings[0].value)
 	}
 
 	gen, err := s.discoverer.GetTokenHistory(token, clusterSize)
@@ -215,7 +298,10 @@ func (s *defaultOffsetState) firstGenerations(token Token, index RangeIndex, clu
 		queue = append(queue, parents...)
 	}
 
-	// Adapt the format to return
+	return genRangesFromTree(roots, rootsGen)
+}
+
+func genRangesFromTree(roots map[GenId]map[RangeIndex]bool, rootsGen map[GenId]*Generation) []GenerationRanges {
 	result := make([]GenerationRanges, 0, len(roots))
 	for genId, indicesMap := range roots {
 		indices := make([]RangeIndex, 0, len(indicesMap))
@@ -224,12 +310,11 @@ func (s *defaultOffsetState) firstGenerations(token Token, index RangeIndex, clu
 		}
 		result = append(result, GenerationRanges{Generation: rootsGen[genId], Indices: indices})
 	}
-
 	return result
 }
 
 // Navigates up through a sibling offset, until the cluster size changes
-func (s *defaultOffsetState) firstGenerationBySibling(
+func (s *defaultOffsetState) earliestGenerationBySibling(
 	token Token,
 	index RangeIndex,
 	clusterSize int,
@@ -254,15 +339,55 @@ func (s *defaultOffsetState) firstGenerationBySibling(
 		}
 	}
 
-	if clusterSize == expectedClusterSize {
-		return []GenerationRanges{{Generation: root, Indices: []RangeIndex{index}}}
+	return s.projectGenRange(token, index, root, clusterSize, expectedClusterSize)
+}
+
+// Navigates to the sibling generation and look for the last generation by cluster size
+func (s *defaultOffsetState) latestGenerationBySibling(
+	token Token,
+	index RangeIndex,
+	clusterSize int,
+	siblingOffset Offset,
+) []GenerationRanges {
+	latest := s.discoverer.GenerationInfo(siblingOffset.GenId())
+	if latest == nil {
+		return nil
 	}
-	// Translate ranges into that cluster size using actual ranges
+	if latest.ClusterSize != siblingOffset.ClusterSize {
+		panic("Invalid offset data")
+	}
+	expectedClusterSize := latest.ClusterSize
+
+	for {
+		nextGens := s.discoverer.NextGeneration(latest.Id())
+		if len(nextGens) != 1 || nextGens[0].ClusterSize != expectedClusterSize {
+			// The generation change reflects a cluster change
+			break
+		}
+		latest = &nextGens[0]
+	}
+
+	return s.projectGenRange(token, index, latest, clusterSize, expectedClusterSize)
+}
+
+// Translate ranges into that cluster size using actual ranges
+func (s *defaultOffsetState) projectGenRange(
+	token Token,
+	index RangeIndex,
+	gen *Generation,
+	clusterSize int,
+	newClusterSize int,
+) []GenerationRanges {
+	if clusterSize == newClusterSize {
+		// Exact ranges, no need to project into multiple
+		return []GenerationRanges{{Generation: gen, Indices: []RangeIndex{index}}}
+	}
+
 	result := make([]GenerationRanges, 0)
-	projected := ProjectRangeByClusterSize(token, index, s.config.ConsumerRanges(), clusterSize, expectedClusterSize)
+	projected := ProjectRangeByClusterSize(token, index, s.config.ConsumerRanges(), clusterSize, newClusterSize)
 	for _, tr := range projected {
 		for _, i := range tr.Indices {
-			result = append(result, GenerationRanges{Generation: root, Indices: []RangeIndex{i}})
+			result = append(result, GenerationRanges{Generation: gen, Indices: []RangeIndex{i}})
 		}
 	}
 	return result
@@ -715,6 +840,112 @@ func (s *defaultOffsetState) sendToFollowers(kv *OffsetStoreKeyValue) {
 	}
 }
 
-func (s *defaultOffsetState) ProducerOffsetLocal(topic *TopicDataId) (int64, error) {
-	return data.ReadProducerOffset(topic, s.config)
+// Returns the max produced offset from local and peers.
+// When it can not be found, it returns a negative value.
+// When there's an unexpected  error on local and peers, it returns an error
+func (s *defaultOffsetState) MaxProducedOffset(topicId *TopicDataId) (int64, error) {
+	gen := s.discoverer.GenerationInfo(topicId.GenId())
+	if gen == nil {
+		log.Warn().Msgf("Past generation could not be retrieved %s", topicId.GenId())
+
+		// Attempt to get the info from local storage
+		localValue, err := s.datalog.ReadProducerOffset(topicId)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return offsetNoData, nil
+			}
+
+			log.Warn().Err(err).Msgf("Max producer offset could not be retrieved from local storage for %s", topicId)
+			return offsetNoData, err
+		}
+		return localValue, nil
+	}
+
+	topology := s.discoverer.Topology()
+	myOrdinal := topology.MyOrdinal()
+	peers := make([]int, 0)
+	for _, ordinal := range gen.Followers {
+		if ordinal != myOrdinal {
+			peers = append(peers, ordinal)
+		}
+	}
+
+	c := make(chan *int64)
+	notFound := new(int64)
+	*notFound = offsetNoData
+
+	// Get the values from the peers and local storage
+	go func() {
+		localValue, err := s.datalog.ReadProducerOffset(topicId)
+		if err != nil {
+			if os.IsNotExist(err) {
+				c <- notFound
+			} else {
+				log.Warn().Err(err).Msgf("Max producer offset could not be retrieved from local storage for %s", topicId)
+				c <- nil
+			}
+		} else {
+			c <- &localValue
+		}
+	}()
+
+	for _, ordinalValue := range peers {
+		// Closure will capture it
+		ordinal := ordinalValue
+		go func() {
+			if ordinal >= len(topology.Brokers) {
+				if s.gossiper.IsHostUp(ordinal) {
+					// Optimistically attempt to get the info from the broker that is leaving the cluster
+					value, err := s.gossiper.ReadProducerOffset(ordinal, topicId)
+					if err == nil {
+						c <- &value
+						return
+					}
+				}
+				c <- notFound
+				return
+			}
+			value, err := s.gossiper.ReadProducerOffset(ordinal, topicId)
+			if err != nil {
+				if err == GossipGetNotFound {
+					log.Debug().Msgf("Producer offset not found on peer B%d for %s", ordinal, topicId)
+					c <- notFound
+				} else {
+					log.Warn().Err(err).Msgf("Producer offset could not be retrieved from peer B%d for %s", ordinal, topicId)
+					c <- nil
+				}
+			} else {
+				c <- &value
+			}
+		}()
+	}
+
+	var result *int64 = nil
+	notFoundCount := 0
+
+	for i := 0; i < len(peers)+1; i++ {
+		value := <-c
+		if value == notFound {
+			notFoundCount++
+			continue
+		}
+		if value != nil {
+			if result == nil || *result < *value {
+				result = value
+			}
+		}
+	}
+
+	if result == nil {
+		if notFoundCount == len(peers)+1 {
+			// We can safely assume that no data was produced for this token+range
+			return offsetNoData, nil
+		}
+
+		message := fmt.Sprintf("Max producer offset could not be retrieved from peers or local for %s", topicId)
+		log.Warn().Msgf(message)
+		return offsetNoData, fmt.Errorf(message)
+	}
+
+	return *result, nil
 }

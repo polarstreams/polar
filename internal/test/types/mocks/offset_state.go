@@ -35,13 +35,13 @@ func (_m *OffsetState) Get(group string, topic string, token types.Token, index 
 	return r0, r1
 }
 
-// GetAllWithDefaults provides a mock function with given fields: group, topic, token, rangeIndex, clusterSize
-func (_m *OffsetState) GetAllWithDefaults(group string, topic string, token types.Token, rangeIndex types.RangeIndex, clusterSize int) []types.Offset {
-	ret := _m.Called(group, topic, token, rangeIndex, clusterSize)
+// GetAllWithDefaults provides a mock function with given fields: group, topic, token, rangeIndex, clusterSize, policy
+func (_m *OffsetState) GetAllWithDefaults(group string, topic string, token types.Token, rangeIndex types.RangeIndex, clusterSize int, policy types.OffsetResetPolicy) []types.Offset {
+	ret := _m.Called(group, topic, token, rangeIndex, clusterSize, policy)
 
 	var r0 []types.Offset
-	if rf, ok := ret.Get(0).(func(string, string, types.Token, types.RangeIndex, int) []types.Offset); ok {
-		r0 = rf(group, topic, token, rangeIndex, clusterSize)
+	if rf, ok := ret.Get(0).(func(string, string, types.Token, types.RangeIndex, int, types.OffsetResetPolicy) []types.Offset); ok {
+		r0 = rf(group, topic, token, rangeIndex, clusterSize, policy)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]types.Offset)
@@ -65,20 +65,20 @@ func (_m *OffsetState) Init() error {
 	return r0
 }
 
-// ProducerOffsetLocal provides a mock function with given fields: topic
-func (_m *OffsetState) ProducerOffsetLocal(topic *types.TopicDataId) (int64, error) {
-	ret := _m.Called(topic)
+// MaxProducedOffset provides a mock function with given fields: topicId
+func (_m *OffsetState) MaxProducedOffset(topicId *types.TopicDataId) (int64, error) {
+	ret := _m.Called(topicId)
 
 	var r0 int64
 	if rf, ok := ret.Get(0).(func(*types.TopicDataId) int64); ok {
-		r0 = rf(topic)
+		r0 = rf(topicId)
 	} else {
 		r0 = ret.Get(0).(int64)
 	}
 
 	var r1 error
 	if rf, ok := ret.Get(1).(func(*types.TopicDataId) error); ok {
-		r1 = rf(topic)
+		r1 = rf(topicId)
 	} else {
 		r1 = ret.Error(1)
 	}

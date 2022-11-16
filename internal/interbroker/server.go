@@ -297,7 +297,7 @@ func (g *gossiper) getProducerOffset(w http.ResponseWriter, r *http.Request, ps 
 		Version:    GenVersion(version),
 	}
 
-	value, err := data.ReadProducerOffset(&topicId, g.config)
+	value, err := g.datalog.ReadProducerOffset(&topicId)
 	if err != nil {
 		if os.IsNotExist(err) {
 			w.WriteHeader(http.StatusNoContent)
@@ -356,6 +356,7 @@ func (g *gossiper) postConsumerGroupInfoHandler(w http.ResponseWriter, r *http.R
 	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
 		return err
 	}
+
 	// Use the registered listener
 	g.consumerInfoListener.OnConsumerInfoFromPeer(message.Origin, message.Groups)
 	return nil
@@ -376,7 +377,7 @@ func (g *gossiper) postConsumerRegister(w http.ResponseWriter, r *http.Request, 
 	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
 		return err
 	}
-	return g.consumerInfoListener.OnRegisterFromPeer(message.Id, message.Group, message.Topics)
+	return g.consumerInfoListener.OnRegisterFromPeer(message.Id, message.Group, message.Topics, message.OnNewGroup)
 }
 
 func (g *gossiper) postReroutingHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {

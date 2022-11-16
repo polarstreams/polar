@@ -3,12 +3,11 @@ package consuming
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/data"
 	. "github.com/barcostreams/barco/internal/data"
 	"github.com/barcostreams/barco/internal/discovery"
 	"github.com/barcostreams/barco/internal/interbroker"
@@ -33,6 +32,7 @@ type groupReadQueue struct {
 	state          *ConsumerState
 	offsetState    OffsetState
 	topologyGetter discovery.TopologyGetter
+	datalog        data.Datalog
 	gossiper       interbroker.Gossiper
 	rrFactory      ReplicationReaderFactory
 	config         conf.ConsumerConfig
@@ -47,6 +47,7 @@ func newGroupReadQueue(
 	state *ConsumerState,
 	offsetState OffsetState,
 	topologyGetter discovery.TopologyGetter,
+	datalog data.Datalog,
 	gossiper interbroker.Gossiper,
 	rrFactory ReplicationReaderFactory,
 	config conf.ConsumerConfig,
@@ -62,6 +63,7 @@ func newGroupReadQueue(
 		state:          state,
 		offsetState:    offsetState,
 		topologyGetter: topologyGetter,
+		datalog:        datalog,
 		gossiper:       gossiper,
 		rrFactory:      rrFactory,
 		config:         config,
@@ -107,7 +109,7 @@ func (q *groupReadQueue) process() {
 		errors := make([]error, 0)
 
 		if len(responseItems) == 0 {
-			readers := q.getReaders(tokens, topics)
+			readers := q.getReaders(tokens, topics, q.state.OffsetPolicy(item.connId))
 			totalSize := 0
 
 			for i := 0; i < len(readers) && totalSize < q.config.ConsumerReadThreshold(); i++ {
@@ -204,7 +206,7 @@ func (q *groupReadQueue) refreshReaders() {
 			}
 
 			if setMaxOffset {
-				maxOffset, err := q.getMaxProducedOffset(topicId)
+				maxOffset, err := q.offsetState.MaxProducedOffset(topicId)
 				if err != nil {
 					log.Warn().Err(err).Msgf("Max offset could not be retrieved for %s", topicId)
 					continue
@@ -328,7 +330,11 @@ func (q *groupReadQueue) closeReader(reader *SegmentReader) {
 }
 
 // Gets the readers, creating them if necessary
-func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) []*SegmentReader {
+func (q *groupReadQueue) getReaders(
+	tokenRanges []TokenRanges,
+	topics []string,
+	policy OffsetResetPolicy,
+) []*SegmentReader {
 	result := make([]*SegmentReader, 0, len(tokenRanges)*len(topics))
 
 	for _, t := range tokenRanges {
@@ -360,9 +366,10 @@ func (q *groupReadQueue) getReaders(tokenRanges []TokenRanges, topics []string) 
 					continue
 				}
 
-				offsetList := q.offsetState.GetAllWithDefaults(q.group, topic, t.Token, index, t.ClusterSize)
+				offsetList := q.offsetState.GetAllWithDefaults(q.group, topic, t.Token, index, t.ClusterSize, policy)
 				for _, offset := range offsetList {
 					if offset.Offset == OffsetCompleted {
+						// It will eventually get moved
 						continue
 					}
 					key := newReaderKey(offset.Token, offset.Index, offset.ClusterSize)
@@ -409,7 +416,7 @@ func (q *groupReadQueue) createReader(
 	if topicId.GenId() != source.Id() {
 		// We are reading from an old generation
 		// We need to set the max offset produced
-		value, err := q.getMaxProducedOffset(&topicId)
+		value, err := q.offsetState.MaxProducedOffset(&topicId)
 		if err != nil {
 			// Hopefully in the future it will resolve itself
 			return nil
@@ -446,6 +453,7 @@ func (q *groupReadQueue) createReader(
 		offset.Offset,
 		q.offsetState,
 		maxProducedOffset,
+		q.datalog,
 		q.config)
 
 	if err != nil {
@@ -454,101 +462,4 @@ func (q *groupReadQueue) createReader(
 	}
 
 	return reader
-}
-
-func (q *groupReadQueue) getMaxProducedOffset(topicId *TopicDataId) (int64, error) {
-	gen := q.topologyGetter.GenerationInfo(topicId.GenId())
-	if gen == nil {
-		log.Warn().Msgf("Past generation could not be retrieved %s", topicId.GenId())
-		// Attempt to get the info from local storage
-		return q.offsetState.ProducerOffsetLocal(topicId)
-	}
-
-	topology := q.topologyGetter.Topology()
-	myOrdinal := topology.MyOrdinal()
-	peers := make([]int, 0)
-	for _, ordinal := range gen.Followers {
-		if ordinal != myOrdinal {
-			peers = append(peers, ordinal)
-		}
-	}
-
-	c := make(chan *int64)
-	notFound := new(int64)
-	*notFound = offsetNoData
-
-	// Get the values from the peers and local storage
-	go func() {
-		localValue, err := q.offsetState.ProducerOffsetLocal(topicId)
-		if err != nil {
-			if os.IsNotExist(err) {
-				c <- notFound
-			} else {
-				log.Warn().Err(err).Msgf("Max producer offset could not be retrieved from local storage for %s", topicId)
-				c <- nil
-			}
-		} else {
-			c <- &localValue
-		}
-	}()
-
-	for _, ordinalValue := range peers {
-		// Closure will capture it
-		ordinal := ordinalValue
-		go func() {
-			if ordinal >= len(topology.Brokers) {
-				if q.gossiper.IsHostUp(ordinal) {
-					// Optimistically attempt to get the info from the broker that is leaving the cluster
-					value, err := q.gossiper.ReadProducerOffset(ordinal, topicId)
-					if err == nil {
-						c <- &value
-						return
-					}
-				}
-				c <- notFound
-				return
-			}
-			value, err := q.gossiper.ReadProducerOffset(ordinal, topicId)
-			if err != nil {
-				if err == GossipGetNotFound {
-					log.Debug().Msgf("Producer offset not found on peer B%d for %s", ordinal, topicId)
-					c <- notFound
-				} else {
-					log.Warn().Err(err).Msgf("Producer offset could not be retrieved from peer B%d for %s", ordinal, topicId)
-					c <- nil
-				}
-			} else {
-				c <- &value
-			}
-		}()
-	}
-
-	var result *int64 = nil
-	notFoundCount := 0
-
-	for i := 0; i < len(peers)+1; i++ {
-		value := <-c
-		if value == notFound {
-			notFoundCount++
-			continue
-		}
-		if value != nil {
-			if result == nil || *result < *value {
-				result = value
-			}
-		}
-	}
-
-	if result == nil {
-		if notFoundCount == len(peers)+1 {
-			// We can safely assume that no data was produced for this token+range
-			return offsetNoData, nil
-		}
-
-		message := fmt.Sprintf("Max producer offset could not be retrieved from peers or local for %s", topicId)
-		log.Warn().Msgf(message)
-		return 0, fmt.Errorf(message)
-	}
-
-	return *result, nil
 }

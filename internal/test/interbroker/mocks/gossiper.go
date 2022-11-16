@@ -270,13 +270,13 @@ func (_m *Gossiper) SendConsumerGroups(ordinal int, groups []types.ConsumerGroup
 	return r0
 }
 
-// SendConsumerRegister provides a mock function with given fields: ordinal, id, group, topics
-func (_m *Gossiper) SendConsumerRegister(ordinal int, id string, group string, topics []string) error {
-	ret := _m.Called(ordinal, id, group, topics)
+// SendConsumerRegister provides a mock function with given fields: ordinal, id, group, topics, onNewGroup
+func (_m *Gossiper) SendConsumerRegister(ordinal int, id string, group string, topics []string, onNewGroup types.OffsetResetPolicy) error {
+	ret := _m.Called(ordinal, id, group, topics, onNewGroup)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(int, string, string, []string) error); ok {
-		r0 = rf(ordinal, id, group, topics)
+	if rf, ok := ret.Get(0).(func(int, string, string, []string, types.OffsetResetPolicy) error); ok {
+		r0 = rf(ordinal, id, group, topics, onNewGroup)
 	} else {
 		r0 = ret.Error(0)
 	}

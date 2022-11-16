@@ -136,7 +136,7 @@ var _ = Describe("A 3 node cluster", func() {
 			expectOk(client.ProduceJson(2, "abc", `{"hello": "world2_1"}`, ""))
 
 			log.Debug().Msgf("Consuming from B2")
-			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
+			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["abc"], "onNewGroup": 1}`)
 			log.Debug().Msgf("Registered as consumer")
 
 			time.Sleep(1 * time.Second)
@@ -225,7 +225,7 @@ var _ = Describe("A 3 node cluster", func() {
 				expectOk(resp)
 			}
 
-			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
+			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["abc"], "onNewGroup": 1}`)
 			time.Sleep(ConsumerAddDelay)
 
 			records := make([]string, 0, totalMessages)
@@ -261,7 +261,7 @@ var _ = Describe("A 3 node cluster", func() {
 			b2.WaitForStart().WaitForVersion1()
 
 			client := NewTestClient(nil)
-			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["abc"]}`)
+			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["abc"], "onNewGroup": 1}`)
 			const totalMessages = 9
 
 			// Message with multiple lines
@@ -306,7 +306,8 @@ var _ = Describe("A 3 node cluster", func() {
 			b2.WaitForStart().WaitForVersion1()
 
 			client := NewTestClient(&TestClientOptions{MaxConnsPerHost: 4})
-			client.RegisterAsConsumer(3, `{"id": "c1", "group": "g1", "topics": ["topic1", "topic2", "topic3"]}`)
+			client.RegisterAsConsumer(3,
+				`{"id": "c1", "group": "g1", "topics": ["topic1", "topic2", "topic3"], "onNewGroup": 1}`)
 			const totalMessages = 100
 
 			// Message with multiple lines
@@ -327,7 +328,7 @@ var _ = Describe("A 3 node cluster", func() {
 			time.Sleep(SegmentFlushInterval)
 
 			responseBodies := make([]string, 0)
-			for i := 0; i < 15; i++ {
+			for i := 0; i < 20; i++ {
 				resp := client.ConsumerPollJson(0)
 				responseBodies = append(responseBodies, ReadBody(resp))
 			}
@@ -387,20 +388,7 @@ var _ = Describe("A 3 node cluster", func() {
 
 			const totalMessages = 12
 			const topic = "topic1"
-			message := `{"id": %d}`
-
-			var wg sync.WaitGroup
-			// Produce messages in a way to make sure that the coalescer will group some of them
-			for i := 0; i < totalMessages; i += 3 {
-				wg.Add(1)
-				go func(i int) {
-					defer wg.Done()
-					expectOk(pClient.ProduceJson(0, topic, fmt.Sprintf(message, i), partitionKeyT0Range))
-					expectOk(pClient.ProduceJson(1, topic, fmt.Sprintf(message, i+1), partitionKeyT1Range))
-					expectOk(pClient.ProduceJson(2, topic, fmt.Sprintf(message, i+2), partitionKeyT2Range))
-				}(i)
-			}
-			wg.Wait()
+			produceOrderedJson(pClient, topic, 0, totalMessages)
 			time.Sleep(SegmentFlushInterval * 2)
 
 			client := &http.Client{
@@ -410,16 +398,13 @@ var _ = Describe("A 3 node cluster", func() {
 				},
 			}
 
-			const registerUrl = "http://127.0.0.%d:9252/v1/consumer/register?consumer_id=c1&topic=%s"
-			// Register on the first broker
-			req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf(registerUrl, 1, topic), nil)
-			resp, err := client.Do(req)
-			Expect(err).NotTo(HaveOccurred())
-			expectOk(resp)
+			const group = "default"
+			registerStatelessConsumer(client, "c1", group, topic, StartFromEarliest)
 
 			// Try register on the second one: it should be a noop
-			req, _ = http.NewRequest(http.MethodPut, fmt.Sprintf(registerUrl, 2, topic), nil)
-			resp, err = client.Do(req)
+			const registerUrl = "http://127.0.0.1:9252/v1/consumer/register?consumer_id=%s&group=%s&topic=%s&onNewGroup=%s"
+			req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf(registerUrl, "c1", group, topic, StartFromEarliest), nil)
+			resp, err := client.Do(req)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ReadBody(resp)).To(Equal("Already registered"))
 			expectStatusOk(resp)
@@ -427,40 +412,7 @@ var _ = Describe("A 3 node cluster", func() {
 			client.CloseIdleConnections() // Close the connection pools
 
 			// Poll from all the brokers
-			messages := []map[string]any{}
-			finished := false
-			for i := 0; i < 10 && !finished; i++ {
-				for brokerIp := 1; brokerIp <= 3; brokerIp++ {
-					pollUrl := fmt.Sprintf("http://127.0.0.%d:9252/v1/consumer/poll?consumer_id=c1", brokerIp)
-					req, _ := http.NewRequest(http.MethodPost, pollUrl, nil)
-					req.Header.Add("Accept", "application/json")
-					resp, err := client.Do(req)
-					Expect(err).NotTo(HaveOccurred())
-					if resp.ContentLength == 0 {
-						_ = resp.Body.Close()
-						continue
-					}
-					if resp.StatusCode != http.StatusOK {
-						panic(fmt.Sprintf("Unexpected status: %s", resp.Status))
-					}
-
-					response := []ConsumerPollResponseJson{}
-					err = json.NewDecoder(resp.Body).Decode(&response)
-					resp.Body.Close()
-					Expect(err).NotTo(HaveOccurred())
-					for _, m := range response {
-						messages = append(messages, m.Values...)
-					}
-
-					if len(messages) == totalMessages {
-						finished = true
-						break
-					}
-				}
-
-				client.CloseIdleConnections() // Close the connection pools
-			}
-
+			messages := pollJsonUntil(client, "c1", totalMessages)
 			for i := 0; i < totalMessages; i++ {
 				Expect(messages).To(ContainElement(map[string]any{"id": float64(i)}))
 			}
@@ -509,8 +461,145 @@ var _ = Describe("A 3 node cluster", func() {
 			b0.LookForErrors(10)
 			b3.LookForErrors(10)
 		})
+
+		It("should support starting from earliest and latest depending on the group policy", func ()  {
+			b0.WaitForStart().WaitForVersion1()
+			b1.WaitForStart().WaitForVersion1()
+			b2.WaitForStart().WaitForVersion1()
+
+			pClient := NewTestClient(nil)
+
+			const messagesByGroup = 12
+			const topic = "topic1"
+
+			// Produce a few messages initially
+			produceOrderedJson(pClient, topic, 0, messagesByGroup)
+			time.Sleep(SegmentFlushInterval * 2)
+
+			consumer1Client := &http.Client{
+				Transport: &http.Transport{MaxConnsPerHost: 1, MaxIdleConns: 1},
+			}
+			consumer2Client := &http.Client{
+				Transport: &http.Transport{MaxConnsPerHost: 1, MaxIdleConns: 1},
+			}
+
+			// Register both consumers
+			registerStatelessConsumer(consumer1Client, "c1", "group1", topic, StartFromEarliest)
+			registerStatelessConsumer(consumer2Client, "c2", "group2", topic, StartFromLatest)
+
+			// Consumer1: Start from earliest
+			messages := pollJsonUntil(consumer1Client, "c1", messagesByGroup)
+			for i := 0; i < messagesByGroup; i++ {
+				Expect(messages).To(ContainElement(map[string]any{"id": float64(i)}))
+			}
+
+			// Consumer2: Start from latest since subscribed
+			messages = pollTimes(consumer2Client, "c2", 2)
+			Expect(messages).To(HaveLen(0), "Consumer 2 is starting from latest, there shouldn't be any messages")
+
+			// Produce some more messages
+			produceOrderedJson(pClient, topic, messagesByGroup, messagesByGroup)
+			time.Sleep(SegmentFlushInterval * 2)
+
+			// Consumer2: Start from latest since subscribed
+			messages = pollJsonUntil(consumer2Client, "c2", messagesByGroup)
+			for i := messagesByGroup; i < messagesByGroup*2; i++ {
+				Expect(messages).To(ContainElement(map[string]any{"id": float64(i)}))
+			}
+
+			// Consumer1: Continue reading
+			messages = pollJsonUntil(consumer1Client, "c1", messagesByGroup)
+			for i := messagesByGroup; i < messagesByGroup*2; i++ {
+				Expect(messages).To(ContainElement(map[string]any{"id": float64(i)}))
+			}
+		})
 	})
 })
+
+func pollJsonUntil(client *http.Client, consumerId string, totalMessages int) []map[string]any {
+	// Poll from all the brokers
+	messages := []map[string]any{}
+	finished := false
+	for i := 0; i < 20 && !finished; i++ {
+		messages = append(messages, pollTimes(client, consumerId, 1)...)
+
+		if len(messages) == totalMessages {
+			finished = true
+			log.Debug().Msgf("Polled %d messages, finishing polling", totalMessages)
+			break
+		}
+
+		client.CloseIdleConnections() // Close the connection pools
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if !finished {
+		log.Warn().Msgf("Poll until returning before retrieving all the messages")
+	}
+
+	return messages
+}
+
+// Polls on each broker for a given amount of times
+func pollTimes(client *http.Client, consumerId string, times int) []map[string]any {
+	messages := []map[string]any{}
+	for i := 0; i < times; i++ {
+		for brokerIp := 1; brokerIp <= 3; brokerIp++ {
+			pollUrl := fmt.Sprintf("http://127.0.0.%d:9252/v1/consumer/poll?consumer_id=%s", brokerIp, consumerId)
+			req, _ := http.NewRequest(http.MethodPost, pollUrl, nil)
+			req.Header.Add("Accept", "application/json")
+			resp, err := client.Do(req)
+			Expect(err).NotTo(HaveOccurred())
+			if resp.ContentLength == 0 {
+				_ = resp.Body.Close()
+				continue
+			}
+			if resp.StatusCode != http.StatusOK {
+				panic(fmt.Sprintf("Unexpected status: %s", resp.Status))
+			}
+
+			response := []ConsumerPollResponseJson{}
+			err = json.NewDecoder(resp.Body).Decode(&response)
+			resp.Body.Close()
+			Expect(err).NotTo(HaveOccurred())
+			for _, m := range response {
+				messages = append(messages, m.Values...)
+			}
+		}
+	}
+
+	return messages
+}
+
+// Produces messages using partition keys on B0, B1 and B2.
+// The messages have the shape: {"id": %d}. Total messages must be multiples of 3.
+func produceOrderedJson(client *TestClient, topic string, startIndex int, totalMessages int) {
+	if totalMessages % 3 != 0 {
+		panic("totalMessages must be multiples of 3")
+	}
+	const message = `{"id": %d}`
+
+	var wg sync.WaitGroup
+	// Produce messages in a way to make sure that the coalescer will group some of them
+	for i := startIndex; i < startIndex+totalMessages; i += 3 {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			expectOk(client.ProduceJson(0, topic, fmt.Sprintf(message, i), partitionKeyT0Range))
+			expectOk(client.ProduceJson(1, topic, fmt.Sprintf(message, i+1), partitionKeyT1Range))
+			expectOk(client.ProduceJson(2, topic, fmt.Sprintf(message, i+2), partitionKeyT2Range))
+		}(i)
+	}
+	wg.Wait()
+}
+
+func registerStatelessConsumer(client *http.Client, consumerId, group, topic string, onNewGroup OffsetResetPolicy) {
+	const registerUrl = "http://127.0.0.1:9252/v1/consumer/register?consumer_id=%s&group=%s&topic=%s&onNewGroup=%s"
+	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf(registerUrl, consumerId, group, topic, onNewGroup), nil)
+	resp, err := client.Do(req)
+	Expect(err).NotTo(HaveOccurred())
+	expectOk(resp)
+}
 
 func expectOk(resp *http.Response, description ...interface{}) {
 	defer resp.Body.Close()

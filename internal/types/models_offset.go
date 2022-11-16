@@ -49,6 +49,17 @@ func NewOffset(topic *TopicDataId, clusterSize int, source GenId, value int64) O
 	}
 }
 
+func NewDefaultOffset(topic *TopicDataId, clusterSize int, value int64) Offset {
+	return Offset{
+		Token:       topic.Token,
+		Index:       topic.RangeIndex,
+		Version:     topic.Version,
+		ClusterSize: clusterSize,
+		Offset:      value,
+		Source:      OffsetSource{},
+	}
+}
+
 func (o *Offset) GenId() GenId {
 	return GenId{
 		Start:   o.Token,
@@ -72,6 +83,36 @@ type OffsetStoreKeyValue struct {
 	Value Offset         `json:"value"`
 }
 
+type OffsetResetPolicy int
+
+const (
+	StartFromLatest OffsetResetPolicy = iota
+	StartFromEarliest
+)
+
+const DefaultOffsetResetPolicy = StartFromLatest
+
+func ParseOffsetResetPolicy(text string) (OffsetResetPolicy, error) {
+	if text == "startFromLatest" {
+		return StartFromLatest, nil
+	}
+	if text == "startFromEarliest" {
+		return StartFromEarliest, nil
+	}
+	return 0, fmt.Errorf("Invalid offset reset policy string value")
+}
+
+func (p OffsetResetPolicy) String() string {
+	switch p {
+	case StartFromLatest:
+		return "startFromLatest"
+	case StartFromEarliest:
+		return "startFromEarliest"
+	default:
+		panic("OffsetResetPolicy value not supported")
+	}
+}
+
 // Represents a local view of the consumer group offsets
 type OffsetState interface {
 	Initializer
@@ -87,11 +128,19 @@ type OffsetState interface {
 	// Gets offset values in order for a given group and range with defaults values.
 	//
 	// The caller MUST check whether the current broker can serve the data and that the consumer is assigned.
-	GetAllWithDefaults(group string, topic string, token Token, rangeIndex RangeIndex, clusterSize int) []Offset
+	GetAllWithDefaults(
+		group string,
+		topic string,
+		token Token,
+		rangeIndex RangeIndex,
+		clusterSize int,
+		policy OffsetResetPolicy) []Offset
 
 	// Sets the known offset value in memory, optionally committing it to the data store
 	Set(group string, topic string, value Offset, commit OffsetCommitType) bool
 
-	// Reads the local max producer offset from disk
-	ProducerOffsetLocal(topic *TopicDataId) (int64, error)
+	// Returns the max produced offset from local and peers.
+	// When it can not be found, it returns a negative value.
+	// When there's an unexpected  error on local and peers, it returns an error
+	MaxProducedOffset(topicId *TopicDataId) (int64, error)
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
+	"github.com/barcostreams/barco/internal/data"
 	"github.com/barcostreams/barco/internal/discovery"
 	"github.com/barcostreams/barco/internal/interbroker"
 	"github.com/barcostreams/barco/internal/localdb"
@@ -42,6 +43,7 @@ const (
 	topicsQueryKey   = "topic"
 	groupQueryKey    = "group"
 	commitQueryKey   = "commit"
+	offsetResetKey   = "onNewGroup"
 )
 
 const consumerGroupDefault = "default"
@@ -60,6 +62,7 @@ func NewConsumer(
 	config conf.ConsumerConfig,
 	localDb localdb.Client,
 	topologyGetter discovery.TopologyGetter,
+	datalog data.Datalog,
 	gossiper interbroker.Gossiper,
 ) Consumer {
 	addDelay := config.ConsumerAddDelay()
@@ -70,11 +73,12 @@ func NewConsumer(
 	return &consumer{
 		config:         config,
 		topologyGetter: topologyGetter,
+		datalog:        datalog,
 		gossiper:       gossiper,
 		localDb:        localDb,
 		rrFactory:      newReplicationReaderFactory(gossiper),
 		state:          NewConsumerState(config, topologyGetter),
-		offsetState:    newDefaultOffsetState(localDb, topologyGetter, gossiper, config),
+		offsetState:    newDefaultOffsetState(localDb, topologyGetter, datalog, gossiper, config),
 		readQueues:     NewCopyOnWriteMap(),
 		addDebouncer:   Debounce(addDelay, 0),
 	}
@@ -83,6 +87,7 @@ func NewConsumer(
 type consumer struct {
 	config         conf.ConsumerConfig
 	topologyGetter discovery.TopologyGetter
+	datalog        data.Datalog
 	gossiper       interbroker.Gossiper
 	rrFactory      ReplicationReaderFactory
 	localDb        localdb.Client
@@ -206,6 +211,16 @@ func (c *consumer) putRegister(
 		info.Id = consumerId
 		info.Group = r.URL.Query().Get(groupQueryKey)
 		info.Topics = r.URL.Query()[topicsQueryKey]
+		info.OnNewGroup = DefaultOffsetResetPolicy
+		offsetResetValue := r.URL.Query().Get(offsetResetKey)
+
+		if offsetResetValue != "" {
+			if policy, err := types.ParseOffsetResetPolicy(offsetResetValue); err != nil {
+				return types.NewHttpError(http.StatusBadRequest, "Invalid offset reset policy value")
+			} else {
+				info.OnNewGroup = policy
+			}
+		}
 
 		if existingTc, existingInfo := c.state.TrackedConsumerById(consumerId); existingTc != nil {
 			if IfEmpty(info.Group, consumerGroupDefault) != existingInfo.Group ||
@@ -233,13 +248,19 @@ func (c *consumer) putRegister(
 		return err
 	}
 
+	log.Info().
+		Strs("topics", info.Topics).
+		Bool("startFromLatest", info.OnNewGroup == StartFromLatest).
+		Msgf("Registered new consumer with id %s and group %s", info.Id, info.Group)
+
 	if statelessConsumer {
 		// Auto register in peers
 		peers := c.topologyGetter.Topology().Peers()
 		if len(peers) > 0 {
 			// Ignore dev mode
 			err := AnyError(CollectErrors(InParallel(len(peers), func(i int) error {
-				return c.gossiper.SendConsumerRegister(peers[i].Ordinal, info.Id, info.Group, info.Topics)
+				return c.gossiper.SendConsumerRegister(
+					peers[i].Ordinal, info.Id, info.Group, info.Topics, info.OnNewGroup)
 			})))
 
 			if err != nil {
@@ -349,7 +370,9 @@ func (c *consumer) postPoll(
 		return nil
 	}
 
-	log.Debug().Msgf("Received consumer client poll from '%s'", id)
+	log.Debug().
+		Interface("query", r.URL.Query()).
+		Msgf("Received consumer client poll from '%s'", id)
 	groupReadQueue := c.getOrCreateReadQueue(group)
 
 	format := compressedBinaryFormat
@@ -416,7 +439,7 @@ func (c *consumer) postGoodbye(
 
 func (c *consumer) getOrCreateReadQueue(group string) *groupReadQueue {
 	grq, _, _ := c.readQueues.LoadOrStore(group, func() (interface{}, error) {
-		return newGroupReadQueue(group, c.state, c.offsetState, c.topologyGetter, c.gossiper, c.rrFactory, c.config), nil
+		return newGroupReadQueue(group, c.state, c.offsetState, c.topologyGetter, c.datalog, c.gossiper, c.rrFactory, c.config), nil
 	})
 
 	return grq.(*groupReadQueue)
@@ -484,11 +507,12 @@ func (c *consumer) OnOffsetFromPeer(kv *OffsetStoreKeyValue) {
 	c.offsetState.Set(kv.Key.Group, kv.Key.Topic, kv.Value, OffsetCommitLocal)
 }
 
-func (c *consumer) OnRegisterFromPeer(id string, group string, topics []string) error {
+func (c *consumer) OnRegisterFromPeer(id string, group string, topics []string, onNewGroup OffsetResetPolicy) error {
 	consumerInfo := ConsumerInfo{
-		Id:     id,
-		Group:  group,
-		Topics: topics,
+		Id:         id,
+		Group:      group,
+		Topics:     topics,
+		OnNewGroup: onNewGroup,
 	}
 
 	if tc, existingInfo := c.state.TrackedConsumerById(id); tc != nil {

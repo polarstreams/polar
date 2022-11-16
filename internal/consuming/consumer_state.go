@@ -174,6 +174,22 @@ func (m *ConsumerState) CanConsume(id string) (string, []TokenRanges, []string) 
 	return info.Group, ranges, info.Topics
 }
 
+func (m *ConsumerState) OffsetPolicy(connId string) OffsetResetPolicy {
+	value := m.consumers.Load()
+
+	if value == nil {
+		return DefaultOffsetResetPolicy
+	}
+
+	consumers := value.(map[string]ConsumerInfo)
+	info, found := consumers[connId]
+	if !found {
+		return DefaultOffsetResetPolicy
+	}
+
+	return info.OnNewGroup
+}
+
 func (m *ConsumerState) Rebalance() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -182,12 +198,11 @@ func (m *ConsumerState) Rebalance() bool {
 	// when we have more time.
 	// In the meantime, this is not a hot path and shouldn't affect performance
 	consumers := map[consumerKey]ConsumerInfo{}
-	consumerGroups := map[string]StringSet{} // Consumer keys by group
-	topics := map[string]StringSet{}         // Topics set by consumer group
+	groupBuilders := make(map[string]*groupInfoBuilder) // groups by group name
 
 	// From the local connections, create the consumer groups
 	for _, info := range m.connections {
-		addToGroup(consumerGroups, consumers, info)
+		addToGroup(groupBuilders, consumers, info)
 	}
 
 	// From the recently removed, add it to active consumers
@@ -196,21 +211,7 @@ func (m *ConsumerState) Rebalance() bool {
 			delete(m.recentlyRemoved, k)
 			continue
 		}
-		addToGroup(consumerGroups, consumers, removed.consumer)
-	}
-
-	// From the consumer groups, add the topics
-	for group, keys := range consumerGroups {
-		// Union of topic for consumer in the group
-		topicSet := StringSet{}
-		for k := range keys {
-			c := consumers[consumerKey(k)]
-			for _, topic := range c.Topics {
-				topicSet.Add(topic)
-			}
-		}
-
-		topics[group] = topicSet
+		addToGroup(groupBuilders, consumers, removed.consumer)
 	}
 
 	for k, peerInfo := range m.peerGroups {
@@ -221,12 +222,12 @@ func (m *ConsumerState) Rebalance() bool {
 
 		for _, group := range peerInfo.groups {
 			// Set topic subscriptions
-			topicSet, found := topics[group.Name]
+			builder, found := groupBuilders[group.Name]
 			if !found {
-				topicSet = StringSet{}
+				builder = newGroupInfoBuilder(group.Name, group.OnNewGroup)
+				groupBuilders[group.Name] = builder
 			}
-			topicSet.Add(group.Topics...)
-			topics[group.Name] = topicSet
+			builder.topics.Add(group.Topics...)
 
 			for _, id := range group.Ids {
 				info := ConsumerInfo{
@@ -237,10 +238,7 @@ func (m *ConsumerState) Rebalance() bool {
 				_, exists := consumers[key]
 				if !exists {
 					consumers[key] = info
-					// append the list of consumer keys per group
-					keys := consumerGroups[info.Group]
-					keys.Add(string(key))
-					consumerGroups[info.Group] = keys
+					builder.keys.Add(string(key))
 				}
 			}
 		}
@@ -251,19 +249,17 @@ func (m *ConsumerState) Rebalance() bool {
 	topology := m.topologyGetter.Topology()
 	groupsForPeers := []ConsumerGroup{}
 
-	for group := range consumerGroups {
-		keySet := consumerGroups[group]
-		topicSet := topics[group]
-
-		keys := keySet.ToSortedSlice()
-		topics := topicSet.ToSortedSlice()
+	for group, builder := range groupBuilders {
+		keys := builder.keys.ToSortedSlice()
+		topics := builder.topics.ToSortedSlice()
 
 		setConsumerAssignment(fullConsumerInfo, topology, keys, topics, consumers)
 
 		groupsForPeers = append(groupsForPeers, ConsumerGroup{
-			Name:   group,
-			Ids:    toIds(keys, consumers),
-			Topics: topics,
+			Name:       group,
+			Ids:        toIds(keys, consumers),
+			Topics:     topics,
+			OnNewGroup: builder.onNewGroup,
 		})
 	}
 
@@ -276,8 +272,6 @@ func (m *ConsumerState) Rebalance() bool {
 	sort.Slice(groupsForPeers, func(i, j int) bool {
 		return groupsForPeers[i].Name < groupsForPeers[j].Name
 	})
-
-	//TODO: Before swapping, if hasChanged, reset offset to lastStoredPosition
 
 	prevGroups := m.groups.Swap(groupsForPeers)
 	m.consumers.Swap(consumersByConnection)
@@ -299,7 +293,7 @@ func toIds(keys []string, consumers map[consumerKey]ConsumerInfo) []string {
 }
 
 func addToGroup(
-	consumerGroups map[string]StringSet,
+	groupBuilders map[string]*groupInfoBuilder,
 	consumers map[consumerKey]ConsumerInfo,
 	info ConsumerInfo,
 ) {
@@ -307,13 +301,14 @@ func addToGroup(
 	_, exists := consumers[key]
 	if !exists {
 		consumers[key] = info
-		// append the list of consumer keys per group
-		keys, found := consumerGroups[info.Group]
+
+		builder, found := groupBuilders[info.Group]
 		if !found {
-			keys = StringSet{}
+			builder = newGroupInfoBuilder(info.Group, info.OnNewGroup)
+			groupBuilders[info.Group] = builder
 		}
-		keys.Add(string(key))
-		consumerGroups[info.Group] = keys
+		builder.keys.Add(string(key))
+		builder.topics.Add(info.Topics...)
 	}
 }
 
@@ -353,6 +348,7 @@ func setConsumerAssignment(
 		c := result[consumerKey(key)]
 		c.Id = info.Id
 		c.Group = info.Group
+		c.OnNewGroup = info.OnNewGroup
 		c.assignedTokens = consumerTokens[i]
 		c.Topics = topics
 

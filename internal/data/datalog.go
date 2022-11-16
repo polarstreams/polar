@@ -2,9 +2,13 @@ package data
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"unsafe"
 
 	"github.com/barcostreams/barco/internal/conf"
@@ -40,6 +44,13 @@ type Datalog interface {
 
 	// Releases the stream buffer
 	ReleaseStreamBuffer(buf []byte)
+
+	// Gets the max producer offset from local.
+	// Returns an error when not found.
+	ReadProducerOffset(topicId *TopicDataId) (int64, error)
+
+	// Gets a sorted list of offsets representing the name of the segment files, where the offset is less than maxOffset
+	SegmentFileList(topic *TopicDataId, maxOffset int64) ([]int64, error)
 }
 
 func NewDatalog(config conf.DatalogConfig) Datalog {
@@ -76,6 +87,32 @@ func (d *datalog) StreamBuffer() []byte {
 
 func (d *datalog) ReleaseStreamBuffer(buf []byte) {
 	d.streamBufferChan <- buf
+}
+
+func (d *datalog) SegmentFileList(topic *TopicDataId, maxOffset int64) ([]int64, error) {
+	basePath := d.config.DatalogPath(topic)
+	pattern := fmt.Sprintf("%s/*.%s", basePath, conf.SegmentFileExtension)
+
+	entries, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Strings(entries)
+	result := make([]int64, 0, len(entries))
+	for _, entry := range entries {
+		filePrefix := strings.Split(filepath.Base(entry), ".")[0]
+		startOffset, err := strconv.ParseInt(filePrefix, 10, 64)
+		if err != nil {
+			continue
+		}
+		if startOffset > maxOffset {
+			break
+		}
+		result = append(result, startOffset)
+	}
+
+	return result, nil
 }
 
 func (d *datalog) ReadFileFrom(
@@ -147,6 +184,10 @@ func (d *datalog) ReadFileFrom(
 			return nil, nil
 		}
 	}
+}
+
+func (d *datalog) ReadProducerOffset(topicId *TopicDataId) (int64, error) {
+	return readProducerOffset(topicId, d.config)
 }
 
 // Returns a slice of the given buffer containing the chunks when completed is true.
