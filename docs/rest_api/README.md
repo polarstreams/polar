@@ -85,12 +85,12 @@ Responds HTTP status `200 OK` when the data has been stored and replicated.
 
 #### Examples:
 
-Sending an event.
+Sending an event with the partition key set.
 
 ```shell
-$ curl -X POST -i -d '{"product_id": 123, "units": -5}' \
+$ curl -X POST -i -d '{"productId": 123, "units": -5}' \
     -H "Content-Type: application/json" \
-    "http://barco.streams:9251/v1/topic/product_stock/messages?partitionKey=123"
+    "http://barco.streams:9251/v1/topic/product-stock/messages?partitionKey=123"
 ```
 
 ### `GET /status`
@@ -114,18 +114,18 @@ Registers a consumer in all the brokers, it's the first step in the read flow an
 
 | Key | Type | Description |
 | --- | ---- | ----------- |
-| `consumer_id` | `string` | A text value chosen by you to identify the consumer in the read flow. In general The application instance id or a random uuid are suited for the `consumer_id` value, as long as you reuse the id across the following requests of the read flow. |
+| `consumerId` | `string` | A text value chosen by you to identify the consumer in the read flow. In general The application instance id or a random uuid are suited for the `consumerId` value, as long as you reuse the id across the following requests of the read flow. |
 | `group` | `string` (optional)| The name of the consumer group, In most cases the application name is a good choice for consumer `group` name. Defaults to `"default"`. |
 | `topic` | `string[]` | The topics to subscribe to. In case it is more than one, you can send repeating the parameter key and value, for example: `?topic=a&topic=b`. |
 | `onNewGroup` | `string` | Determines the start offset when there's no information for a given consumer group. Possible values are `startFromLatest` (default) and `startFromEarliest`.|
 
 #### Example
 
-Register a consumer in the cluster subscribing to the topic `"product_stock"`.
+Register a consumer in the cluster subscribing to the topic `"product-stock"`.
 
 ```shell
 $ curl -X PUT \
-    "http://barco.streams:9252/v1/consumer/register?consumer_id=1&group=product_stock_updater&topic=product_stock"
+    "http://barco.streams:9252/v1/consumer/register?consumerId=1&group=product-stock-updater&topic=product-stock"
 ```
 
 #### Response
@@ -138,7 +138,7 @@ Responds HTTP status `200 OK` when the consumer is registered on all brokers.
 
 | Key | Type | Description |
 | --- | ---- | ----------- |
-| `consumer_id` | `string` (required) | The consumer identifier used to register the consumer. |
+| `consumerId` | `string` (required) | The consumer identifier used to register the consumer. |
 
 #### Response
 
@@ -163,11 +163,11 @@ Register endpoint from above and retry.
 
 ```
 $ curl -i -X POST -H "Accept: application/json"\
-    "http://barco.streams:9252/v1/consumer/poll?consumer_id=1"
+    "http://barco.streams:9252/v1/consumer/poll?consumerId=1"
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-[{"topic":"product_stock","token":"-9223372036854775808","rangeIndex":0,"version":1,"startOffset":"6","values":[{"product_id": 123, "units": -1}, {"product_id": 123, "units": 20}]}]
+[{"topic":"product-stock","token":"-9223372036854775808","rangeIndex":0,"version":1,"startOffset":"6","values":[{"productId": 123, "units": -1}, {"productId": 123, "units": 20}]}]
 ```
 
 ### `POST /v1/consumer/commit`
@@ -180,7 +180,7 @@ the position of the reader.
 
 | Key | Type | Description |
 | --- | ---- | ----------- |
-| `consumer_id` | `string` | The consumer identifier used to register the consumer. |
+| `consumerId` | `string` | The consumer identifier used to register the consumer. |
 
 #### Response
 
@@ -193,7 +193,7 @@ Responds HTTP status `409 Conflict` when the consumer is not considered to be re
 Manually commit the position of the reader.
 
 ```shell
-$ curl -i -X POST "http://barco.streams:9252/v1/consumer/commit?consumer_id=1"
+$ curl -i -X POST "http://barco.streams:9252/v1/consumer/commit?consumerId=1"
 ```
 
 ### `POST /v1/consumer/goodbye`
@@ -205,7 +205,7 @@ loop.
 
 | Key | Type | Description |
 | --- | ---- | ----------- |
-| `consumer_id` | `string` | The consumer identifier used to register the consumer. |
+| `consumerId` | `string` | The consumer identifier used to register the consumer. |
 
 #### Response
 
