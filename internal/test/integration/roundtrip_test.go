@@ -402,6 +402,7 @@ var _ = Describe("A 3 node cluster", func() {
 			registerStatelessConsumer(client, "c1", group, topic, StartFromEarliest)
 
 			// Try register on the second one: it should be a noop
+			// Use legacy "consumer_id" querystring parameter
 			const registerUrl = "http://127.0.0.1:9252/v1/consumer/register?consumer_id=%s&group=%s&topic=%s&onNewGroup=%s"
 			req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf(registerUrl, "c1", group, topic, StartFromEarliest), nil)
 			resp, err := client.Do(req)
@@ -418,7 +419,7 @@ var _ = Describe("A 3 node cluster", func() {
 			}
 
 			for i := 0; i < 2; i++ {
-				req, _ := http.NewRequest(http.MethodPost, "http://127.0.0.1:9252/v1/consumer/goodbye?consumer_id=c1", nil)
+				req, _ := http.NewRequest(http.MethodPost, "http://127.0.0.1:9252/v1/consumer/goodbye?consumerId=c1", nil)
 				resp, err := client.Do(req)
 				Expect(err).NotTo(HaveOccurred())
 				if i == 0 {
@@ -545,7 +546,7 @@ func pollTimes(client *http.Client, consumerId string, times int) []map[string]a
 	messages := []map[string]any{}
 	for i := 0; i < times; i++ {
 		for brokerIp := 1; brokerIp <= 3; brokerIp++ {
-			pollUrl := fmt.Sprintf("http://127.0.0.%d:9252/v1/consumer/poll?consumer_id=%s", brokerIp, consumerId)
+			pollUrl := fmt.Sprintf("http://127.0.0.%d:9252/v1/consumer/poll?consumerId=%s", brokerIp, consumerId)
 			req, _ := http.NewRequest(http.MethodPost, pollUrl, nil)
 			req.Header.Add("Accept", "application/json")
 			resp, err := client.Do(req)
@@ -594,7 +595,7 @@ func produceOrderedJson(client *TestClient, topic string, startIndex int, totalM
 }
 
 func registerStatelessConsumer(client *http.Client, consumerId, group, topic string, onNewGroup OffsetResetPolicy) {
-	const registerUrl = "http://127.0.0.1:9252/v1/consumer/register?consumer_id=%s&group=%s&topic=%s&onNewGroup=%s"
+	const registerUrl = "http://127.0.0.1:9252/v1/consumer/register?consumerId=%s&group=%s&topic=%s&onNewGroup=%s"
 	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf(registerUrl, consumerId, group, topic, onNewGroup), nil)
 	resp, err := client.Do(req)
 	Expect(err).NotTo(HaveOccurred())

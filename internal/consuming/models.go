@@ -3,6 +3,7 @@ package consuming
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -332,8 +333,22 @@ func (c *trackedConsumerHandler) Id() string {
 	return value.Id()
 }
 
-func (c *trackedConsumerHandler) IsTracked() bool {
-	return c.getValue() != nil
+// Determines whether the consumer is already tracked.
+// When is tracked as stateless consumer and the ids don't match, it returns an error
+func (c *trackedConsumerHandler) IsTracked(statelessId string) (bool, error) {
+	v := c.getValue()
+	if v == nil {
+		return false, nil
+	}
+	if statelessTc, ok := v.(*trackedConsumerById); ok {
+		if statelessId == "" {
+			return false, fmt.Errorf("Stateless consumer connection can not be used without id parameter")
+		}
+		if statelessTc.Id() != statelessId {
+			return false, fmt.Errorf("Stateless consumer does not match id %s != %s", statelessTc.Id(), statelessId)
+		}
+	}
+	return true, nil
 }
 
 func (c *trackedConsumerHandler) TrackAsStateless(id string) {

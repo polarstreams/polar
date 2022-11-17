@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/barcostreams/barco/internal/conf"
@@ -39,16 +40,18 @@ const (
 
 const (
 	// The query string parameters used for the consumer server
-	consumerQueryKey = "consumer_id" // Used to determine whether it's stateless-less
-	topicsQueryKey   = "topic"
-	groupQueryKey    = "group"
-	commitQueryKey   = "commit"
-	offsetResetKey   = "onNewGroup"
+	consumerQueryKey       = "consumerId"  // Used to determine whether it's stateless-less
+	consumerLegacyQueryKey = "consumer_id" // Introduced in v0.4.0, should be supported for at least until v0.7.0
+	topicsQueryKey         = "topic"
+	groupQueryKey          = "group"
+	commitQueryKey         = "commit"
+	offsetResetKey         = "onNewGroup"
 )
 
 const consumerGroupDefault = "default"
 
 var removeDebouncer = Debounce(removeDelay, 0.4) // Debounce events that occurred in the following 2 minutes
+var logLegacyConsumerIdOnce sync.Once
 
 // Consumer represents a consumer server
 type Consumer interface {
@@ -207,8 +210,20 @@ func (c *consumer) putRegister(
 	var info ConsumerInfo
 	statelessConsumer := false
 
-	if consumerId := r.URL.Query().Get(consumerQueryKey); consumerId != "" {
-		info.Id = consumerId
+	statelessConsumerId := r.URL.Query().Get(consumerQueryKey)
+	if statelessConsumerId == "" {
+		if legacyId := r.URL.Query().Get(consumerLegacyQueryKey); legacyId != "" {
+			statelessConsumerId = legacyId
+			logLegacyConsumerIdOnce.Do(func() {
+				log.Warn().Msgf(
+					"Using '%s' for stateless consumers is DEPRECATED and will be removed in future versions, use '%s' instead",
+					consumerLegacyQueryKey, statelessConsumerId)
+			})
+		}
+	}
+
+	if statelessConsumerId != "" {
+		info.Id = statelessConsumerId
 		info.Group = r.URL.Query().Get(groupQueryKey)
 		info.Topics = r.URL.Query()[topicsQueryKey]
 		info.OnNewGroup = DefaultOffsetResetPolicy
@@ -222,7 +237,7 @@ func (c *consumer) putRegister(
 			}
 		}
 
-		if existingTc, existingInfo := c.state.TrackedConsumerById(consumerId); existingTc != nil {
+		if existingTc, existingInfo := c.state.TrackedConsumerById(statelessConsumerId); existingTc != nil {
 			if IfEmpty(info.Group, consumerGroupDefault) != existingInfo.Group ||
 				!reflect.DeepEqual(info.Topics, existingInfo.Topics) {
 				return types.NewHttpError(
@@ -234,7 +249,7 @@ func (c *consumer) putRegister(
 			return nil
 		}
 
-		tc.TrackAsStateless(consumerId)
+		tc.TrackAsStateless(statelessConsumerId)
 		statelessConsumer = true
 	} else {
 		if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
@@ -337,19 +352,38 @@ func (c *consumer) unRegister(id string, debounce bool) {
 	}
 }
 
-// Verifies whether the consumer is tracked or, for stateless consumers, whether it can load an already tracked consumer
-func (c *consumer) isRegistered(tc *trackedConsumerHandler, r *http.Request) bool {
-	if tc.IsTracked() {
-		return true
-	}
-
-	if consumerId := r.URL.Query().Get(consumerQueryKey); consumerId != "" {
-		if existing, _ := c.state.TrackedConsumerById(consumerId); existing != nil {
-			tc.LoadFromExisting(existing)
-			return true
+// Verifies whether the consumer is tracked or, for stateless consumers, whether it can load an already
+// tracked consumer.
+//
+// It returns an error when it's not tracked and it can't be registered.
+func (c *consumer) validateRegistered(tc *trackedConsumerHandler, r *http.Request) HttpError {
+	consumerId := r.URL.Query().Get(consumerQueryKey)
+	if consumerId == "" {
+		if legacyId := r.URL.Query().Get(consumerLegacyQueryKey); legacyId != "" {
+			consumerId = legacyId
+			logLegacyConsumerIdOnce.Do(func() {
+				log.Warn().Msgf(
+					"Using '%s' for stateless consumers is DEPRECATED and will be removed in future versions, use '%s' instead",
+					consumerLegacyQueryKey, consumerId)
+			})
 		}
 	}
-	return false
+	if tracked, err := tc.IsTracked(consumerId); err != nil {
+		return types.NewHttpError(consumerNotRegisteredStatus, err.Error())
+	} else if tracked {
+		// Already tracked
+		return nil
+	}
+
+	if consumerId != "" {
+		if existing, _ := c.state.TrackedConsumerById(consumerId); existing != nil {
+			tc.LoadFromExisting(existing)
+			// Track new
+			return nil
+		}
+	}
+
+	return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
 }
 
 func (c *consumer) postPoll(
@@ -358,8 +392,8 @@ func (c *consumer) postPoll(
 	r *http.Request,
 	_ httprouter.Params,
 ) error {
-	if !c.isRegistered(tc, r) {
-		return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
+	if err := c.validateRegistered(tc, r); err != nil {
+		return err
 	}
 	tc.SetAsRead()
 	id := tc.Id()
@@ -390,8 +424,8 @@ func (c *consumer) postManualCommit(
 	r *http.Request,
 	_ httprouter.Params,
 ) error {
-	if !c.isRegistered(tc, r) {
-		return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
+	if err := c.validateRegistered(tc, r); err != nil {
+		return err
 	}
 	tc.SetAsRead()
 	id := tc.Id()
@@ -415,8 +449,8 @@ func (c *consumer) postGoodbye(
 	r *http.Request,
 	_ httprouter.Params,
 ) error {
-	if !c.isRegistered(tc, r) {
-		return types.NewHttpError(consumerNotRegisteredStatus, "Consumer not registered")
+	if err := c.validateRegistered(tc, r); err != nil {
+		return err
 	}
 
 	id := tc.Id()
