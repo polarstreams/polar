@@ -22,7 +22,7 @@ var _ = Describe("Dev mode", func() {
 		}
 	})
 
-	It("Produces and consumes", func() {
+	It("produces and consumes", func() {
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
 		b0.WaitOutput("Barco started")
 
@@ -41,5 +41,20 @@ var _ = Describe("Dev mode", func() {
 		time.Sleep(500 * time.Millisecond)
 		b0.LookForErrors(30)
 
+	})
+
+	It("supports restarting without cleaning the directory", func() {
+		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
+		b0.WaitForStart()
+		b0.Shutdown()
+
+		// Restart
+		b0.Start()
+		b0.WaitForStart()
+
+		client := NewTestClient(nil)
+		expectOk(client.ProduceJson(0, "abc", `{"hello": "world"}`, ""), "should produce json")
+		time.Sleep(200 * time.Millisecond)
+		b0.LookForErrors(30)
 	})
 })
