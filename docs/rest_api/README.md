@@ -29,7 +29,7 @@ A JSON Object containing the following properties:
 | consumerPort | `number` | The port number exposing the [Consumer API](#consumer-api). |
 | names | `string[]` | The host names of the cluster, on K8s it can be empty for large clusters, providing `baseName` and `serviceName` instead. |
 | baseName | `string` | In K8S, the host base name that composed with the pod ordinal and `serviceName`, compose the host name of a broker. |
-| serviceName | `string` | In K8s, the name of the Barco service. |
+| serviceName | `string` | In K8s, the name of the Barco service with the namespace. |
 
 
 #### Examples
@@ -51,7 +51,7 @@ $ curl -i "http://barco.streams:9250/v1/brokers"
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"baseName":"barco-","serviceName":"barco","length":12,"producerPort":9251,"consumerPort":9252}
+{"baseName":"barco-","serviceName":"barco.streams","length":12,"producerPort":9251,"consumerPort":9252}
 ```
 
 ### `GET /status`

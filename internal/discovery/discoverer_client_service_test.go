@@ -64,9 +64,9 @@ var _ = Describe("discoverer", func() {
 		It("should start a discovery service for a 6-node cluster", func() {
 			const port = 9021
 			config := new(mocks.Config)
-			config.On("BaseHostName").Return("barco2-")
-			config.On("ServiceName").Return("svc")
-			config.On("PodNamespace").Return("")
+			config.On("BaseHostName").Return("barcosample-")
+			config.On("ServiceName").Return("svc2")
+			config.On("PodNamespace").Return("streams2")
 			config.On("Ordinal").Return(1)
 			config.On("DevMode").Return(false)
 			config.On("ListenOnAllAddresses").Return(true)
@@ -101,8 +101,8 @@ var _ = Describe("discoverer", func() {
 			err = json.NewDecoder(r.Body).Decode(&result)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(Equal(topologyClientMessage{
-				BaseName:     "barco2-",
-				ServiceName:  "svc",
+				BaseName:     "barcosample-",
+				ServiceName:  "svc2.streams2",
 				Length:       6,
 				ProducerPort: 8901,
 				ConsumerPort: 8902,
