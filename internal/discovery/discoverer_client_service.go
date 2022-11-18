@@ -105,9 +105,14 @@ func (d *discoverer) newResponseTopology(t *TopologyInfo) *topologyClientMessage
 }
 
 func (d *discoverer) newResponseTopologyUsingOrdinals(t *TopologyInfo) *topologyClientMessage {
+	serviceName := d.config.ServiceName()
+	if serviceName != "" && d.config.PodNamespace() != "" {
+		serviceName += "." + d.config.PodNamespace()
+	}
+
 	result := topologyClientMessage{
 		BaseName:     d.config.BaseHostName(),
-		ServiceName:  d.config.ServiceName(),
+		ServiceName:  serviceName,
 		Length:       len(t.Brokers),
 		ProducerPort: d.config.ProducerPort(),
 		ConsumerPort: d.config.ConsumerPort(),
