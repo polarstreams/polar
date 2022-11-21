@@ -87,7 +87,13 @@ func absInt64(num Token) int64 {
 func RangeByTokenAndClusterSize(token Token, index RangeIndex, rangesPerToken int, clusterSize int) (Token, Token) {
 	// Expressing the range size as a factor ONLY works if the rangesPerToken never change
 	// during the lifetime of a topic
-	rangeSize := Token(chunkSizeUnit * getRingFactor(clusterSize) / int64(rangesPerToken))
+	rangeSize := Token(chunkSizeUnit * (getRingFactor(clusterSize) / int64(rangesPerToken)))
+
+	if clusterSize == 1 {
+		// Calculations overflow with a single-broker cluster
+		return rangeByTokenAndClusterSizeDevMode(index, rangesPerToken, clusterSize)
+	}
+
 	start := token + rangeSize*Token(index)
 	end := Token(0)
 	if index < RangeIndex(rangesPerToken)-1 {
@@ -105,6 +111,21 @@ func RangeByTokenAndClusterSize(token Token, index RangeIndex, rangesPerToken in
 		if end == StartToken {
 			end = Token(math.MaxInt64)
 		}
+	}
+	return start, end
+}
+
+func rangeByTokenAndClusterSizeDevMode(index RangeIndex, rangesPerToken int, clusterSize int) (Token, Token) {
+	// Dev mode clusters can not be graduated to a multi broker cluster, so we are safe
+	if rangesPerToken == 1 {
+		return StartToken, Token(math.MaxInt64)
+	}
+	rangeSizeForSize2 := float64(math.MaxInt64)
+	rangeSize := rangeSizeForSize2 * (2 / float64(rangesPerToken))
+	start := StartToken + Token(rangeSize)*Token(index)
+	end := Token(math.MaxInt64)
+	if index < RangeIndex(rangesPerToken)-1 {
+		end = StartToken + Token(rangeSize)*Token(index+1)
 	}
 	return start, end
 }
