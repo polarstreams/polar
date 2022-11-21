@@ -2,7 +2,6 @@ package consuming
 
 import (
 	"fmt"
-	"math"
 	"reflect"
 	"sort"
 	"sync"
@@ -159,19 +158,8 @@ func (m *ConsumerState) CanConsume(id string) (string, []TokenRanges, []string) 
 	}
 
 	info := connections[id]
-
-	// TODO: Revisit token/ranges assignment algorithm
-	// Assign all ranges to the same consumer for now
-	ranges := make([]TokenRanges, 0, len(info.assignedTokens))
-	for _, t := range info.assignedTokens {
-		indices := make([]RangeIndex, 0, m.config.ConsumerRanges())
-		for i := 0; i < m.config.ConsumerRanges(); i++ {
-			indices = append(indices, RangeIndex(i))
-		}
-		ranges = append(ranges, TokenRanges{Token: t, Indices: indices})
-	}
-
-	return info.Group, ranges, info.Topics
+	// Default to empty values
+	return info.Group, info.assignedTokens, info.Topics
 }
 
 func (m *ConsumerState) OffsetPolicy(connId string) OffsetResetPolicy {
@@ -248,12 +236,13 @@ func (m *ConsumerState) Rebalance() bool {
 	fullConsumerInfo := map[consumerKey]ConsumerInfo{}
 	topology := m.topologyGetter.Topology()
 	groupsForPeers := []ConsumerGroup{}
+	rangesPerToken := m.config.ConsumerRanges()
 
 	for group, builder := range groupBuilders {
 		keys := builder.keys.ToSortedSlice()
 		topics := builder.topics.ToSortedSlice()
 
-		setConsumerAssignment(fullConsumerInfo, topology, keys, topics, consumers)
+		setConsumerAssignment(fullConsumerInfo, topology, keys, topics, consumers, rangesPerToken)
 
 		groupsForPeers = append(groupsForPeers, ConsumerGroup{
 			Name:       group,
@@ -322,24 +311,28 @@ func setConsumerAssignment(
 	keys []string,
 	topics []string, // topics assigned to a group
 	consumers map[consumerKey]ConsumerInfo,
+	rangesPerToken int,
 ) {
 	// Sort the keys within a group
 	sort.Strings(keys)
-	brokerLength := len(topology.Brokers)
+	brokerLength := topology.TotalBrokers()
 	consumerLength := len(keys)
+	consumerTokensByIndex := make([]map[Token][]RangeIndex, consumerLength)
 
-	// Distribute fairly in a theoretical ring with 3*2^n shape
-	baseLength := consumerBaseLength(consumerLength)
-	consumerTokens := make([][]Token, baseLength)
+	consumerIndex := 0
+	for brokerIndex := range topology.Brokers {
+		token := GetTokenAtIndex(brokerLength, brokerIndex)
+		for rangeIndex := RangeIndex(0); rangeIndex < RangeIndex(rangesPerToken); rangeIndex++ {
+			consumerTokens := consumerTokensByIndex[consumerIndex]
+			if len(consumerTokens) == 0 {
+				consumerTokens = make(map[Token][]RangeIndex)
+				consumerTokensByIndex[consumerIndex] = consumerTokens
+			}
+			consumerTokens[token] = append(consumerTokens[token], rangeIndex)
 
-	index := 0
-	for brokerIndex, broker := range topology.Brokers {
-		if len(consumerTokens) > broker.Ordinal {
-			// The alphabetical index is considered maps to the broker ordinal
-			index = broker.Ordinal
+			// Increment the consumer index
+			consumerIndex = (consumerIndex + 1) % consumerLength
 		}
-
-		consumerTokens[index] = append(consumerTokens[index], GetTokenAtIndex(brokerLength, brokerIndex))
 	}
 
 	// Assign the tokens to the keys that do exist
@@ -349,44 +342,22 @@ func setConsumerAssignment(
 		c.Id = info.Id
 		c.Group = info.Group
 		c.OnNewGroup = info.OnNewGroup
-		c.assignedTokens = consumerTokens[i]
+		c.assignedTokens = mapToTokenRange(consumerTokensByIndex[i], brokerLength)
 		c.Topics = topics
 
 		result[consumerKey(key)] = c
 	}
-
-	if baseLength > consumerLength {
-		// Assign the tokens from the theoretical ring to the actual ring
-		remainingTokens := make([]Token, 0)
-		for i := consumerLength; i < baseLength; i++ {
-			remainingTokens = append(remainingTokens, consumerTokens[i]...)
-		}
-
-		for i, token := range remainingTokens {
-			// Assign backwards to avoid overloading the consumer at zero
-			index := int(math.Abs(float64((consumerLength - 1 - i) % consumerLength)))
-			key := keys[index]
-			c := result[consumerKey(key)]
-			c.assignedTokens = append(c.assignedTokens, token)
-			result[consumerKey(key)] = c
-		}
-	}
-
-	// Fill the unused consumers
-	for i := brokerLength; i < len(keys); i++ {
-		key := consumerKey(keys[i])
-		result[key] = consumers[key]
-	}
 }
 
-// For a given real consumers length, it returns the ring length that
-// can contain it.
-// For example: given 3 it returns 3; for 4 -> 6; for 5 -> 6; for 7 -> 12
-func consumerBaseLength(length int) int {
-	if length < 3 {
-		return 3
+func mapToTokenRange(m map[Token][]RangeIndex, clusterSize int) []TokenRanges {
+	result := make([]TokenRanges, 0, len(m))
+	for token, indices := range m {
+		result = append(result, TokenRanges{
+			Token:       token,
+			Indices:     indices,
+			ClusterSize: clusterSize,
+		})
 	}
-	// Rings are 3 * 2^n
-	exponent := math.Ceil(math.Log2(float64(length) / 3))
-	return int(3 * math.Exp2(exponent))
+
+	return result
 }
