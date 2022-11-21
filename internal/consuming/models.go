@@ -30,7 +30,7 @@ type ConsumerInfo struct {
 	OnNewGroup OffsetResetPolicy `json:"onNewGroup"`
 
 	// Only used internally
-	assignedTokens []Token
+	assignedTokens []TokenRanges
 }
 
 type ReplicationReaderFactory interface {

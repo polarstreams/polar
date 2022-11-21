@@ -2,6 +2,7 @@ package consuming
 
 import (
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -20,26 +21,6 @@ func Test(t *testing.T) {
 	RunSpecs(t, "Consumer Suite")
 }
 
-var _ = Describe("consumerBaseLength()", func() {
-	It("should return the expected size", func() {
-		values := [][]int{
-			{1, 3},
-			{3, 3},
-			{4, 6},
-			{6, 6},
-			{7, 12},
-			{12, 12},
-			{13, 24},
-			{24, 24},
-			{25, 48},
-		}
-
-		for _, item := range values {
-			Expect(consumerBaseLength(item[0])).To(Equal(item[1]))
-		}
-	})
-})
-
 var _ = Describe("ConsumerState", func() {
 	Describe("Rebalance()", func() {
 		const brokerLength = 6
@@ -56,11 +37,11 @@ var _ = Describe("ConsumerState", func() {
 				assertTopics(state, expectedTopics, id1, id2, id3)
 
 				_, tokens1, _ := state.CanConsume(id1)
-				Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
+				Expect(tokens1).To(HaveLen(brokerLength))
 				_, tokens2, _ := state.CanConsume(id2)
-				Expect(tokens2).To(Equal(getTokens(brokerLength, 2, 2)))
+				Expect(tokens2).To(HaveLen(brokerLength))
 				_, tokens3, _ := state.CanConsume(id3)
-				Expect(tokens3).To(Equal(getTokens(brokerLength, 4, 2)))
+				Expect(tokens3).To(HaveLen(brokerLength))
 
 				Expect(state.GetInfoForPeers()).To(HaveLen(1))
 				Expect(state.GetInfoForPeers()[0].Name).To(Equal("g1"))
@@ -82,11 +63,11 @@ var _ = Describe("ConsumerState", func() {
 				assertTopics(state, []string{"topic1"}, id1a, id1b, id2, id3)
 
 				_, tokens1, _ := state.CanConsume(id1a)
-				Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
+				Expect(tokens1).To(HaveLen(brokerLength))
 				_, tokens2, _ := state.CanConsume(id2)
-				Expect(tokens2).To(Equal(getTokens(brokerLength, 2, 2)))
+				Expect(tokens2).To(HaveLen(brokerLength))
 				_, tokens3, _ := state.CanConsume(id3)
-				Expect(tokens3).To(Equal(getTokens(brokerLength, 4, 2)))
+				Expect(tokens3).To(HaveLen(brokerLength))
 
 				Expect(state.GetInfoForPeers()).To(HaveLen(1))
 				Expect(state.GetInfoForPeers()[0].Name).To(Equal("g1"))
@@ -107,11 +88,11 @@ var _ = Describe("ConsumerState", func() {
 				assertTopics(state, []string{"topic1"}, id1a, id1b, id2, id3)
 
 				_, tokens1, _ := state.CanConsume(id1a)
-				Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
+				Expect(tokens1).To(HaveLen(brokerLength))
 				_, tokens2, _ := state.CanConsume(id2)
-				Expect(tokens2).To(Equal(getTokens(brokerLength, 2, 2)))
+				Expect(tokens2).To(HaveLen(brokerLength))
 				_, tokens3, _ := state.CanConsume(id3)
-				Expect(tokens3).To(Equal(getTokens(brokerLength, 4, 2)))
+				Expect(tokens3).To(HaveLen(brokerLength))
 
 				state.RemoveConnection(id1b)
 
@@ -119,7 +100,7 @@ var _ = Describe("ConsumerState", func() {
 				Expect(rebalanced).To(BeFalse()) // No change
 
 				_, tokens1, _ = state.CanConsume(id1a)
-				Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
+				Expect(tokens1).To(HaveLen(brokerLength))
 
 				id1b = addConnection(state, "a", "g1", DefaultOffsetResetPolicy, "topic1")
 				rebalanced = state.Rebalance()
@@ -153,12 +134,12 @@ var _ = Describe("ConsumerState", func() {
 					Expect(rebalanced).To(BeTrue())
 
 					_, tokens1, _ := state.CanConsume(id1)
-					Expect(tokens1).To(Equal(getTokens(brokerLength, 0, 2)))
+					Expect(tokens1).To(HaveLen(brokerLength))
 					_, tokens2, _ := state.CanConsume(id2)
 					// The id does not map to any tokens
 					Expect(tokens2).To(HaveLen(0))
 					_, tokens3, _ := state.CanConsume(id3)
-					Expect(tokens3).To(Equal(getTokens(brokerLength, 4, 2)))
+					Expect(tokens3).To(HaveLen(brokerLength))
 
 					Expect(state.GetInfoForPeers()).To(HaveLen(1))
 					Expect(state.GetInfoForPeers()[0].Name).To(Equal("g1"))
@@ -188,9 +169,9 @@ var _ = Describe("ConsumerState", func() {
 					Expect(tokens2).To(HaveLen(0))
 
 					_, tokens1, _ := state.CanConsume(id1)
-					Expect(tokens1).To(HaveLen(3))
+					Expect(tokens1).To(HaveLen(brokerLength))
 					_, tokens3, _ := state.CanConsume(id3)
-					Expect(tokens3).To(HaveLen(3))
+					Expect(tokens3).To(HaveLen(brokerLength))
 
 					Expect(state.GetInfoForPeers()).To(HaveLen(1))
 					Expect(state.GetInfoForPeers()[0].Name).To(Equal("g1"))
@@ -234,122 +215,96 @@ var _ = Describe("ConsumerState", func() {
 var _ = Describe("setConsumerAssignment()", func() {
 	topics := []string{"abc", "ced"}
 
-	It("should set the tokens for consumers with the same length", func() {
-		topology := newTestTopology(6, 0)
+	It("should set the token ranges when consumers have the same length", func() {
+		const clusterSize = 3
+		const rangesPerToken = 2
+		topology := newTestTopology(3, 0)
 		result := map[consumerKey]ConsumerInfo{}
 		keys, consumers := createTestConsumers(6)
 
-		setConsumerAssignment(result, &topology, keys, topics, consumers)
+		setConsumerAssignment(result, &topology, keys, topics, consumers, rangesPerToken)
 
-		for ordinal, k := range keys {
+		for consumerIndex, k := range keys {
 			c := result[consumerKey(k)]
-			// Use the topology to calculate the expected token
-			ringIndex := topology.GetIndex(ordinal)
+			token := GetTokenAtIndex(clusterSize, consumerIndex/rangesPerToken)
+			rangeIndex := RangeIndex(consumerIndex % rangesPerToken)
 			Expect(c.Topics).To(Equal(topics))
 			Expect(c.assignedTokens).To(HaveLen(1))
-			Expect(c.assignedTokens[0]).To(Equal(topology.GetToken(BrokerIndex(ringIndex))))
+			Expect(c.assignedTokens[0]).To(Equal(TokenRanges{
+				Token: token, Indices: []RangeIndex{rangeIndex}, ClusterSize: clusterSize}))
 		}
 	})
 
-	It("should set the tokens for when consumers are more than brokers", func() {
-		const brokerLength = 6
-		topology := newTestTopology(brokerLength, 0)
+	It("should set the tokens for when consumers are more than brokers times ranges", func() {
+		const clusterSize = 3
+		const rangesPerToken = 4
+		topology := newTestTopology(3, 0)
 		result := map[consumerKey]ConsumerInfo{}
-		keys, consumers := createTestConsumers(8)
+		keys, consumers := createTestConsumers(14)
 
-		// rearrange keys to make sure that it reorders it
-		temp := keys[0]
-		keys[0] = keys[1]
-		keys[1] = temp
+		setConsumerAssignment(result, &topology, keys, topics, consumers, rangesPerToken)
 
-		setConsumerAssignment(result, &topology, keys, topics, consumers)
-
-		for ordinal, k := range keys {
+		for consumerIndex, k := range keys {
 			c := result[consumerKey(k)]
-			ringIndex := topology.GetIndex(ordinal)
-			if ordinal < brokerLength {
-				Expect(c.Topics).To(Equal(topics))
-				Expect(c.assignedTokens).To(HaveLen(1))
-				Expect(c.assignedTokens[0]).To(Equal(topology.GetToken(BrokerIndex(ringIndex))))
+			token := GetTokenAtIndex(clusterSize, consumerIndex/rangesPerToken)
+			rangeIndex := RangeIndex(consumerIndex % rangesPerToken)
+			Expect(c.Topics).To(Equal(topics))
+			if consumerIndex < clusterSize*rangesPerToken {
+				Expect(c.assignedTokens).To(Equal([]TokenRanges{
+					{Token: token, Indices: []RangeIndex{rangeIndex}, ClusterSize: clusterSize}}))
 			} else {
-				// No topics or tokens assigned
-				Expect(c.Topics).To(HaveLen(0))
+				// The rest of the consumers are unused
 				Expect(c.assignedTokens).To(HaveLen(0))
 			}
 		}
 	})
 
-	It("should set the tokens for when consumers are less than brokers (3s)", func() {
-		topology := newTestTopology(6, 0)
+	It("should set the tokens when consumers are less than brokers (3s)", func() {
+		const clusterSize = 3
+		const rangesPerToken = 2
+		const totalRanges = clusterSize * rangesPerToken
+		topology := newTestTopology(3, 0)
 		result := map[consumerKey]ConsumerInfo{}
-		keys, consumers := createTestConsumers(3)
+		keys, consumers := createTestConsumers(4)
 
-		setConsumerAssignment(result, &topology, keys, topics, consumers)
-
-		for ordinal, k := range keys {
+		setConsumerAssignment(result, &topology, keys, topics, consumers, rangesPerToken)
+		for consumerIndex, k := range keys {
 			c := result[consumerKey(k)]
-			ringIndex := topology.GetIndex(ordinal)
+			token := GetTokenAtIndex(clusterSize, consumerIndex/rangesPerToken)
+			rangeIndex := RangeIndex(consumerIndex % rangesPerToken)
 			Expect(c.Topics).To(Equal(topics))
-			// Assign 2 tokens per consumers
-			Expect(c.assignedTokens).To(HaveLen(2))
-			Expect(c.assignedTokens[0]).To(Equal(topology.GetToken(ringIndex)))
-			Expect(c.assignedTokens[1]).To(Equal(topology.GetToken(ringIndex + 1)))
-		}
-	})
-
-	It("should set the tokens for when consumers are a lot less than brokers (3s)", func() {
-		topology := newTestTopology(48, 0)
-		result := map[consumerKey]ConsumerInfo{}
-		keys, consumers := createTestConsumers(6)
-
-		setConsumerAssignment(result, &topology, keys, topics, consumers)
-
-		for ordinal, k := range keys {
-			c := result[consumerKey(k)]
-			ringIndex := topology.GetIndex(ordinal)
-			Expect(c.Topics).To(Equal(topics))
-			Expect(c.assignedTokens).To(HaveLen(8))
-			for i := 0; i < 8; i++ {
-				Expect(c.assignedTokens[i]).To(Equal(topology.GetToken(ringIndex + BrokerIndex(i))))
+			if consumerIndex < 2 {
+				lastToken := GetTokenAtIndex(clusterSize, clusterSize-1)
+				Expect(c.assignedTokens).To(ConsistOf([]TokenRanges{
+					{Token: token, Indices: []RangeIndex{rangeIndex}, ClusterSize: clusterSize},
+					{Token: lastToken, Indices: []RangeIndex{rangeIndex}, ClusterSize: clusterSize}}))
+			} else {
+				Expect(c.assignedTokens).To(ConsistOf([]TokenRanges{
+					{Token: token, Indices: []RangeIndex{rangeIndex}, ClusterSize: clusterSize}}))
 			}
 		}
 	})
 
 	It("should set the tokens for when there's only one consumer", func() {
 		const brokerLength = 6
+		const rangesPerToken = 4
 		topology := newTestTopology(brokerLength, 0)
 		result := map[consumerKey]ConsumerInfo{}
 		keys, consumers := createTestConsumers(1)
 
-		setConsumerAssignment(result, &topology, keys, topics, consumers)
+		setConsumerAssignment(result, &topology, keys, topics, consumers, rangesPerToken)
 
 		c := result[consumerKey(keys[0])]
 		Expect(c.Topics).To(Equal(topics))
 		// Assign all tokens to the consumer
 		Expect(c.assignedTokens).To(HaveLen(6))
+		sort.Slice(c.assignedTokens, func(i, j int) bool {
+			return c.assignedTokens[i].Token < c.assignedTokens[j].Token
+		})
+
 		for i := 0; i < brokerLength; i++ {
-			Expect(c.assignedTokens[i]).To(Equal(topology.GetToken(BrokerIndex(i))))
-		}
-	})
-
-	It("should set the tokens for when there are 2 consumers", func() {
-		const brokerLength = 6
-		topology := newTestTopology(brokerLength, 0)
-		result := map[consumerKey]ConsumerInfo{}
-		keys, consumers := createTestConsumers(2)
-
-		setConsumerAssignment(result, &topology, keys, topics, consumers)
-
-		for ordinal, k := range keys {
-			c := result[consumerKey(k)]
-			ringIndex := topology.GetIndex(ordinal)
-			Expect(c.Topics).To(Equal(topics))
-			Expect(c.assignedTokens).To(HaveLen(3))
-			// The first two tokens are the natural tokens
-			// The other one is the "remaining one"
-			for i := 0; i < 2; i++ {
-				Expect(c.assignedTokens[i]).To(Equal(topology.GetToken(ringIndex + BrokerIndex(i))))
-			}
+			Expect(c.assignedTokens[i].Token).To(Equal(topology.GetToken(BrokerIndex(i))))
+			Expect(c.assignedTokens[i].Indices).To(Equal([]RangeIndex{0, 1, 2, 3}))
 		}
 	})
 })
@@ -391,21 +346,6 @@ func createTestConsumers(length int) ([]string, map[consumerKey]ConsumerInfo) {
 	}
 
 	return keys, consumers
-}
-
-func getTokens(brokerLength int, index int, n int) []TokenRanges {
-	result := []TokenRanges{}
-
-	for i := 0; i < n; i++ {
-		t := GetTokenAtIndex(brokerLength, index+i)
-		indices := make([]RangeIndex, 0, consumerRanges)
-		for j := 0; j < consumerRanges; j++ {
-			indices = append(indices, RangeIndex(j))
-		}
-		result = append(result, TokenRanges{Token: t, Indices: indices})
-	}
-
-	return result
 }
 
 func assertTopics(state *ConsumerState, topics []string, consumerIds ...string) {
