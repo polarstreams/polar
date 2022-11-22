@@ -104,7 +104,8 @@ Responds HTTP status `200 OK` when the Producer API is ready on the broker.
 The Consumer API, exposed in port `9252` by default, is used to retrieve events from a topic.
 
 Consuming requires a certain request flow to support stateless HTTP clients and still provide delivery guarantees:
-you need to register the consumer first in order to read records from a topic.
+you need to register the consumer first in order to read records from a topic. Visit the [Consumer API request-response
+flow](./consumer_flow/) documentation for more information.
 
 ### `PUT /v1/consumer/register`
 
@@ -218,9 +219,3 @@ Responds HTTP status `409 Conflict` when the consumer is not considered to be re
 Responds HTTP status `200 OK` when the Consumer API is ready on the broker.
 
 [ndjson]: http://ndjson.org/
-
-<!--TODO: Talk about the following topics-->
-<!--Flow: loop logic: 409, ... -->
-<!--Read / idle timeout-->
-<!--Ordering (producing)-->
-<!--Consumer flow Flow-->
