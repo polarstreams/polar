@@ -97,6 +97,21 @@ var _ = Describe("Token", func() {
 				"The end of range 0 of a 3-broker cluster matches end of range 1 in a 6-broker cluster")
 			Expect(start1_6).To(Equal(Token(-8454757700450211328)))
 		})
+
+		It("should work for dev mode", func() {
+			start0, end0_1 := RangeByTokenAndClusterSize(StartToken, 0, 4, 1)
+			start1_1, end1_1 := RangeByTokenAndClusterSize(StartToken, 1, 4, 1)
+			start2_1, end2_1 := RangeByTokenAndClusterSize(StartToken, 2, 4, 1)
+			start3_1, end3_1 := RangeByTokenAndClusterSize(StartToken, 3, 4, 1)
+
+			Expect(start0).To(Equal(StartToken))
+			Expect(end0_1).To(Equal(start1_1))
+			Expect(end1_1).To(Equal(start2_1))
+			Expect(start2_1).To(Equal(Token(0)))
+			Expect(end2_1).To(Equal(start3_1))
+			Expect(start3_1).To(Equal(Token(4611686018427387904)))
+			Expect(end3_1).To(Equal(Token(math.MaxInt64)))
+		})
 	})
 
 	Describe("HashToken()", func() {

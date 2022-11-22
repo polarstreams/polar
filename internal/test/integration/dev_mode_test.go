@@ -51,6 +51,7 @@ var _ = Describe("Dev mode", func() {
 		// Restart
 		b0.Start()
 		b0.WaitForStart()
+		time.Sleep(50 * time.Millisecond)
 
 		client := NewTestClient(nil)
 		expectOk(client.ProduceJson(0, "abc", `{"hello": "world"}`, ""), "should produce json")
