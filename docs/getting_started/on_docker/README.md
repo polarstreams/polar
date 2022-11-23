@@ -8,7 +8,11 @@ docker run --rm --env BARCO_DEV_MODE=true -p 9250-9252:9250-9252 barcostreams/ba
 ```
 
 You can start producing messages using a [client library][go-client] or directly invoking the Barco's
-[REST API][rest-api], for example:
+[REST API][rest-api]. You can use your technology of choice to send requests to the REST API, there are some examples
+in [Rust][example-rust], [Node.js][example-nodejs] and others in the [Client Examples][client-examples]
+repository.
+
+For the purpose of this guide, we will use `curl` as an HTTP client.
 
 ```shell
 curl -X POST -i -d '{"hello":"world"}' \
@@ -65,3 +69,6 @@ Read more about the API flow and guarantees on the [REST API Documentation][rest
 
 [rest-api]: ../../rest_api/
 [go-client]: https://github.com/barcostreams/go-client
+[example-rust]: https://github.com/barcostreams/client-examples/tree/main/rust
+[example-nodejs]: https://github.com/barcostreams/client-examples/tree/main/nodejs
+[client-examples]: https://github.com/barcostreams/client-examples
