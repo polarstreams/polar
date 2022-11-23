@@ -60,6 +60,14 @@ func NewDefaultOffset(topic *TopicDataId, clusterSize int, value int64) Offset {
 	}
 }
 
+// Compares the values in the struct, except the source
+func (o *Offset) Equals(other *Offset) bool {
+	if o.GenId() == other.GenId() && o.Index == other.Index && o.Offset == other.Offset {
+		return true
+	}
+	return false
+}
+
 func (o *Offset) GenId() GenId {
 	return GenId{
 		Start:   o.Token,

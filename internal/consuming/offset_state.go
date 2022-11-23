@@ -640,8 +640,9 @@ func (s *defaultOffsetState) setMap(key OffsetStoreKey, value *Offset) bool {
 		}
 
 		// 1x1 replace
+		isNewValue := !value.Equals(&list[offsetIndex].value)
 		list[offsetIndex].value = *value
-		return true
+		return isNewValue
 	}
 
 	if !Intersects(item.start, item.end, start, end) {
