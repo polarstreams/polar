@@ -418,6 +418,23 @@ var _ = Describe("defaultOffsetState", func() {
 			Expect(s.offsetMap[key][4]).To(Equal(offsetRange{start: startC3T2_3, end: endC3T2_3, value: offsetEnd}))
 		})
 
+		It("should return false when offset already exist with the same value", func ()  {
+			s := newTestOffsetState(offsetMap, consumerRanges)
+			result := s.Set(group, topic, valueC3_T0_1, OffsetCommitNone)
+			Expect(result).To(BeFalse())
+
+			// Even with different source
+			value := valueC3_T0_1
+			value.Source.Timestamp = time.Now().UnixMicro()
+			result = s.Set(group, topic, value, OffsetCommitNone)
+			Expect(result).To(BeFalse())
+
+			// When changing the actual value, it should return true
+			value.Offset++
+			result = s.Set(group, topic, value, OffsetCommitNone)
+			Expect(result).To(BeTrue(), "should return true when changing the actual value")
+		})
+
 		It("should insert a range at the beginning", func() {
 			// Empty initial map
 			s := newTestOffsetState(nil, consumerRanges)
