@@ -15,8 +15,8 @@ This is a summary of the request/response flow of a typical application that con
   * Poll each broker
 * Unregister consumer
 
-There's an [implementation example in Node.js][nodejs-example] of the request-response flow in the
-[Client Examples][client-examples] repository.
+There are implementation examples in [Rust][example-rust] and in [Node.js][example-nodejs] of the request-response
+flow in the [Client Examples][client-examples] repository.
 
 ## Inactivity timeouts
 
@@ -37,5 +37,6 @@ If a consumer wants to manually commit the reader position without requesting mo
 request](../README.md#post-v1consumercommit). Additionally, a [goodbye request](../README.md#post-v1consumergoodbye)
 will also commit the position as well as unregistering the consumer.
 
-[nodejs-example]: https://github.com/barcostreams/client-examples/tree/main/nodejs/consuming
+[example-nodejs]: https://github.com/barcostreams/client-examples/tree/main/nodejs
+[example-rust]: https://github.com/barcostreams/client-examples/tree/main/rust
 [client-examples]: https://github.com/barcostreams/client-examples/
