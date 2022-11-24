@@ -2,6 +2,7 @@ package types
 
 import "github.com/polarstreams/polar/internal/metrics"
 
+// TODO: REMOVE
 type FlowController interface {
 	// Allocate makes sure that buffer memory usage remains within the predefined boundaries.
 	Allocate(length int)
