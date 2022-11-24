@@ -413,22 +413,13 @@ var _ = Describe("A 3 node cluster", func() {
 			client.CloseIdleConnections() // Close the connection pools
 
 			// Poll from all the brokers
-			messages := pollJsonUntil(client, "c1", totalMessages)
+			messages := pollJsonUntil(3, client, "c1", totalMessages)
 			for i := 0; i < totalMessages; i++ {
 				Expect(messages).To(ContainElement(map[string]any{"id": float64(i)}))
 			}
 
-			for i := 0; i < 2; i++ {
-				req, _ := http.NewRequest(http.MethodPost, "http://127.0.0.1:9252/v1/consumer/goodbye?consumerId=c1", nil)
-				resp, err := client.Do(req)
-				Expect(err).NotTo(HaveOccurred())
-				if i == 0 {
-					expectStatusOk(resp)
-				} else {
-					Expect(resp.StatusCode).To(Equal(http.StatusConflict))
-					resp.Body.Close()
-				}
-			}
+			req, _ = http.NewRequest(http.MethodPost, "http://127.0.0.1:9252/v1/consumer/goodbye?consumerId=c1", nil)
+			doRequest(client, req, http.StatusOK)
 		})
 
 		It("should get topology changes and resize the ring", func() {
@@ -472,6 +463,7 @@ var _ = Describe("A 3 node cluster", func() {
 
 			const messagesByGroup = 12
 			const topic = "topic1"
+			const clusterSize = 3
 
 			// Produce a few messages initially
 			produceOrderedJson(pClient, topic, 0, messagesByGroup)
@@ -489,13 +481,13 @@ var _ = Describe("A 3 node cluster", func() {
 			registerStatelessConsumer(consumer2Client, "c2", "group2", topic, StartFromLatest)
 
 			// Consumer1: Start from earliest
-			messages := pollJsonUntil(consumer1Client, "c1", messagesByGroup)
+			messages := pollJsonUntil(clusterSize, consumer1Client, "c1", messagesByGroup)
 			for i := 0; i < messagesByGroup; i++ {
 				Expect(messages).To(ContainElement(map[string]any{"id": float64(i)}))
 			}
 
 			// Consumer2: Start from latest since subscribed
-			messages = pollTimes(consumer2Client, "c2", 2)
+			messages = pollTimes(clusterSize, consumer2Client, "c2", 2)
 			Expect(messages).To(HaveLen(0), "Consumer 2 is starting from latest, there shouldn't be any messages")
 
 			// Produce some more messages
@@ -503,13 +495,13 @@ var _ = Describe("A 3 node cluster", func() {
 			time.Sleep(SegmentFlushInterval * 2)
 
 			// Consumer2: Start from latest since subscribed
-			messages = pollJsonUntil(consumer2Client, "c2", messagesByGroup)
+			messages = pollJsonUntil(clusterSize, consumer2Client, "c2", messagesByGroup)
 			for i := messagesByGroup; i < messagesByGroup*2; i++ {
 				Expect(messages).To(ContainElement(map[string]any{"id": float64(i)}))
 			}
 
 			// Consumer1: Continue reading
-			messages = pollJsonUntil(consumer1Client, "c1", messagesByGroup)
+			messages = pollJsonUntil(clusterSize, consumer1Client, "c1", messagesByGroup)
 			for i := messagesByGroup; i < messagesByGroup*2; i++ {
 				Expect(messages).To(ContainElement(map[string]any{"id": float64(i)}))
 			}
@@ -517,13 +509,12 @@ var _ = Describe("A 3 node cluster", func() {
 	})
 })
 
-func pollJsonUntil(client *http.Client, consumerId string, totalMessages int) []map[string]any {
+func pollJsonUntil(clusterSize int, client *http.Client, consumerId string, totalMessages int) []map[string]any {
 	// Poll from all the brokers
 	messages := []map[string]any{}
 	finished := false
 	for i := 0; i < 20 && !finished; i++ {
-		messages = append(messages, pollTimes(client, consumerId, 1)...)
-
+		messages = append(messages, pollTimes(clusterSize, client, consumerId, 1)...)
 		if len(messages) == totalMessages {
 			finished = true
 			log.Debug().Msgf("Polled %d messages, finishing polling", totalMessages)
@@ -542,10 +533,10 @@ func pollJsonUntil(client *http.Client, consumerId string, totalMessages int) []
 }
 
 // Polls on each broker for a given amount of times
-func pollTimes(client *http.Client, consumerId string, times int) []map[string]any {
+func pollTimes(clusterSize int, client *http.Client, consumerId string, times int) []map[string]any {
 	messages := []map[string]any{}
 	for i := 0; i < times; i++ {
-		for brokerIp := 1; brokerIp <= 3; brokerIp++ {
+		for brokerIp := 1; brokerIp <= clusterSize; brokerIp++ {
 			pollUrl := fmt.Sprintf("http://127.0.0.%d:9252/v1/consumer/poll?consumerId=%s", brokerIp, consumerId)
 			req, _ := http.NewRequest(http.MethodPost, pollUrl, nil)
 			req.Header.Add("Accept", "application/json")
@@ -611,6 +602,14 @@ func expectOk(resp *http.Response, description ...interface{}) {
 func expectStatusOk(resp *http.Response) {
 	defer resp.Body.Close()
 	Expect(resp.StatusCode).To(Equal(http.StatusOK))
+}
+
+// Calls client.Do() and check that the response is has the provided status
+func doRequest(client *http.Client, req *http.Request, status int) {
+	resp, err := client.Do(req)
+	Expect(err).NotTo(HaveOccurred())
+	defer resp.Body.Close()
+	Expect(resp.StatusCode).To(Equal(status))
 }
 
 func expectOkOrMessage(resp *http.Response, message string, description ...interface{}) {

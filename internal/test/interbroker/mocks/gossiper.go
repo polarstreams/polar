@@ -256,6 +256,20 @@ func (_m *Gossiper) SendCommittedOffset(ordinal int, offsetKv *types.OffsetStore
 	return r0
 }
 
+// SendConsumerCommit provides a mock function with given fields: ordinal, id
+func (_m *Gossiper) SendConsumerCommit(ordinal int, id string) error {
+	ret := _m.Called(ordinal, id)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int, string) error); ok {
+		r0 = rf(ordinal, id)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SendConsumerGroups provides a mock function with given fields: ordinal, groups
 func (_m *Gossiper) SendConsumerGroups(ordinal int, groups []types.ConsumerGroup) error {
 	ret := _m.Called(ordinal, groups)
@@ -277,6 +291,20 @@ func (_m *Gossiper) SendConsumerRegister(ordinal int, id string, group string, t
 	var r0 error
 	if rf, ok := ret.Get(0).(func(int, string, string, []string, types.OffsetResetPolicy) error); ok {
 		r0 = rf(ordinal, id, group, topics, onNewGroup)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// SendConsumerUnregister provides a mock function with given fields: ordinal, id
+func (_m *Gossiper) SendConsumerUnregister(ordinal int, id string) error {
+	ret := _m.Called(ordinal, id)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int, string) error); ok {
+		r0 = rf(ordinal, id)
 	} else {
 		r0 = ret.Error(0)
 	}

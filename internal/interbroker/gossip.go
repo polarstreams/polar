@@ -72,6 +72,10 @@ type Gossiper interface {
 
 	SendConsumerRegister(ordinal int, id string, group string, topics []string, onNewGroup OffsetResetPolicy) error
 
+	SendConsumerCommit(ordinal int, id string) error
+
+	SendConsumerUnregister(ordinal int, id string) error
+
 	// Sends a message to the broker with the committed offset of a consumer group
 	SendCommittedOffset(ordinal int, offsetKv *OffsetStoreKeyValue) error
 
@@ -347,7 +351,7 @@ func (g *gossiper) requestGet(ordinal int, baseUrl string) (*http.Response, erro
 
 	resp, err := c.gossipClient.Get(g.getPeerUrl(broker, baseUrl))
 
-	if err == nil && resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+	if err == nil && !utils.IsSuccess(resp.StatusCode) {
 		return nil, errors.New(resp.Status)
 	}
 
@@ -380,7 +384,7 @@ func (g *gossiper) requestPost(ordinal int, baseUrl string, body []byte) (*http.
 
 	resp, err := c.gossipClient.Post(g.getPeerUrl(broker, baseUrl), contentType, bytes.NewReader(body))
 
-	if err == nil && resp.StatusCode != http.StatusOK {
+	if err == nil && !utils.IsSuccess(resp.StatusCode) {
 		return nil, types.NewHttpError(resp.StatusCode, resp.Status)
 	}
 
@@ -547,6 +551,18 @@ func (g *gossiper) SendConsumerRegister(ordinal int, id string, group string, to
 	}
 
 	r, err := g.requestPost(ordinal, conf.GossipConsumerRegisterUrl, jsonBody)
+	defer bodyClose(r)
+	return err
+}
+
+func (g *gossiper) SendConsumerCommit(ordinal int, id string) error {
+	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipConsumerCommitUrl, id), nil)
+	defer bodyClose(r)
+	return err
+}
+
+func (g *gossiper) SendConsumerUnregister(ordinal int, id string) error {
+	r, err := g.requestPost(ordinal, fmt.Sprintf(conf.GossipConsumerUnregisterUrl, id), nil)
 	defer bodyClose(r)
 	return err
 }

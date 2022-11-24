@@ -278,7 +278,10 @@ func (s *SegmentReader) storeOffset(lastCommit *time.Time, manual bool) {
 	}
 
 	if commitType == OffsetCommitAll {
-		log.Debug().Str("group", s.group).Msgf("Setting offset for %s on all replicas: %s", &s.Topic, &value)
+		log.Debug().
+			Str("group", s.group).
+			Int64("value", value.Offset).
+			Msgf("Setting offset for %s on all replicas: %s", &s.Topic, &value)
 	}
 
 	s.offsetState.Set(s.group, s.Topic.Name, value, commitType)

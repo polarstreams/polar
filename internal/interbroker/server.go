@@ -12,6 +12,7 @@ import (
 	"github.com/barcostreams/barco/internal/conf"
 	"github.com/barcostreams/barco/internal/data"
 	"github.com/barcostreams/barco/internal/metrics"
+	"github.com/barcostreams/barco/internal/types"
 	. "github.com/barcostreams/barco/internal/types"
 	. "github.com/barcostreams/barco/internal/utils"
 	"github.com/julienschmidt/httprouter"
@@ -93,6 +94,8 @@ func (g *gossiper) acceptHttpConnections() error {
 			router.POST(conf.GossipConsumerGroupsInfoUrl, ToPostHandle(g.postConsumerGroupInfoHandler))
 			router.POST(conf.GossipConsumerOffsetUrl, ToPostHandle(g.postConsumerOffsetHandler))
 			router.POST(conf.GossipConsumerRegisterUrl, ToPostHandle(g.postConsumerRegister))
+			router.POST(fmt.Sprintf(conf.GossipConsumerCommitUrl, ":id"), ToPostHandle(g.postConsumerCommit))
+			router.POST(fmt.Sprintf(conf.GossipConsumerUnregisterUrl, ":id"), ToPostHandle(g.postConsumerUnregister))
 
 			// Routing message is part of gossip but it's usually made using a different client connection
 			router.POST(fmt.Sprintf(conf.RoutingMessageUrl, ":topic"), ToPostHandle(g.postReroutingHandler))
@@ -378,6 +381,23 @@ func (g *gossiper) postConsumerRegister(w http.ResponseWriter, r *http.Request, 
 		return err
 	}
 	return g.consumerInfoListener.OnRegisterFromPeer(message.Id, message.Group, message.Topics, message.OnNewGroup)
+}
+
+func (g *gossiper) postConsumerCommit(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	id := ps.ByName("id")
+	if id == "" {
+		return types.NewHttpError(http.StatusBadRequest, "consumer id is required")
+	}
+
+	return g.consumerInfoListener.OnCommitFromPeer(id)
+}
+
+func (g *gossiper) postConsumerUnregister(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
+	id := ps.ByName("id")
+	if id == "" {
+		return types.NewHttpError(http.StatusBadRequest, "consumer id is required")
+	}
+	return g.consumerInfoListener.OnUnregisterFromPeer(id)
 }
 
 func (g *gossiper) postReroutingHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) error {
