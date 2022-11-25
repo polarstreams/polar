@@ -16,7 +16,7 @@ func TestSuite(t *testing.T) {
 
 var _ = Describe("bufferPool", func() {
 	It("should get a single buffer", func() {
-		pool := newBufferPool(16 * baseSize)
+		pool := NewBufferPool(16 * baseSize)
 		values := pool.Get(baseSize * 5)
 		Expect(len(values)).To(Equal(5))
 		Expect(values[0]).To(HaveLen(baseSize))
@@ -26,7 +26,7 @@ var _ = Describe("bufferPool", func() {
 
 	It("should get in parallel", func() {
 		const expectedSize = baseSize * 11
-		pool := newBufferPool(16 * baseSize)
+		pool := NewBufferPool(16 * baseSize)
 		c := make(chan [][]byte, 100)
 		go func() {
 			values := pool.Get(baseSize * 5)
@@ -58,7 +58,7 @@ var _ = Describe("bufferPool", func() {
 
 	It("should block when no more space is available", func() {
 		var freeInvoked atomic.Int32
-		pool := newBufferPool(baseSize * 16)
+		pool := NewBufferPool(baseSize * 16)
 		value1 := pool.Get(baseSize * 10)
 		value2 := pool.Get(baseSize * 4)
 		go func() {

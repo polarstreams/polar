@@ -7,13 +7,18 @@ import (
 
 const baseSize = 8192
 
+type BufferPool interface {
+	Free(buffers [][]byte)
+	Get(length int) [][]byte
+}
+
 type bufferPool struct {
 	requests         chan *bufferRequest
 	availableBuffers chan []byte
 	size             int
 }
 
-func newBufferPool(length int) *bufferPool {
+func NewBufferPool(length int) BufferPool {
 	normalizedLength := (length / baseSize) * (baseSize + 1)
 	metrics.AllocationPoolAvailableBytes.Set(float64(normalizedLength))
 	chunks := normalizedLength / baseSize

@@ -15,6 +15,7 @@ import (
 	"github.com/polarstreams/polar/internal/discovery"
 	"github.com/polarstreams/polar/internal/interbroker"
 	"github.com/polarstreams/polar/internal/metrics"
+	"github.com/polarstreams/polar/internal/producing/pooling"
 	"github.com/polarstreams/polar/internal/types"
 	"github.com/polarstreams/polar/internal/utils"
 	"github.com/julienschmidt/httprouter"
@@ -38,25 +39,25 @@ func NewProducer(
 	coalescerMap := utils.NewCopyOnWriteMap()
 
 	return &producer{
-		config:         config,
-		topicGetter:    topicGetter,
-		datalog:        datalog,
-		gossiper:       gossiper,
-		leaderGetter:   leaderGetter,
-		coalescerMap:   coalescerMap,
-		flowController: types.NewFlowControl(config.AllocationPoolSize()),
+		config:       config,
+		topicGetter:  topicGetter,
+		datalog:      datalog,
+		gossiper:     gossiper,
+		leaderGetter: leaderGetter,
+		coalescerMap: coalescerMap,
+		bufferPool:   pooling.NewBufferPool(config.AllocationPoolSize()),
 	}
 }
 
 type producer struct {
-	config         conf.ProducerConfig
-	topicGetter    topics.TopicGetter
-	datalog        data.Datalog
-	gossiper       interbroker.Gossiper
-	leaderGetter   discovery.TopologyGetter
-	coalescerMap   *utils.CopyOnWriteMap
-	server         *http.Server
-	flowController types.FlowController
+	config       conf.ProducerConfig
+	topicGetter  topics.TopicGetter
+	datalog      data.Datalog
+	gossiper     interbroker.Gossiper
+	leaderGetter discovery.TopologyGetter
+	coalescerMap *utils.CopyOnWriteMap
+	server       *http.Server
+	bufferPool   pooling.BufferPool
 }
 
 func (p *producer) Init() error {
@@ -156,12 +157,18 @@ func (p *producer) handleMessage(
 			fmt.Sprintf("Leader for token %d could not be found", replication.Token))
 	}
 
-	p.flowController.Allocate(int(contentLength))
-	defer p.flowController.Free(int(contentLength))
-
 	if !leader.IsSelf {
 		// Route the message as-is
 		return p.gossiper.SendToLeader(replication, topic, querystring, contentLength, contentType, body)
+	}
+
+	// Use a buffer from the pool (may block when there isn't free space)
+	buffers := p.bufferPool.Get(int(contentLength))
+	defer p.bufferPool.Free(buffers)
+	bodyLength, err := readBody(buffers, body)
+	if err != nil {
+		log.Err(err).Msgf("Producer server could not read body of expected length %d", contentLength)
+		return fmt.Errorf("Producer server could not read body of expected length %d", contentLength)
 	}
 
 	timestampMicros := time.Now().UnixMicro()
@@ -172,7 +179,7 @@ func (p *producer) handleMessage(
 	}
 
 	coalescer := p.getCoalescer(topic, replication.Token, replication.RangeIndex)
-	if err := coalescer.append(replication, uint32(contentLength), timestampMicros, contentType, body); err != nil {
+	if err := coalescer.append(replication, uint32(bodyLength), timestampMicros, contentType, buffers); err != nil {
 		return p.adaptCoalescerError(err)
 	}
 	return nil
@@ -186,6 +193,25 @@ func (p *producer) adaptCoalescerError(err error) error {
 			fmt.Sprintf("Producer request could not be handled at the moment: %s", err.Error()))
 	}
 	return err
+}
+
+func readBody(buffers [][]byte, body io.Reader) (int, error) {
+	length := 0
+	for i, b := range buffers {
+		n, err := io.ReadFull(body, b)
+		length += n
+		if err != nil {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				if i == len(buffers)-1 {
+					// EOF is expected on the last buffer
+					return length, nil
+				}
+			}
+			return length, err
+		}
+	}
+
+	return length, nil
 }
 
 func (p *producer) getCoalescer(topicName string, token types.Token, rangeIndex types.RangeIndex) *coalescer {

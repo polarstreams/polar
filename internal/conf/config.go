@@ -124,7 +124,7 @@ type DiscovererConfig interface {
 type ProducerConfig interface {
 	BasicConfig
 	DatalogConfig
-	AllocationPoolSize() int //  The number of bytes in the shared producer allocation pool
+	AllocationPoolSize() int //  TODO: CHANGE NAME The number of bytes in the shared producer allocation pool
 }
 
 type ConsumerConfig interface {
