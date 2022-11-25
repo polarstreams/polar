@@ -64,7 +64,7 @@ var _ = Describe("recordItem", func() {
 				length:      uint32(len(data)),
 				timestamp:   time.Now().UnixMicro(),
 				contentType: ContentTypeNDJSON,
-				buffers:     [][]byte{
+				buffers: [][]byte{
 					dataBuf[:22],
 					dataBuf[22:26],
 					dataBuf[26:27],
@@ -82,7 +82,7 @@ var _ = Describe("recordItem", func() {
 				length:      uint32(len(data)),
 				timestamp:   time.Now().UnixMicro(),
 				contentType: ContentTypeNDJSON,
-				buffers:     [][]byte{
+				buffers: [][]byte{
 					dataBuf[:22],
 					dataBuf[22:26],
 					dataBuf[26:27],

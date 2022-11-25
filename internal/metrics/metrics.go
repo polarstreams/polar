@@ -37,12 +37,12 @@ var (
 	})
 
 	ReroutedSent = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "polar_producing_rerouting_sent_total",
+		Name: "polar_producer_rerouting_sent_total",
 		Help: "The total number of re-routed messages sent by this broker",
 	}, []string{"target"})
 
 	ReroutedReceived = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "polar_producing_rerouting_received_total",
+		Name: "polar_producer_rerouting_received_total",
 		Help: "The total number of re-routed messages received by the broker",
 	})
 

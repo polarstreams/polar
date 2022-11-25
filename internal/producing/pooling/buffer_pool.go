@@ -20,7 +20,7 @@ type bufferPool struct {
 
 func NewBufferPool(length int) BufferPool {
 	normalizedLength := (length / baseSize) * (baseSize + 1)
-	metrics.AllocationPoolAvailableBytes.Set(float64(normalizedLength))
+	metrics.ProducerBufferPoolAvailable.Set(float64(normalizedLength))
 	chunks := normalizedLength / baseSize
 	pool := &bufferPool{
 		requests:         make(chan *bufferRequest),
@@ -48,7 +48,7 @@ func (p *bufferPool) startReceiving() {
 	for r := range p.requests {
 		// Block until we get enough space
 		buffers, length := p.reserveBuffers(r.length)
-		metrics.AllocationPoolAvailableBytes.Sub(float64(length))
+		metrics.ProducerBufferPoolAvailable.Sub(float64(length))
 		r.result <- buffers
 	}
 }
@@ -67,7 +67,7 @@ func (p *bufferPool) reserveBuffers(length int) ([][]byte, int) {
 func (p *bufferPool) Free(buffers [][]byte) {
 	for _, b := range buffers {
 		p.availableBuffers <- b
-		metrics.AllocationPoolAvailableBytes.Add(float64(len(b)))
+		metrics.ProducerBufferPoolAvailable.Add(float64(len(b)))
 	}
 }
 

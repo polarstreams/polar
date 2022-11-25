@@ -63,7 +63,7 @@ func (r *recordItem) marshalRecordsByLine(w io.Writer, length uint32) (totalReco
 				recordBodyLength += len(token)
 			}
 			if index < len(buf) && recordBodyLength > 0 {
-				if err := marshalRecord(w, r.timestamp, uint32(recordBodyLength), recordBody); err != nil  {
+				if err := marshalRecord(w, r.timestamp, uint32(recordBodyLength), recordBody); err != nil {
 					return totalRecords, err
 				}
 				totalRecords++
@@ -73,9 +73,9 @@ func (r *recordItem) marshalRecordsByLine(w io.Writer, length uint32) (totalReco
 		}
 	}
 
-	if (recordBodyLength > 0) {
+	if recordBodyLength > 0 {
 		totalRecords++
-		if err := marshalRecord(w, r.timestamp, uint32(recordBodyLength), recordBody); err != nil  {
+		if err := marshalRecord(w, r.timestamp, uint32(recordBodyLength), recordBody); err != nil {
 			return totalRecords, err
 		}
 	}

@@ -35,7 +35,7 @@ const (
 	envReplicationTimeoutDuration      = "POLAR_REPLICATION_TIMEOUT_DURATION"
 	envReplicationWriteTimeoutDuration = "POLAR_REPLICATION_WRITE_TIMEOUT_DURATION"
 	envMaxSegmentSize                  = "POLAR_MAX_SEGMENT_FILE_SIZE"
-	envAllocationPoolSize              = "POLAR_ALLOCATION_POOL_SIZE"
+	envProducerBufferPoolSize          = "POLAR_PRODUCER_BUFFER_POOL_SIZE"
 	envConsumerAddDelay                = "POLAR_CONSUMER_ADD_DELAY_MS"
 	envConsumerReadTimeout             = "POLAR_CONSUMER_READ_TIMEOUT_MS"
 	envConsumerRanges                  = "POLAR_CONSUMER_RANGES"
@@ -62,7 +62,7 @@ const (
 	defaultLogRetention            = "168h" // 7 days
 	defaultReplicationTimeout      = "1s"
 	defaultReplicationWriteTimeout = "500ms"
-	defaultAllocationPoolSize      = 32 * MiB
+	defaultProducerBufferPoolSize  = 32 * MiB
 )
 
 var hostRegex = regexp.MustCompile(`([\w\-.]+?)-(\d+)`)
@@ -124,7 +124,7 @@ type DiscovererConfig interface {
 type ProducerConfig interface {
 	BasicConfig
 	DatalogConfig
-	AllocationPoolSize() int //  TODO: CHANGE NAME The number of bytes in the shared producer allocation pool
+	ProducerBufferPoolSize() int
 }
 
 type ConsumerConfig interface {
@@ -312,8 +312,8 @@ func (c *config) MaxSegmentSize() int {
 	return envInt(envMaxSegmentSize, 1024*MiB)
 }
 
-func (c *config) AllocationPoolSize() int {
-	return envInt(envAllocationPoolSize, defaultAllocationPoolSize)
+func (c *config) ProducerBufferPoolSize() int {
+	return envInt(envProducerBufferPoolSize, defaultProducerBufferPoolSize)
 }
 
 func (c *config) SegmentBufferSize() int {

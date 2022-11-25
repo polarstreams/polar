@@ -45,7 +45,7 @@ func NewProducer(
 		gossiper:     gossiper,
 		leaderGetter: leaderGetter,
 		coalescerMap: coalescerMap,
-		bufferPool:   pooling.NewBufferPool(config.AllocationPoolSize()),
+		bufferPool:   pooling.NewBufferPool(config.ProducerBufferPoolSize()),
 	}
 }
 
