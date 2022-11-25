@@ -418,7 +418,7 @@ var _ = Describe("defaultOffsetState", func() {
 			Expect(s.offsetMap[key][4]).To(Equal(offsetRange{start: startC3T2_3, end: endC3T2_3, value: offsetEnd}))
 		})
 
-		It("should return false when offset already exist with the same value", func ()  {
+		It("should return false when offset already exist with the same value", func() {
 			s := newTestOffsetState(offsetMap, consumerRanges)
 			result := s.Set(group, topic, valueC3_T0_1, OffsetCommitNone)
 			Expect(result).To(BeFalse())

@@ -221,6 +221,11 @@ func InParallel(length int, f func(int) error) []chan error {
 	return result
 }
 
+// Runs in parallel and returns an error if any is found
+func InParallelAnyError(length int, f func(int) error) error {
+	return AnyError(CollectErrors(InParallel(length, f)))
+}
+
 // Collects single messages from each channel
 func CollectErrors(channels []chan error) []error {
 	result := make([]error, len(channels))
@@ -273,4 +278,9 @@ func IfEmpty(value string, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+// Returns true for 2xx status code
+func IsSuccess(code int) bool {
+	return code >= 200 && code < 300
 }

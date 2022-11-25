@@ -27,6 +27,11 @@ type ConsumerInfoListener interface {
 
 	// Invoked when a consumer should be registered as a result of a peer request
 	OnRegisterFromPeer(id string, group string, topics []string, onNewGroup OffsetResetPolicy) error
+
+	// Invoked when a consumer offset should be committed locally as a result of a peer request
+	OnCommitFromPeer(id string) error
+
+	OnUnregisterFromPeer(id string) error
 }
 
 type ReroutingListener interface {

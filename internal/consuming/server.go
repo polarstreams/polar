@@ -429,17 +429,19 @@ func (c *consumer) postManualCommit(
 	}
 	tc.SetAsRead()
 	id := tc.Id()
-	group, tokens, _ := logsToServe(c.state, c.topologyGetter, id)
-	if len(tokens) == 0 {
-		log.Debug().
-			Msgf("Received consumer client manual commit from connection '%s' with no assigned tokens", id)
-		NoContentResponse(w, consumerNoOwnedDataDelay)
-		return nil
-	}
 
-	log.Debug().Msgf("Received consumer client manual commit from connection '%s'", id)
-	groupReadQueue := c.getOrCreateReadQueue(group)
-	groupReadQueue.manualCommit(id, w)
+	if tc.IsStateless() {
+		// Commit on peers
+		peers := c.topologyGetter.Topology().Peers()
+		err := InParallelAnyError(len(peers), func(i int) error {
+			return c.gossiper.SendConsumerCommit(peers[i].Ordinal, id)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	c.manualCommitLocal(tc.Id(), "local commit request", w)
+
 	return nil
 }
 
@@ -454,21 +456,44 @@ func (c *consumer) postGoodbye(
 	}
 
 	id := tc.Id()
+	statelessConsumer := tc.IsStateless()
+	peers := c.topologyGetter.Topology().Peers()
 	log.Debug().Msgf("Processing consumer goodbye from '%s'", id)
 
 	if r.URL.Query().Get(commitQueryKey) != "false" {
-		group, tokens, _ := logsToServe(c.state, c.topologyGetter, id)
-		if len(tokens) > 0 {
-			log.Debug().Msgf("Committing offset as part of goodbye for consumer '%s'", id)
-			groupReadQueue := c.getOrCreateReadQueue(group)
-			groupReadQueue.manualCommit(id, ignoreResponse{})
+		// Commit first
+		if statelessConsumer {
+			err := InParallelAnyError(len(peers), func(i int) error {
+				return c.gossiper.SendConsumerCommit(peers[i].Ordinal, id)
+			})
+			if err != nil {
+				return err
+			}
 		}
+		c.manualCommitLocal(id, "goodbye", ignoreResponse{})
 	}
 
 	c.unRegister(id, !tc.IsStateless())
 	tc.Close()
+
+	// Unregister on peers in the background
+	go func() {
+		_ = InParallelAnyError(len(peers), func(i int) error {
+			return c.gossiper.SendConsumerUnregister(peers[i].Ordinal, id)
+		})
+	}()
+
 	RespondText(w, "OK")
 	return nil
+}
+
+func (c *consumer) manualCommitLocal(id string, messageType string, w http.ResponseWriter) {
+	group, tokens, _ := logsToServe(c.state, c.topologyGetter, id)
+	if len(tokens) > 0 {
+		log.Debug().Msgf("Committing offset as part of %s for consumer '%s'", messageType, id)
+		groupReadQueue := c.getOrCreateReadQueue(group)
+		groupReadQueue.manualCommit(id, w)
+	}
 }
 
 func (c *consumer) getOrCreateReadQueue(group string) *groupReadQueue {
@@ -563,6 +588,16 @@ func (c *consumer) OnRegisterFromPeer(id string, group string, topics []string, 
 	tc.TrackAsStateless(id)
 
 	return c.addConnectionAndRebalance(tc, consumerInfo, false)
+}
+
+func (c *consumer) OnUnregisterFromPeer(id string) error {
+	c.unRegister(id, false)
+	return nil
+}
+
+func (c *consumer) OnCommitFromPeer(id string) error {
+	c.manualCommitLocal(id, "gossip commit request", ignoreResponse{})
+	return nil
 }
 
 func (c *consumer) sendConsumerGroupsToPeers() {
