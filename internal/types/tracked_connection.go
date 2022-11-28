@@ -35,18 +35,6 @@ func NewTrackedConnection(conn net.Conn, closeHandler func(*TrackedConnection)) 
 	}
 }
 
-// Creates a new TrackedConnection using the provided tcp conn.
-func NewFailedConnection() *TrackedConnection {
-	isOpen := atomic.Value{}
-	isOpen.Store(false)
-	return &TrackedConnection{
-		conn:         nil,
-		isOpen:       isOpen,
-		closeHandler: nil,
-		id:           uuid.New(),
-	}
-}
-
 // IsOpen() returns true when the connection is known to be open.
 func (c *TrackedConnection) IsOpen() bool {
 	v := c.isOpen.Load()

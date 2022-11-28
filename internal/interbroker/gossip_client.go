@@ -176,10 +176,8 @@ func (g *gossiper) onHostShuttingDown(b *BrokerInfo) {
 }
 
 func (g *gossiper) createClient(broker BrokerInfo) *clientInfo {
-	gossipConnection := &atomic.Value{}
 
 	clientInfo := &clientInfo{
-		gossipConnection:         gossipConnection,
 		dataConn:                 &atomic.Value{},
 		hostName:                 broker.HostName,
 		isConnected:              0,
@@ -201,8 +199,6 @@ func (g *gossiper) createClient(broker BrokerInfo) *clientInfo {
 				log.Debug().Msgf("Creating gossip connection to %s", addr)
 				conn, err := net.Dial(network, addr)
 				if err != nil {
-					// Clean whatever is in cache with a connection marked as closed
-					gossipConnection.Store(NewFailedConnection())
 					clientInfo.startReconnection(g, &broker)
 					return conn, err
 				}
@@ -216,9 +212,6 @@ func (g *gossiper) createClient(broker BrokerInfo) *clientInfo {
 					clientInfo.startReconnection(g, &broker)
 				})
 
-				// Store it at clientInfo level to retrieve the connection status later
-				// TODO: Unused, maybe remove
-				gossipConnection.Store(c)
 				return c, nil
 			},
 			// Use an eager health check setting at the cost of a few bytes/sec
@@ -274,7 +267,6 @@ func (g *gossiper) getClientInfo(ordinal int) *clientInfo {
 type clientInfo struct {
 	gossipClient             *http.Client  // HTTP/2 client for gossip messages
 	routingClient            *http.Client  // HTTP/2 client for re-routing events to the natural leader
-	gossipConnection         *atomic.Value // Tracked connection to determine gossip state
 	dataConn                 *atomic.Value // Client data connection
 	isConnected              int32         // Determines whether there's an open connection to gossip HTTP/2 server
 	dataMessages             chan dataRequest
