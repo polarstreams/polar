@@ -31,9 +31,11 @@ On demand cost is $0.17 per hour.
     <em>Messages per second by instance</em>
 </p>
 
-The results show that Barco can process writes up to 1.4M messages/sec (1.42 GiB/s) on a commodity cluster
-composed of 3 `c6i.xlarge` brokers. Even on the cheapest C7g instance with one vCPU it can achieve more than
-1M msgs/s. The max latency on all runs was under 100ms.
+The results show that Barco can process more than one million messages per second when writing on a cluster composed of
+commodity instances. The max latency on all runs was under 100ms.
+
+Note that when running on `c6i.xlarge`, the benchmark is limited by the network bandwidth of the client (as `12.5 Gbps`
+is `1.45 GiB/s`).
 
 What we find specially interesting is that **Barco can support writes of more than 99K msgs/s with baseline CPU
 performance of `t4g.micro`, bursting up to 1M msgs/s**. This is also an example of what resource sharing might

@@ -46,7 +46,6 @@ func newDataConnection(cli *clientInfo, config conf.GossipConfig) (*dataConnecti
 			log.Info().Msgf("Peer data client %s closing connection to %s", userType, conn.RemoteAddr())
 			conn.Close()
 			closed <- true
-			// TODO: Respond to all sent requests with connection error
 		})
 	}
 
