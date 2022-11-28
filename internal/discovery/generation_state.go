@@ -112,8 +112,6 @@ func (d *discoverer) NextGeneration(id GenId) []Generation {
 	nextGens, err := d.localDb.GenerationsByParent(gen)
 	utils.PanicIfErr(err, "Generations by parent failed to be retrieved")
 
-	// TODO: Handle the case where this token was joined with another one and v+1 does not exist
-
 	return nextGens
 }
 
