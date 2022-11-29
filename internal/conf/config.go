@@ -24,6 +24,10 @@ const (
 const (
 	envHome                            = "BARCO_HOME"
 	envListenOnAllAddresses            = "BARCO_LISTEN_ON_ALL"
+	envProducerPort                    = "BARCO_PRODUCER_PORT"
+	envConsumerPort                    = "BARCO_CONSUMER_PORT"
+	envClientDiscoveryPort             = "BARCO_CLIENT_DISCOVERY_PORT"
+	envMetricsPort                     = "BARCO_METRICS_PORT"
 	envGossipPort                      = "BARCO_GOSSIP_PORT"
 	envGossipDataPort                  = "BARCO_GOSSIP_DATA_PORT"
 	envSegmentFlushIntervalMs          = "BARCO_SEGMENT_FLUSH_INTERVAL_MS"
@@ -201,19 +205,19 @@ func (c *config) Init() error {
 }
 
 func (c *config) ProducerPort() int {
-	return DefaultProducerPort
+	return envInt(envProducerPort, DefaultProducerPort)
 }
 
 func (c *config) ConsumerPort() int {
-	return DefaultConsumerPort
+	return envInt(envConsumerPort, DefaultConsumerPort)
 }
 
 func (c *config) ClientDiscoveryPort() int {
-	return DefaultClientDiscoveryPort
+	return envInt(envClientDiscoveryPort, DefaultClientDiscoveryPort)
 }
 
 func (c *config) MetricsPort() int {
-	return DefaultMetricsPort
+	return envInt(envMetricsPort, DefaultMetricsPort)
 }
 
 func (c *config) GossipPort() int {
