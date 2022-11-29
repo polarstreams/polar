@@ -16,6 +16,7 @@ nav:
     - Partitioning: 'features/partitioning/README.md'
     - Modern I/O Techniques: 'features/io/README.md'
     - Built for Edge Computing: 'features/edge/README.md'
+    - Metrics: 'features/metrics/README.md'
   - FAQ: 'faq/README.md'
 
 copyright: >-
