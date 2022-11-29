@@ -13,6 +13,7 @@ technology with "at least once" message delivery guarantees.
 - [Rest API](./rest_api/)
 - [Benchmarks](./benchmarks/)
 - Features
+    - [Partitioning](./features/partitioning/)
     - [Modern IO Techniques](./features/io/)
     - [Built for Edge Computing](./features/edge/)
 - [FAQ](./faq/)

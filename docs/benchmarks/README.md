@@ -31,8 +31,8 @@ On demand cost is $0.17 per hour.
     <em>Messages per second by instance</em>
 </p>
 
-The results show that Barco can process more than one million messages per second when writing on a cluster composed of
-commodity instances. The max latency on all runs was under 100ms.
+The results show that Barco can process more than one million messages per second (1 GiB/s) when writing on a cluster
+composed of commodity instances. The max latency on all runs was under 100ms.
 
 Note that when running on `c6i.xlarge`, the benchmark is limited by the network bandwidth of the client (as `12.5 Gbps`
 is `1.45 GiB/s`).
