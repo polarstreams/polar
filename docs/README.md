@@ -16,4 +16,5 @@ technology with "at least once" message delivery guarantees.
     - [Partitioning](./features/partitioning/)
     - [Modern IO Techniques](./features/io/)
     - [Built for Edge Computing](./features/edge/)
+    - [Metrics](./features/metrics/)
 - [FAQ](./faq/)
