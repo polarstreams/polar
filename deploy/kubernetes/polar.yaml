@@ -66,7 +66,7 @@ spec:
     matchLabels:
       app.kubernetes.io/name: polar
       name: polar
-  servicename: polar
+  serviceName: polar
   replicas: 3
   template:
     metadata:
@@ -77,7 +77,7 @@ spec:
         prometheus.io/port: "9253"
         prometheus.io/scrape: "true"
     spec:
-      serviceAccountname: polar
+      serviceAccountName: polar
       terminationGracePeriodSeconds: 60
       containers:
       - name: polar
