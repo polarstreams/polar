@@ -6,19 +6,17 @@ import (
 	"encoding/binary"
 	"io"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/polarstreams/polar/internal/conf"
 	"github.com/polarstreams/polar/internal/metrics"
 	. "github.com/polarstreams/polar/internal/types"
 	"github.com/polarstreams/polar/internal/utils"
-	"github.com/klauspost/compress/zstd"
-	"github.com/rs/zerolog/log"
 )
 
 // Set of buffers used to coalesce and write the records
 type coalescerBuffers struct {
 	group      [writeConcurrencyLevel]*bytes.Buffer
 	compressor [writeConcurrencyLevel]*zstd.Encoder
-	bodyReader []byte // Used to read from the body for line-separated bodies
 }
 
 // Represents one or more records depending on the format
@@ -27,63 +25,80 @@ type recordItem struct {
 	length      uint32 // Body length
 	timestamp   int64  // Timestamp in micros
 	contentType string // The content type detailing the format of the
-	body        io.Reader
+	buffers     [][]byte
 	response    chan error
 }
 
-func (r *recordItem) marshal(w io.Writer, readerBuffer []byte) (totalRecords int, err error) {
+func (r *recordItem) marshal(w io.Writer) (totalRecords int, err error) {
 	if r.contentType == ContentTypeNDJSON {
-		return r.marshalRecordsByLine(w, readerBuffer)
+		return r.marshalRecordsByLine(w, r.length)
 	}
 
-	return 1, marshalRecord(w, r.timestamp, r.length, r.body, readerBuffer)
+	return 1, marshalRecord(w, r.timestamp, r.length, r.buffers)
 }
 
-func (r *recordItem) marshalRecordsByLine(w io.Writer, readerBuffer []byte) (totalRecords int, err error) {
-	scanner := bufio.NewScanner(r.body)
-	// Write chunks by chunks
-	scanner.Buffer(readerBuffer, len(readerBuffer))
+func (r *recordItem) marshalRecordsByLine(w io.Writer, length uint32) (totalRecords int, err error) {
+	recordBodyLength := 0
+	recordBody := make([][]byte, 0, len(r.buffers))
 
-	for scanner.Scan() {
-		length := len(scanner.Bytes())
-		if length == 0 {
-			continue
+	// keep track of remaining, r.buffers might contain more bytes than the actual message length
+	totalMessageRemaining := int(length)
+
+	for _, rawBuf := range r.buffers {
+		n := len(rawBuf)
+		if totalMessageRemaining < n {
+			n = totalMessageRemaining
 		}
-		if err := marshalRecordProps(r.timestamp, uint32(length), w); err != nil {
-			return 0, err
+		totalMessageRemaining -= n
+
+		// Use only the part of the buffer that can be read (rawBuf can be over-dimensioned)
+		buf := rawBuf[0:n]
+		index := 0
+
+		for index < len(buf) {
+			advance, token, _ := bufio.ScanLines(buf[index:], true)
+			index += advance
+			if len(token) > 0 {
+				recordBody = append(recordBody, token)
+				recordBodyLength += len(token)
+			}
+			if index < len(buf) && recordBodyLength > 0 {
+				if err := marshalRecord(w, r.timestamp, uint32(recordBodyLength), recordBody); err != nil {
+					return totalRecords, err
+				}
+				totalRecords++
+				recordBody = recordBody[:0]
+				recordBodyLength = 0
+			}
 		}
-		if err := utils.WriteBytes(w, scanner.Bytes()); err != nil {
-			return 0, err
-		}
-		totalRecords++
 	}
 
-	if err := scanner.Err(); err != nil {
-		if err == bufio.ErrTooLong {
-			log.Info().Msgf("Message size is greater than %d bytes", len(readerBuffer))
+	if recordBodyLength > 0 {
+		totalRecords++
+		if err := marshalRecord(w, r.timestamp, uint32(recordBodyLength), recordBody); err != nil {
+			return totalRecords, err
 		}
-		return 0, err
 	}
 	return
 }
 
-func marshalRecord(w io.Writer, timestamp int64, length uint32, body io.Reader, readBuffer []byte) error {
+func marshalRecord(w io.Writer, timestamp int64, length uint32, buffers [][]byte) error {
 	if err := marshalRecordProps(timestamp, length, w); err != nil {
 		return err
 	}
+
+	// keep track of remaining, r.buffers might contain more bytes than the actual message length
+	remaining := int(length)
+
 	// Don't io.CopyBuffer() to avoid zstd.Encoder's ReadFrom() implementation
-	for {
-		n, err := body.Read(readBuffer)
-		if n > 0 {
-			if err = utils.WriteBytes(w, readBuffer[0:n]); err != nil {
-				return err
-			}
+	for _, buf := range buffers {
+		n := len(buf)
+		if remaining < n {
+			n = remaining
 		}
-		if err != nil {
-			if err != io.EOF {
-				return err
-			}
-			break
+		remaining -= n
+		if err := utils.WriteBytes(w, buf[0:n]); err != nil {
+			return err
 		}
 	}
 	return nil

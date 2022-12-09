@@ -9,11 +9,11 @@ import (
 	"strings"
 	"sync"
 
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	cMocks "github.com/polarstreams/polar/internal/test/conf/mocks"
 	dMocks "github.com/polarstreams/polar/internal/test/discovery/mocks"
 	. "github.com/polarstreams/polar/internal/types"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 )
 

@@ -7,13 +7,13 @@ import (
 	"io"
 	"net/http/httptest"
 
+	"github.com/klauspost/compress/zstd"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"github.com/polarstreams/polar/internal/conf"
 	"github.com/polarstreams/polar/internal/data"
 	cMocks "github.com/polarstreams/polar/internal/test/conf/mocks"
 	. "github.com/polarstreams/polar/internal/types"
-	"github.com/klauspost/compress/zstd"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("groupReadQueue()", func() {

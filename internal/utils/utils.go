@@ -12,10 +12,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/polarstreams/polar/internal/conf"
-	"github.com/polarstreams/polar/internal/types"
 	"github.com/google/uuid"
 	"github.com/julienschmidt/httprouter"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/types"
 	"github.com/rs/zerolog/log"
 )
 

@@ -2,16 +2,15 @@ package producing
 
 import (
 	"bytes"
-	"io"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/polarstreams/polar/internal/conf"
 	"github.com/polarstreams/polar/internal/data"
 	"github.com/polarstreams/polar/internal/discovery"
 	"github.com/polarstreams/polar/internal/metrics"
 	"github.com/polarstreams/polar/internal/types"
 	"github.com/polarstreams/polar/internal/utils"
-	"github.com/klauspost/compress/zstd"
 	"github.com/rs/zerolog/log"
 )
 
@@ -44,7 +43,6 @@ func newBuffers(config conf.ProducerConfig) coalescerBuffers {
 	result := coalescerBuffers{
 		group:      [writeConcurrencyLevel]*bytes.Buffer{},
 		compressor: [writeConcurrencyLevel]*zstd.Encoder{},
-		bodyReader: make([]byte, config.MaxMessageSize()),
 	}
 	for i := 0; i < writeConcurrencyLevel; i++ {
 		b := utils.NewBufferCap(initCapacity)
@@ -185,7 +183,7 @@ func (c *coalescer) compress(index *uint8, group *coalescerGroup) ([]byte, int, 
 	totalRecordLength := 0
 
 	for _, item := range group.items {
-		recordLength, err := item.marshal(compressor, c.buffers.bodyReader)
+		recordLength, err := item.marshal(compressor)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -204,14 +202,14 @@ func (c *coalescer) append(
 	length uint32,
 	timestampMicros int64,
 	contentType string,
-	body io.ReadCloser,
+	buffers [][]byte,
 ) error {
 	record := &recordItem{
 		replication: replication,
 		length:      length,
 		timestamp:   timestampMicros,
 		contentType: contentType,
-		body:        body,
+		buffers:     buffers,
 		response:    make(chan error, 1),
 	}
 	c.items <- record

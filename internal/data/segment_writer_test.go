@@ -4,11 +4,11 @@ import (
 	"io/ioutil"
 	"time"
 
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"github.com/polarstreams/polar/internal/test/conf/mocks"
 	mocks2 "github.com/polarstreams/polar/internal/test/types/mocks"
 	. "github.com/polarstreams/polar/internal/types"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 )
 

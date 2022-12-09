@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/polarstreams/polar/internal/conf"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/polarstreams/polar/internal/conf"
 )
 
 func Test(t *testing.T) {

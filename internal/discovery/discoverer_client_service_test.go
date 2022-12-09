@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/polarstreams/polar/internal/test/conf/mocks"
-	"github.com/polarstreams/polar/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/polarstreams/polar/internal/test/conf/mocks"
+	"github.com/polarstreams/polar/internal/utils"
 )
 
 var _ = Describe("discoverer", func() {

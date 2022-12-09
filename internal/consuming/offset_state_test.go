@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"time"
 
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	cMocks "github.com/polarstreams/polar/internal/test/conf/mocks"
 	dataMocks "github.com/polarstreams/polar/internal/test/data/mocks"
 	dMocks "github.com/polarstreams/polar/internal/test/discovery/mocks"
 	iMocks "github.com/polarstreams/polar/internal/test/interbroker/mocks"
 	dbMocks "github.com/polarstreams/polar/internal/test/localdb/mocks"
 	. "github.com/polarstreams/polar/internal/types"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 )
 

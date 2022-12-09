@@ -15,20 +15,6 @@ type Config struct {
 	mock.Mock
 }
 
-// AllocationPoolSize provides a mock function with given fields:
-func (_m *Config) AllocationPoolSize() int {
-	ret := _m.Called()
-
-	var r0 int
-	if rf, ok := ret.Get(0).(func() int); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(int)
-	}
-
-	return r0
-}
-
 // AutoCommitInterval provides a mock function with given fields:
 func (_m *Config) AutoCommitInterval() time.Duration {
 	ret := _m.Called()
@@ -432,6 +418,20 @@ func (_m *Config) PodNamespace() string {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// ProducerBufferPoolSize provides a mock function with given fields:
+func (_m *Config) ProducerBufferPoolSize() int {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
 	}
 
 	return r0

@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	. "github.com/google/uuid"
 	"github.com/polarstreams/polar/internal/conf"
 	"github.com/polarstreams/polar/internal/data"
 	"github.com/polarstreams/polar/internal/discovery"
@@ -22,7 +23,6 @@ import (
 	"github.com/polarstreams/polar/internal/types"
 	. "github.com/polarstreams/polar/internal/types"
 	"github.com/polarstreams/polar/internal/utils"
-	. "github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 )

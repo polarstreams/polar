@@ -37,12 +37,12 @@ var (
 	})
 
 	ReroutedSent = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "polar_producing_rerouting_sent_total",
+		Name: "polar_producer_rerouting_sent_total",
 		Help: "The total number of re-routed messages sent by this broker",
 	}, []string{"target"})
 
 	ReroutedReceived = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "polar_producing_rerouting_received_total",
+		Name: "polar_producer_rerouting_received_total",
 		Help: "The total number of re-routed messages received by the broker",
 	})
 
@@ -57,8 +57,8 @@ var (
 		Buckets: prometheus.ExponentialBuckets(2, 7, 10), // buckets from 2 to 80MiB
 	})
 
-	AllocationPoolAvailableBytes = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "polar_producing_allocation_pool_available_bytes",
+	ProducerBufferPoolAvailable = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "polar_producer_buffer_pool_available_bytes",
 		Help: "The number of bytes available to allocate",
 	})
 

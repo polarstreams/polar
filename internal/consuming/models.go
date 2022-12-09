@@ -11,14 +11,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/karlseguin/jsonwriter"
+	"github.com/klauspost/compress/zstd"
 	"github.com/polarstreams/polar/internal/conf"
 	"github.com/polarstreams/polar/internal/data"
 	"github.com/polarstreams/polar/internal/types"
 	. "github.com/polarstreams/polar/internal/types"
 	"github.com/polarstreams/polar/internal/utils"
-	"github.com/google/uuid"
-	"github.com/karlseguin/jsonwriter"
-	"github.com/klauspost/compress/zstd"
 	"github.com/rs/zerolog/log"
 )
 

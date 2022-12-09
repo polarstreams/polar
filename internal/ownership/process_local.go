@@ -3,10 +3,10 @@ package ownership
 import (
 	"time"
 
+	"github.com/google/uuid"
 	. "github.com/polarstreams/polar/internal/interbroker"
 	. "github.com/polarstreams/polar/internal/types"
 	"github.com/polarstreams/polar/internal/utils"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
