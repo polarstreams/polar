@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/test/conf/mocks"
-	"github.com/barcostreams/barco/internal/utils"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/test/conf/mocks"
+	"github.com/polarstreams/polar/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

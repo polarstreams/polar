@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	. "github.com/barcostreams/barco/internal/test/integration"
-	. "github.com/barcostreams/barco/internal/types"
+	. "github.com/polarstreams/polar/internal/test/integration"
+	. "github.com/polarstreams/polar/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/rs/zerolog/log"
@@ -28,7 +28,7 @@ var _ = Describe("Dev mode", func() {
 
 	It("produces and consumes", func() {
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
-		b0.WaitOutput("Barco started")
+		b0.WaitOutput("PolarStreams started")
 
 		client := NewTestClient(nil)
 		message := `{"hello": "world"}`
@@ -64,7 +64,7 @@ var _ = Describe("Dev mode", func() {
 
 	It("produces and consumes using REST API", func() {
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
-		b0.WaitOutput("Barco started")
+		b0.WaitOutput("PolarStreams started")
 		pClient := NewTestClient(nil)
 
 		const messagesByGroup = 5

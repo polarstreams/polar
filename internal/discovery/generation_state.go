@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
+	. "github.com/polarstreams/polar/internal/types"
+	"github.com/polarstreams/polar/internal/utils"
 	. "github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )

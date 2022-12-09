@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/test/conf/mocks"
-	dbMocks "github.com/barcostreams/barco/internal/test/localdb/mocks"
-	. "github.com/barcostreams/barco/internal/types"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/test/conf/mocks"
+	dbMocks "github.com/polarstreams/polar/internal/test/localdb/mocks"
+	. "github.com/polarstreams/polar/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -57,7 +57,7 @@ var _ = Describe("discoverer", func() {
 			d := &discoverer{
 				config: &configFake{
 					ordinal:      1,
-					baseHostName: "barco-",
+					baseHostName: "polar-",
 				},
 				k8sClient: &k8sClientFake{3},
 				localDb:   newLocalDbWithNoRecords(),
@@ -67,9 +67,9 @@ var _ = Describe("discoverer", func() {
 			d.Init()
 
 			Expect(d.Topology().Brokers).To(Equal([]BrokerInfo{
-				{IsSelf: false, Ordinal: 0, HostName: "barco-0.barco"},
-				{IsSelf: true, Ordinal: 1, HostName: "barco-1.barco"},
-				{IsSelf: false, Ordinal: 2, HostName: "barco-2.barco"},
+				{IsSelf: false, Ordinal: 0, HostName: "polar-0.polar"},
+				{IsSelf: true, Ordinal: 1, HostName: "polar-1.polar"},
+				{IsSelf: false, Ordinal: 2, HostName: "polar-2.polar"},
 			}))
 			Expect(d.Topology().LocalIndex).To(Equal(BrokerIndex(1)))
 		})
@@ -78,7 +78,7 @@ var _ = Describe("discoverer", func() {
 			d := &discoverer{
 				config: &configFake{
 					ordinal:      2,
-					baseHostName: "barco-",
+					baseHostName: "polar-",
 				},
 				k8sClient: &k8sClientFake{6},
 				localDb:   newLocalDbWithNoRecords(),
@@ -88,12 +88,12 @@ var _ = Describe("discoverer", func() {
 			d.Init()
 
 			Expect(d.Topology().Brokers).To(Equal([]BrokerInfo{
-				{IsSelf: false, Ordinal: 0, HostName: "barco-0.barco"},
-				{IsSelf: false, Ordinal: 3, HostName: "barco-3.barco"},
-				{IsSelf: false, Ordinal: 1, HostName: "barco-1.barco"},
-				{IsSelf: false, Ordinal: 4, HostName: "barco-4.barco"},
-				{IsSelf: true, Ordinal: 2, HostName: "barco-2.barco"},
-				{IsSelf: false, Ordinal: 5, HostName: "barco-5.barco"},
+				{IsSelf: false, Ordinal: 0, HostName: "polar-0.polar"},
+				{IsSelf: false, Ordinal: 3, HostName: "polar-3.polar"},
+				{IsSelf: false, Ordinal: 1, HostName: "polar-1.polar"},
+				{IsSelf: false, Ordinal: 4, HostName: "polar-4.polar"},
+				{IsSelf: true, Ordinal: 2, HostName: "polar-2.polar"},
+				{IsSelf: false, Ordinal: 5, HostName: "polar-5.polar"},
 			}))
 
 			Expect(d.Topology().LocalIndex).To(Equal(BrokerIndex(4)))
@@ -105,7 +105,7 @@ var _ = Describe("discoverer", func() {
 			d := &discoverer{
 				config: &configFake{
 					ordinal:      1,
-					baseHostName: "barco-",
+					baseHostName: "polar-",
 				},
 				k8sClient: &k8sClientFake{3},
 				localDb:   newLocalDbWithNoRecords(),
@@ -118,11 +118,11 @@ var _ = Describe("discoverer", func() {
 				{
 					IsSelf:   false,
 					Ordinal:  0,
-					HostName: "barco-0.barco",
+					HostName: "polar-0.polar",
 				}, {
 					IsSelf:   false,
 					Ordinal:  2,
-					HostName: "barco-2.barco",
+					HostName: "polar-2.polar",
 				},
 			}))
 		})
@@ -131,16 +131,16 @@ var _ = Describe("discoverer", func() {
 	Describe("createTopology()", func() {
 		It("should return the brokers in placement order for 3 broker cluster", func() {
 			config := new(mocks.Config)
-			config.On("BaseHostName").Return("barco-")
+			config.On("BaseHostName").Return("polar-")
 			config.On("ServiceName").Return("svc")
 			config.On("PodNamespace").Return("streams")
 			config.On("Ordinal").Return(1)
 
 			topology := createTopology(3, config)
 			Expect(topology.Brokers).To(Equal([]BrokerInfo{
-				{IsSelf: false, Ordinal: 0, HostName: "barco-0.svc.streams"},
-				{IsSelf: true, Ordinal: 1, HostName: "barco-1.svc.streams"},
-				{IsSelf: false, Ordinal: 2, HostName: "barco-2.svc.streams"},
+				{IsSelf: false, Ordinal: 0, HostName: "polar-0.svc.streams"},
+				{IsSelf: true, Ordinal: 1, HostName: "polar-1.svc.streams"},
+				{IsSelf: false, Ordinal: 2, HostName: "polar-2.svc.streams"},
 			}))
 			Expect(topology.LocalIndex).To(Equal(BrokerIndex(1)))
 		})
@@ -181,24 +181,24 @@ var _ = Describe("discoverer", func() {
 		It("should return the brokers in placement order for 12 broker cluster", func() {
 			config := new(mocks.Config)
 			config.On("BaseHostName").Return("broker-")
-			config.On("ServiceName").Return("barco")
+			config.On("ServiceName").Return("polar")
 			config.On("PodNamespace").Return("")
 			config.On("Ordinal").Return(4)
 
 			topology := createTopology(12, config)
 			Expect(topology.Brokers).To(Equal([]BrokerInfo{
-				{IsSelf: false, Ordinal: 0, HostName: "broker-0.barco"},
-				{IsSelf: false, Ordinal: 6, HostName: "broker-6.barco"},
-				{IsSelf: false, Ordinal: 3, HostName: "broker-3.barco"},
-				{IsSelf: false, Ordinal: 7, HostName: "broker-7.barco"},
-				{IsSelf: false, Ordinal: 1, HostName: "broker-1.barco"},
-				{IsSelf: false, Ordinal: 8, HostName: "broker-8.barco"},
-				{IsSelf: true, Ordinal: 4, HostName: "broker-4.barco"},
-				{IsSelf: false, Ordinal: 9, HostName: "broker-9.barco"},
-				{IsSelf: false, Ordinal: 2, HostName: "broker-2.barco"},
-				{IsSelf: false, Ordinal: 10, HostName: "broker-10.barco"},
-				{IsSelf: false, Ordinal: 5, HostName: "broker-5.barco"},
-				{IsSelf: false, Ordinal: 11, HostName: "broker-11.barco"},
+				{IsSelf: false, Ordinal: 0, HostName: "broker-0.polar"},
+				{IsSelf: false, Ordinal: 6, HostName: "broker-6.polar"},
+				{IsSelf: false, Ordinal: 3, HostName: "broker-3.polar"},
+				{IsSelf: false, Ordinal: 7, HostName: "broker-7.polar"},
+				{IsSelf: false, Ordinal: 1, HostName: "broker-1.polar"},
+				{IsSelf: false, Ordinal: 8, HostName: "broker-8.polar"},
+				{IsSelf: true, Ordinal: 4, HostName: "broker-4.polar"},
+				{IsSelf: false, Ordinal: 9, HostName: "broker-9.polar"},
+				{IsSelf: false, Ordinal: 2, HostName: "broker-2.polar"},
+				{IsSelf: false, Ordinal: 10, HostName: "broker-10.polar"},
+				{IsSelf: false, Ordinal: 5, HostName: "broker-5.polar"},
+				{IsSelf: false, Ordinal: 11, HostName: "broker-11.polar"},
 			}))
 			Expect(topology.LocalIndex).To(Equal(BrokerIndex(6)))
 		})
@@ -293,11 +293,11 @@ func (c *configFake) BaseHostName() string {
 }
 
 func (c *configFake) ServiceName() string {
-	return "barco"
+	return "polar"
 }
 
 func (c *configFake) PodName() string {
-	return "barco-0"
+	return "polar-0"
 }
 
 func (c *configFake) PodNamespace() string {
@@ -305,7 +305,7 @@ func (c *configFake) PodNamespace() string {
 }
 
 func (c *configFake) HomePath() string {
-	return "/var/lib/barco"
+	return "/var/lib/polar"
 }
 
 func (c *configFake) ConsumerRanges() int {
@@ -343,7 +343,7 @@ func (c *configFake) FixedTopologyFilePollDelay() time.Duration {
 func newConfigFake(ordinal int) *configFake {
 	return &configFake{
 		ordinal:      ordinal,
-		baseHostName: "barco-",
+		baseHostName: "polar-",
 	}
 }
 

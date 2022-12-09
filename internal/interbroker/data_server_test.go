@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/barcostreams/barco/internal/test/fakes"
+	"github.com/polarstreams/polar/internal/test/fakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/rs/zerolog/log"

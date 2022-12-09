@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
+	. "github.com/polarstreams/polar/internal/types"
+	"github.com/polarstreams/polar/internal/utils"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

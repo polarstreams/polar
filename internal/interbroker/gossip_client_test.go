@@ -9,9 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	cMocks "github.com/barcostreams/barco/internal/test/conf/mocks"
-	dMocks "github.com/barcostreams/barco/internal/test/discovery/mocks"
-	. "github.com/barcostreams/barco/internal/types"
+	cMocks "github.com/polarstreams/polar/internal/test/conf/mocks"
+	dMocks "github.com/polarstreams/polar/internal/test/discovery/mocks"
+	. "github.com/polarstreams/polar/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"

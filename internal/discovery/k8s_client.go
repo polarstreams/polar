@@ -6,8 +6,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/utils"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/utils"
 	"github.com/rs/zerolog/log"
 	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,7 +57,7 @@ func (c *k8sClientImpl) init(config conf.DiscovererConfig) error {
 	log.Debug().Str("pod", podName).Str("namespace", c.namespace).Msgf("Querying k8s api")
 
 	if c.namespace == "" || podName == "" {
-		return fmt.Errorf("K8s discovery requires BARCO_POD_NAME and BARCO_POD_NAMESPACE to be set")
+		return fmt.Errorf("K8s discovery requires POLAR_POD_NAME and POLAR_POD_NAMESPACE to be set")
 	}
 
 	pod, err := client.CoreV1().

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/types"
+	"github.com/polarstreams/polar/internal/utils"
 )
 
 type opcode uint8

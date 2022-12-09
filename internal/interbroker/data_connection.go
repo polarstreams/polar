@@ -8,8 +8,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/metrics"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/metrics"
 	"github.com/rs/zerolog/log"
 )
 

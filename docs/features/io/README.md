@@ -1,11 +1,11 @@
 # Modern I/O Techniques
 
-Internally, Barco uses a series of I/O-related techniques that make it both fast and lightweight, supporting high
+Internally, PolarStreams uses a series of I/O-related techniques that make it both fast and lightweight, supporting high
 throughput and consistently low latency while keeping compute and memory resource utilization low.
 
 ## Direct I/O
 
-Barco uses [Direct I/O][direct-io]. Direct I/O is a feature of the file system in which file reads and writes go
+PolarStreams uses [Direct I/O][direct-io]. Direct I/O is a feature of the file system in which file reads and writes go
 directly from an application to the storage device, bypassing the Kernel page cache.
 
 Bypassing the page cache in our case allow us to use buffering and flush strategies tuned to the workload when writing
@@ -18,7 +18,7 @@ buffers and caching (K8s working set).
 
 ## Write batching and parallel processing
 
-When writing to disk, Barco coalesces multiple events into compressed and [checksummed][checksum] data fragments,
+When writing to disk, PolarStreams coalesces multiple events into compressed and [checksummed][checksum] data fragments,
 called chunks. A chunk gets built in memory as new events are arranged to be written in a topic. When a chunk is
 ready to be written to disk we schedule a write to disk and, instead of waiting idle for the storage device to
 acknowledge the write, the coalescer continues processing the following chunk.
@@ -31,7 +31,7 @@ acknowledge the write, the coalescer continues processing the following chunk.
 
 ## Compressed chunks for replication and consumers
 
-The Barco broker acting as a leader of a partition is the one responsible for compressing and checksumming the
+The PolarStreams broker acting as a leader of a partition is the one responsible for compressing and checksumming the
 data in the log segment. A chunk is effectively only compressed once and sent to the replicas as a compressed payload.
 The replica is only responsible for appending the chunk and acknowledge it. Minimizing CPU utilization on a replica and
 significantly reducing network traffic.

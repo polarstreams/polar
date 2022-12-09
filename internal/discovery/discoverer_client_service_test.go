@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/barcostreams/barco/internal/test/conf/mocks"
-	"github.com/barcostreams/barco/internal/utils"
+	"github.com/polarstreams/polar/internal/test/conf/mocks"
+	"github.com/polarstreams/polar/internal/utils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -17,7 +17,7 @@ var _ = Describe("discoverer", func() {
 		It("should start a discovery service for a 3-node cluster", func() {
 			const port = 9020
 			config := new(mocks.Config)
-			config.On("BaseHostName").Return("barco1-")
+			config.On("BaseHostName").Return("polar1-")
 			config.On("ServiceName").Return("svc")
 			config.On("PodNamespace").Return("streams")
 			config.On("Ordinal").Return(1)
@@ -55,7 +55,7 @@ var _ = Describe("discoverer", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(Equal(topologyClientMessage{
 				Length:       3,
-				BrokerNames:  []string{"barco1-0.svc.streams", "barco1-1.svc.streams", "barco1-2.svc.streams"},
+				BrokerNames:  []string{"polar1-0.svc.streams", "polar1-1.svc.streams", "polar1-2.svc.streams"},
 				ProducerPort: 8901,
 				ConsumerPort: 8902,
 			}))
@@ -64,7 +64,7 @@ var _ = Describe("discoverer", func() {
 		It("should start a discovery service for a 6-node cluster", func() {
 			const port = 9021
 			config := new(mocks.Config)
-			config.On("BaseHostName").Return("barcosample-")
+			config.On("BaseHostName").Return("polarsample-")
 			config.On("ServiceName").Return("svc2")
 			config.On("PodNamespace").Return("streams2")
 			config.On("Ordinal").Return(1)
@@ -101,7 +101,7 @@ var _ = Describe("discoverer", func() {
 			err = json.NewDecoder(r.Body).Decode(&result)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(Equal(topologyClientMessage{
-				BaseName:     "barcosample-",
+				BaseName:     "polarsample-",
 				ServiceName:  "svc2.streams2",
 				Length:       6,
 				ProducerPort: 8901,

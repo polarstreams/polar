@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/barcostreams/barco/internal/test/conf/mocks"
-	. "github.com/barcostreams/barco/internal/types"
+	"github.com/polarstreams/polar/internal/test/conf/mocks"
+	. "github.com/polarstreams/polar/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

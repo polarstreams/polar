@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
+	"github.com/polarstreams/polar/internal/conf"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/rs/zerolog/log"
@@ -68,15 +68,15 @@ func NewTestBroker(ordinal int, options ...*TestBrokerOptions) *TestBroker {
 }
 
 func (b *TestBroker) Start() {
-	buildOutput, err := exec.Command("go", "build", "-o", "barco.exe", "../../../.").CombinedOutput()
+	buildOutput, err := exec.Command("go", "build", "-o", "polar.exe", "../../../.").CombinedOutput()
 	Expect(err).NotTo(HaveOccurred(), "Build failed: %s", string(buildOutput))
 
 	logPretty := ""
-	if os.Getenv("BARCO_TEST_LOG_PRETTY") == "true" {
+	if os.Getenv("POLAR_TEST_LOG_PRETTY") == "true" {
 		logPretty = "-pretty"
 	}
 
-	cmd := exec.Command("./barco.exe", "-debug", logPretty)
+	cmd := exec.Command("./polar.exe", "-debug", logPretty)
 
 	names := make([]string, 0)
 	brokerLength := 3
@@ -89,21 +89,21 @@ func (b *TestBroker) Start() {
 
 	// Basic test env variables
 	envs := append(os.Environ(),
-		fmt.Sprintf("BARCO_HOME=home%d", b.ordinal),
-		fmt.Sprintf("BARCO_SEGMENT_FLUSH_INTERVAL_MS=%d", SegmentFlushInterval.Milliseconds()),
-		fmt.Sprintf("BARCO_CONSUMER_ADD_DELAY_MS=%d", ConsumerAddDelay.Milliseconds()),
-		"BARCO_CONSUMER_RANGES=4",
-		"BARCO_TOPOLOGY_FILE_POLL_DELAY_MS=400",
-		"BARCO_MAX_SEGMENT_FILE_SIZE=16777216", // 16MiB
-		"BARCO_SHUTDOWN_DELAY_SECS=2")
+		fmt.Sprintf("POLAR_HOME=home%d", b.ordinal),
+		fmt.Sprintf("POLAR_SEGMENT_FLUSH_INTERVAL_MS=%d", SegmentFlushInterval.Milliseconds()),
+		fmt.Sprintf("POLAR_CONSUMER_ADD_DELAY_MS=%d", ConsumerAddDelay.Milliseconds()),
+		"POLAR_CONSUMER_RANGES=4",
+		"POLAR_TOPOLOGY_FILE_POLL_DELAY_MS=400",
+		"POLAR_MAX_SEGMENT_FILE_SIZE=16777216", // 16MiB
+		"POLAR_SHUTDOWN_DELAY_SECS=2")
 
 	if !b.options.DevMode {
 		envs = append(envs,
-			fmt.Sprintf("BARCO_ORDINAL=%d", b.ordinal),
-			fmt.Sprintf("BARCO_BROKER_NAMES=%s", strings.Join(names, ",")),
-			"BARCO_LISTEN_ON_ALL=false")
+			fmt.Sprintf("POLAR_ORDINAL=%d", b.ordinal),
+			fmt.Sprintf("POLAR_BROKER_NAMES=%s", strings.Join(names, ",")),
+			"POLAR_LISTEN_ON_ALL=false")
 	} else {
-		envs = append(envs, "BARCO_DEV_MODE=true")
+		envs = append(envs, "POLAR_DEV_MODE=true")
 	}
 
 	cmd.Env = envs
@@ -119,12 +119,12 @@ func (b *TestBroker) Start() {
 		for scanner.Scan() {
 			value := scanner.Text()
 			if log.Debug().Enabled() {
-				focus := os.Getenv("BARCO_TEST_OUTPUT_FOCUS")
+				focus := os.Getenv("POLAR_TEST_OUTPUT_FOCUS")
 				if focus == "" || b.brokerName == focus {
 					fmt.Printf("%s > %s\n", b.brokerName, value)
 				}
 			}
-			if !started && strings.Contains(value, "Barco started") {
+			if !started && strings.Contains(value, "PolarStreams started") {
 				started = true
 				b.startChan <- true
 			}

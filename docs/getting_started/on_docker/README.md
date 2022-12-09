@@ -1,13 +1,13 @@
-# Getting Started with Barco on Docker
+# Getting Started with PolarStreams on Docker
 
-Barco Streams is distributed by default with a minimal size of 3 brokers for production use. You can run a
+PolarStreams is distributed by default with a minimal size of 3 brokers for production use. You can run a
 single-broker using Docker / Podman with developer mode enabled to get started quickly.
 
 ```shell
-docker run --rm --env BARCO_DEV_MODE=true -p 9250-9252:9250-9252 barcostreams/barco:latest
+docker run --rm --env POLAR_DEV_MODE=true -p 9250-9252:9250-9252 polarstreams/polar:latest
 ```
 
-You can start producing messages using a [client library][go-client] or directly invoking the Barco's
+You can start producing messages using a [client library][go-client] or directly invoking the PolarStreams's
 [REST API][rest-api]. You can use your technology of choice to send requests to the REST API, there are some examples
 in [Rust][example-rust], [Node.js][example-nodejs] and others in the [Client Examples][client-examples]
 repository.
@@ -45,7 +45,7 @@ curl -i -X POST -H "Accept: application/json" \
 
 You can continue polling the brokers multiple times to consume data.
 
-Barco internally tracks the reader position of each consumer group (offset) in relationship to the topic and partition.
+PolarStreams internally tracks the reader position of each consumer group (offset) in relationship to the topic and partition.
 The broker will automatically commit the previously read data when a new poll request is made from the same consumer.
 
 If at any point in time you want to manually save the reader offset without having to retrieve more data, you
@@ -68,7 +68,7 @@ instance as inactive and it will not be included in the data assignment.
 Read more about the API flow and guarantees on the [REST API Documentation][rest-api].
 
 [rest-api]: ../../rest_api/
-[go-client]: https://github.com/barcostreams/go-client
-[example-rust]: https://github.com/barcostreams/client-examples/tree/main/rust
-[example-nodejs]: https://github.com/barcostreams/client-examples/tree/main/nodejs
-[client-examples]: https://github.com/barcostreams/client-examples
+[go-client]: https://github.com/polarstreams/go-client
+[example-rust]: https://github.com/polarstreams/client-examples/tree/main/rust
+[example-nodejs]: https://github.com/polarstreams/client-examples/tree/main/nodejs
+[client-examples]: https://github.com/polarstreams/client-examples

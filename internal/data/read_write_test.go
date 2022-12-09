@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/barcostreams/barco/internal/conf"
+	"github.com/polarstreams/polar/internal/conf"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

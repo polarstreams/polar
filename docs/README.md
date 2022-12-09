@@ -1,9 +1,9 @@
-# Barco Streams Documentation
+# PolarStreams Documentation
 
-Welcome to the Barco Streams Documentation. Barco is a persistent event streaming
+Welcome to the PolarStreams Documentation. PolarStreams is a persistent event streaming
 technology with "at least once" message delivery guarantees.
 
-- [About Barco](./technical_intro/)
+- [About PolarStreams](./technical_intro/)
 - Getting started
     - [Getting started on Docker](./getting_started/on_docker/)
     - [Getting started on Kubernetes](./getting_started/on_kubernetes/)

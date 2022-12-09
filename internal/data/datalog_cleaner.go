@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
+	"github.com/polarstreams/polar/internal/conf"
 	"github.com/rs/zerolog/log"
 )
 

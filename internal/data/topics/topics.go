@@ -1,8 +1,8 @@
 package topics
 
 import (
-	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/types"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/types"
 )
 
 type TopicHandler interface {

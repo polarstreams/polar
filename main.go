@@ -9,18 +9,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/consuming"
-	"github.com/barcostreams/barco/internal/data"
-	"github.com/barcostreams/barco/internal/data/topics"
-	"github.com/barcostreams/barco/internal/discovery"
-	"github.com/barcostreams/barco/internal/interbroker"
-	"github.com/barcostreams/barco/internal/localdb"
-	"github.com/barcostreams/barco/internal/metrics"
-	"github.com/barcostreams/barco/internal/ownership"
-	"github.com/barcostreams/barco/internal/producing"
-	"github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/consuming"
+	"github.com/polarstreams/polar/internal/data"
+	"github.com/polarstreams/polar/internal/data/topics"
+	"github.com/polarstreams/polar/internal/discovery"
+	"github.com/polarstreams/polar/internal/interbroker"
+	"github.com/polarstreams/polar/internal/localdb"
+	"github.com/polarstreams/polar/internal/metrics"
+	"github.com/polarstreams/polar/internal/ownership"
+	"github.com/polarstreams/polar/internal/producing"
+	"github.com/polarstreams/polar/internal/types"
+	"github.com/polarstreams/polar/internal/utils"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -33,7 +33,7 @@ func main() {
 	devMode := flag.Bool("dev", false, "starts a single instance in dev mode")
 	logPretty := flag.Bool("pretty", false, "logs a human-friendly, colorized output")
 	flag.Parse()
-	if *debug || os.Getenv(conf.EnvBarcoDebug) == "true" {
+	if *debug || os.Getenv(conf.EnvDebug) == "true" {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
 	if *logPretty {
@@ -43,9 +43,9 @@ func main() {
 	config := conf.NewConfig(*devMode)
 
 	if !config.DevMode() {
-		log.Info().Msg("Starting Barco")
+		log.Info().Msg("Starting PolarStreams")
 	} else {
-		log.Info().Msg("Starting Barco in dev mode")
+		log.Info().Msg("Starting PolarStreams in dev mode")
 	}
 
 	log.Info().Msgf("Using architecture target %s", runtime.GOARCH)
@@ -103,7 +103,7 @@ func main() {
 		log.Fatal().Err(err).Msg("Exiting")
 	}
 
-	log.Info().Msg("Barco started")
+	log.Info().Msg("PolarStreams started")
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan,
@@ -112,7 +112,7 @@ func main() {
 		syscall.SIGQUIT)
 	<-sigChan
 
-	log.Info().Msg("Barco shutting down")
+	log.Info().Msg("PolarStreams shutting down")
 
 	localDbClient.MarkAsShuttingDown()
 	producer.Close()
@@ -127,5 +127,5 @@ func main() {
 	gossiper.Close()
 	discoverer.Close()
 	localDbClient.Close()
-	log.Info().Msg("Barco shutdown completed")
+	log.Info().Msg("PolarStreams shutdown completed")
 }

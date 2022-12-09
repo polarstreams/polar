@@ -13,9 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
-	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
+	"github.com/polarstreams/polar/internal/conf"
+	. "github.com/polarstreams/polar/internal/types"
+	"github.com/polarstreams/polar/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 

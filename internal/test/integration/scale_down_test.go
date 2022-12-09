@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	. "github.com/barcostreams/barco/internal/test/integration"
+	. "github.com/polarstreams/polar/internal/test/integration"
 	. "github.com/onsi/ginkgo"
 	"github.com/rs/zerolog/log"
 )

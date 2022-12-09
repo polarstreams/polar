@@ -6,12 +6,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/discovery"
-	"github.com/barcostreams/barco/internal/interbroker"
-	"github.com/barcostreams/barco/internal/localdb"
-	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/discovery"
+	"github.com/polarstreams/polar/internal/interbroker"
+	"github.com/polarstreams/polar/internal/localdb"
+	. "github.com/polarstreams/polar/internal/types"
+	"github.com/polarstreams/polar/internal/utils"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )

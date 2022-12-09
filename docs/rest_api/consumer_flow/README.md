@@ -1,13 +1,13 @@
 # Consumer API Flow
 
-Consuming messages from Barco Streams requires a certain request flow to support stateless HTTP clients and still
+Consuming messages from PolarStreams requires a certain request flow to support stateless HTTP clients and still
 provide delivery guarantees.
 
 You should make sure that you have at least one connection to each broker address. You can either use the DNS AAAA
-records from the Kubernetes headless service exposed by Barco or use the discovery service to get the individual broker
+records from the Kubernetes headless service exposed by PolarStreams or use the discovery service to get the individual broker
 addresses.
 
-This is a summary of the request/response flow of a typical application that consumes data from a Barco cluster:
+This is a summary of the request/response flow of a typical application that consumes data from a PolarStreams cluster:
 
 * Discover the broker addresses
 * Register as consumer in the cluster
@@ -29,7 +29,7 @@ a [register request](../README.md#put-v1consumerregister) and retry.
 
 ## Offset Commit
 
-Barco Streams brokers keep track the position of the consumers. After fetching a group of messages, when the consumer
+PolarStreams brokers keep track the position of the consumers. After fetching a group of messages, when the consumer
 polls again on the same broker, the broker will automatically commit the consumer position before returning the
 next group of messages.
 
@@ -37,6 +37,6 @@ If a consumer wants to manually commit the reader position without requesting mo
 request](../README.md#post-v1consumercommit). Additionally, a [goodbye request](../README.md#post-v1consumergoodbye)
 will also commit the position as well as unregistering the consumer.
 
-[example-nodejs]: https://github.com/barcostreams/client-examples/tree/main/nodejs
-[example-rust]: https://github.com/barcostreams/client-examples/tree/main/rust
-[client-examples]: https://github.com/barcostreams/client-examples/
+[example-nodejs]: https://github.com/polarstreams/client-examples/tree/main/nodejs
+[example-rust]: https://github.com/polarstreams/client-examples/tree/main/rust
+[client-examples]: https://github.com/polarstreams/client-examples/

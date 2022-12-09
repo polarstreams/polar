@@ -15,16 +15,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
-	. "github.com/barcostreams/barco/internal/test/integration"
-	. "github.com/barcostreams/barco/internal/types"
+	"github.com/polarstreams/polar/internal/conf"
+	. "github.com/polarstreams/polar/internal/test/integration"
+	. "github.com/polarstreams/polar/internal/types"
 	"github.com/klauspost/compress/zstd"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/rs/zerolog/log"
 )
 
-const consumerContentType = "application/vnd.barco.consumermessage"
+const consumerContentType = "application/vnd.polar.consumermessage"
 
 // Precalculated partition keys that will fall under a certain range
 const (

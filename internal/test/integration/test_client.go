@@ -12,13 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
+	"github.com/polarstreams/polar/internal/conf"
 	. "github.com/onsi/gomega"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
 )
 
-// Represents a Barco Client used for integration tests
+// Represents a PolarStreams Client used for integration tests
 type TestClient struct {
 	consumerClient *http.Client
 	producerClient *http.Client

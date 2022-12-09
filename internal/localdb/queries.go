@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
+	. "github.com/polarstreams/polar/internal/types"
+	"github.com/polarstreams/polar/internal/utils"
 )
 
 type queries struct {

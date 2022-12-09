@@ -3,9 +3,9 @@ package ownership
 import (
 	"time"
 
-	. "github.com/barcostreams/barco/internal/interbroker"
-	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
+	. "github.com/polarstreams/polar/internal/interbroker"
+	. "github.com/polarstreams/polar/internal/types"
+	"github.com/polarstreams/polar/internal/utils"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )

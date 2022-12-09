@@ -8,9 +8,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/discovery"
-	. "github.com/barcostreams/barco/internal/types"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/discovery"
+	. "github.com/polarstreams/polar/internal/types"
 )
 
 const staleInfoThreshold = 5 * time.Minute
