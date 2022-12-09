@@ -32,5 +32,12 @@ when running on the lower-end of commodity hardware, [check out the benchmarks f
 We strive for having no settings to adapt or watch out for when managing a PolarStreams deployment. In practice, we only
 recommend looking for the default number of [consumer ranges per broker (fan-out)][partitioning].
 
+## Why the project name change?
+
+PolarStreams project used to be called Barco Streams. We decided to change it because there was an existing large
+company named Barco with a product named SecureStream (unrelated to event streaming). The name of the project changed
+ but the goal of the project is the same: to provide a persistent, distributed, durable and elastic
+event streaming solution that easy to use and operate.
+
 [benchmarks]: ../benchmarks/
 [partitioning]: ../features/partitioning/
