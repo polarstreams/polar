@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	. "github.com/barcostreams/barco/internal/types"
+	. "github.com/polarstreams/polar/internal/types"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/context"
 )

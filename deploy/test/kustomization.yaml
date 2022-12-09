@@ -9,5 +9,5 @@ bases:
   - ../kubernetes
 
 images:
-  - name: barcostreams/barco
+  - name: polarstreams/polar
     newTag: latest

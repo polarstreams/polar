@@ -15,7 +15,7 @@ func Test(t *testing.T) {
 var _ = Describe("parseHostName()", func() {
 	It("should return default when provided is empty", func() {
 		base, ordinal := parseHostName("")
-		Expect(base).To(Equal("barco-"))
+		Expect(base).To(Equal("polar-"))
 		Expect(ordinal).To(Equal(0))
 	})
 
@@ -29,7 +29,7 @@ var _ = Describe("parseHostName()", func() {
 		Expect(base).To(Equal("abc-"))
 		Expect(ordinal).To(Equal(12))
 
-		base, ordinal = parseHostName("instance-1.barco")
+		base, ordinal = parseHostName("instance-1.polar")
 		Expect(base).To(Equal("instance-"))
 		Expect(ordinal).To(Equal(1))
 	})

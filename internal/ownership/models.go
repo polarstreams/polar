@@ -3,7 +3,7 @@ package ownership
 import (
 	"fmt"
 
-	. "github.com/barcostreams/barco/internal/types"
+	. "github.com/polarstreams/polar/internal/types"
 	. "github.com/google/uuid"
 )
 

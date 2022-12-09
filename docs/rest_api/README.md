@@ -1,6 +1,6 @@
-# Barco Streams REST API
+# PolarStreams REST API
 
-Barco Streams provide HTTP APIs to produce and consume messages from the cluster, and to introspect the
+PolarStreams provide HTTP APIs to produce and consume messages from the cluster, and to introspect the
 status of the brokers in the cluster.
 
 ## Table of Contents
@@ -29,7 +29,7 @@ A JSON Object containing the following properties:
 | consumerPort | `number` | The port number exposing the [Consumer API](#consumer-api). |
 | names | `string[]` | The host names of the cluster, on K8s it can be empty for large clusters, providing `baseName` and `serviceName` instead. |
 | baseName | `string` | In K8S, the host base name that composed with the pod ordinal and `serviceName`, compose the host name of a broker. |
-| serviceName | `string` | In K8s, the name of the Barco service with the namespace. |
+| serviceName | `string` | In K8s, the name of the PolarStreams service with the namespace. |
 
 
 #### Examples
@@ -37,21 +37,21 @@ A JSON Object containing the following properties:
 Getting the topology of a 3-broker cluster.
 
 ```bash
-$ curl -i "http://barco.streams:9250/v1/brokers"
+$ curl -i "http://polar.streams:9250/v1/brokers"
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"length":3,"names":["barco-0.barco.streams","barco-1.barco.streams","barco-2.barco.streams"],"producerPort":9251,"consumerPort":9252}
+{"length":3,"names":["polar-0.polar.streams","polar-1.polar.streams","polar-2.polar.streams"],"producerPort":9251,"consumerPort":9252}
 ```
 
 Getting the topology of a 12-broker cluster.
 
 ```shell
-$ curl -i "http://barco.streams:9250/v1/brokers"
+$ curl -i "http://polar.streams:9250/v1/brokers"
 HTTP/1.1 200 OK
 Content-Type: application/json
 
-{"baseName":"barco-","serviceName":"barco.streams","length":12,"producerPort":9251,"consumerPort":9252}
+{"baseName":"polar-","serviceName":"polar.streams","length":12,"producerPort":9251,"consumerPort":9252}
 ```
 
 ### `GET /status`
@@ -66,7 +66,7 @@ The Producer API, exposed in port `9251` by default, is used to send events to a
 
 ### `POST /v1/topic/{topic}/messages`
 
-Stores one or more events. When a `partitionKey` is provided in the query string, Barco will route the request to the
+Stores one or more events. When a `partitionKey` is provided in the query string, PolarStreams will route the request to the
 leader of the partition to provide the following ordering guarantee: events with the same partition key are stored
 (and retrieved) in order.
 
@@ -90,7 +90,7 @@ Sending an event with the partition key set.
 ```shell
 $ curl -X POST -i -d '{"productId": 123, "units": -5}' \
     -H "Content-Type: application/json" \
-    "http://barco.streams:9251/v1/topic/product-stock/messages?partitionKey=123"
+    "http://polar.streams:9251/v1/topic/product-stock/messages?partitionKey=123"
 ```
 
 ### `GET /status`
@@ -126,7 +126,7 @@ Register a consumer in the cluster subscribing to the topic `"product-stock"`.
 
 ```shell
 $ curl -X PUT \
-    "http://barco.streams:9252/v1/consumer/register?consumerId=1&group=product-stock-updater&topic=product-stock"
+    "http://polar.streams:9252/v1/consumer/register?consumerId=1&group=product-stock-updater&topic=product-stock"
 ```
 
 #### Response
@@ -164,7 +164,7 @@ Register endpoint from above and retry.
 
 ```
 $ curl -i -X POST -H "Accept: application/json"\
-    "http://barco.streams:9252/v1/consumer/poll?consumerId=1"
+    "http://polar.streams:9252/v1/consumer/poll?consumerId=1"
 HTTP/1.1 200 OK
 Content-Type: application/json
 
@@ -194,7 +194,7 @@ Responds HTTP status `409 Conflict` when the consumer is not considered to be re
 Manually commit the position of the reader.
 
 ```shell
-$ curl -i -X POST "http://barco.streams:9252/v1/consumer/commit?consumerId=1"
+$ curl -i -X POST "http://polar.streams:9252/v1/consumer/commit?consumerId=1"
 ```
 
 ### `POST /v1/consumer/goodbye`

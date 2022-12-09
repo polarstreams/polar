@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/barcostreams/barco/internal/types"
+	. "github.com/polarstreams/polar/internal/types"
 )
 
 const (
@@ -22,30 +22,30 @@ const (
 )
 
 const (
-	envHome                            = "BARCO_HOME"
-	envListenOnAllAddresses            = "BARCO_LISTEN_ON_ALL"
-	envProducerPort                    = "BARCO_PRODUCER_PORT"
-	envConsumerPort                    = "BARCO_CONSUMER_PORT"
-	envClientDiscoveryPort             = "BARCO_CLIENT_DISCOVERY_PORT"
-	envMetricsPort                     = "BARCO_METRICS_PORT"
-	envGossipPort                      = "BARCO_GOSSIP_PORT"
-	envGossipDataPort                  = "BARCO_GOSSIP_DATA_PORT"
-	envSegmentFlushIntervalMs          = "BARCO_SEGMENT_FLUSH_INTERVAL_MS"
-	envLogRetentionDuration            = "BARCO_LOG_RETENTION_DURATION"
-	envReplicationTimeoutDuration      = "BARCO_REPLICATION_TIMEOUT_DURATION"
-	envReplicationWriteTimeoutDuration = "BARCO_REPLICATION_WRITE_TIMEOUT_DURATION"
-	envMaxSegmentSize                  = "BARCO_MAX_SEGMENT_FILE_SIZE"
-	envAllocationPoolSize              = "BARCO_ALLOCATION_POOL_SIZE"
-	envConsumerAddDelay                = "BARCO_CONSUMER_ADD_DELAY_MS"
-	envConsumerReadTimeout             = "BARCO_CONSUMER_READ_TIMEOUT_MS"
-	envConsumerRanges                  = "BARCO_CONSUMER_RANGES"
-	envTopologyFilePollDelayMs         = "BARCO_TOPOLOGY_FILE_POLL_DELAY_MS"
-	envShutdownDelaySecs               = "BARCO_SHUTDOWN_DELAY_SECS"
-	envDevMode                         = "BARCO_DEV_MODE"
-	envServiceName                     = "BARCO_SERVICE_NAME"
-	envPodName                         = "BARCO_POD_NAME"
-	envPodNamespace                    = "BARCO_POD_NAMESPACE"
-	EnvBarcoDebug                      = "BARCO_DEBUG"
+	envHome                            = "POLAR_HOME"
+	envListenOnAllAddresses            = "POLAR_LISTEN_ON_ALL"
+	envProducerPort                    = "POLAR_PRODUCER_PORT"
+	envConsumerPort                    = "POLAR_CONSUMER_PORT"
+	envClientDiscoveryPort             = "POLAR_CLIENT_DISCOVERY_PORT"
+	envMetricsPort                     = "POLAR_METRICS_PORT"
+	envGossipPort                      = "POLAR_GOSSIP_PORT"
+	envGossipDataPort                  = "POLAR_GOSSIP_DATA_PORT"
+	envSegmentFlushIntervalMs          = "POLAR_SEGMENT_FLUSH_INTERVAL_MS"
+	envLogRetentionDuration            = "POLAR_LOG_RETENTION_DURATION"
+	envReplicationTimeoutDuration      = "POLAR_REPLICATION_TIMEOUT_DURATION"
+	envReplicationWriteTimeoutDuration = "POLAR_REPLICATION_WRITE_TIMEOUT_DURATION"
+	envMaxSegmentSize                  = "POLAR_MAX_SEGMENT_FILE_SIZE"
+	envAllocationPoolSize              = "POLAR_ALLOCATION_POOL_SIZE"
+	envConsumerAddDelay                = "POLAR_CONSUMER_ADD_DELAY_MS"
+	envConsumerReadTimeout             = "POLAR_CONSUMER_READ_TIMEOUT_MS"
+	envConsumerRanges                  = "POLAR_CONSUMER_RANGES"
+	envTopologyFilePollDelayMs         = "POLAR_TOPOLOGY_FILE_POLL_DELAY_MS"
+	envShutdownDelaySecs               = "POLAR_SHUTDOWN_DELAY_SECS"
+	envDevMode                         = "POLAR_DEV_MODE"
+	envServiceName                     = "POLAR_SERVICE_NAME"
+	envPodName                         = "POLAR_POD_NAME"
+	envPodNamespace                    = "POLAR_POD_NAMESPACE"
+	EnvDebug                           = "POLAR_DEBUG"
 )
 
 // Port defaults
@@ -116,8 +116,8 @@ type DiscovererConfig interface {
 	// return the host name of a replica
 	BaseHostName() string
 	ServiceName() string                       // Name of the K8S service for pod stable names
-	PodName() string                           // Name of the pod barco is running
-	PodNamespace() string                      // Name of the namespace of the barco pod
+	PodName() string                           // Name of the pod the broker is running
+	PodNamespace() string                      // Name of the namespace of the broker pod
 	FixedTopologyFilePollDelay() time.Duration // The delay between attempts to read file for changes in topology
 }
 
@@ -169,13 +169,13 @@ type config struct {
 
 func parseHostName(hostName string) (baseHostName string, ordinal int) {
 	if hostName == "" {
-		return "barco-", 0
+		return "polar-", 0
 	}
 
 	matches := hostRegex.FindAllStringSubmatch(hostName, -1)
 
 	if len(matches) == 0 {
-		return "barco-", 0
+		return "polar-", 0
 	}
 
 	m := matches[0]
@@ -331,7 +331,7 @@ func (c *config) MaxDataBodyLength() int {
 }
 
 func (c *config) HomePath() string {
-	return env(envHome, filepath.Join("/var", "lib", "barco"))
+	return env(envHome, filepath.Join("/var", "lib", "polar"))
 }
 
 func (c *config) dataPath() string {
@@ -343,12 +343,12 @@ func (c *config) LocalDbPath() string {
 }
 
 func (c *config) DatalogPath(t *TopicDataId) string {
-	// Pattern: /var/lib/barco/data/datalog/{topic}/{token}/{rangeIndex}/{genVersion}
+	// Pattern: /var/lib/polar/data/datalog/{topic}/{token}/{rangeIndex}/{genVersion}
 	return filepath.Join(c.DatalogSegmentsPath(), t.Name, t.Token.String(), t.RangeIndex.String(), t.Version.String())
 }
 
 func (c *config) DatalogSegmentsPath() string {
-	// Example: /var/lib/barco/data/datalog/
+	// Example: /var/lib/polar/data/datalog/
 	return filepath.Join(c.dataPath(), "datalog")
 }
 
@@ -365,7 +365,7 @@ func (c *config) BaseHostName() string {
 }
 
 func (c *config) ServiceName() string {
-	return env(envServiceName, "barco")
+	return env(envServiceName, "polar")
 }
 
 func (c *config) PodName() string {

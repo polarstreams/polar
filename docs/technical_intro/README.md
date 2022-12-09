@@ -1,4 +1,4 @@
-# Barco Streams - Technical Introduction
+# PolarStreams - Technical Introduction
 
 ## Seminal papers
 
@@ -6,10 +6,10 @@
 - [Scalable Distributed Transactions across Heterogeneous Stores](https://www.researchgate.net/profile/Akon-Dey/publication/282156834_Scalable_Distributed_Transactions_across_Heterogeneous_Stores/links/56058b9608ae5e8e3f32b98d/Scalable-Distributed-Transactions-across-Heterogeneous-Stores.pdf)
 - [Raft Consensus Algorithm](https://raft.github.io/raft.pdf)
 
-## How does Barco work?
+## How does PolarStreams work?
 
-Events are organized in topics. In Barco, topics are always multi-producer and multi-consumer. To achieve high
-availability and durability, topic events are persisted on disk on multiple Barco brokers.
+Events are organized in topics. In PolarStreams, topics are always multi-producer and multi-consumer. To achieve high
+availability and durability, topic events are persisted on disk on multiple PolarStreams brokers.
 
 Data is automatically distributed across brokers using consistent hashing (Murmur3 tokens) in a similar way as [Amazon
 DynamoDB](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf) and [Apache
@@ -26,7 +26,7 @@ the following two brokers in the cluster.
 
 In the preceding diagram, Broker A is the natural leader of token A. When Broker A is considered unavailable by other brokers, after a series of strong consistent operations broker B will take ownership of range (A, B). In case both A and B are considered down, C will not try to take ownership of range (A, B), as it won't be able guarantee the minimum amount of replicas of the data.
 
-Barco uses a deterministic way to assign tokens to brokers (i.e. broker with ordinal 2 will always have the same token). New brokers added to an existing cluster will be placed in the middle of the previous token range, splitting it in half. In the same way, removing brokers causes ranges to be twice the size.
+PolarStreams uses a deterministic way to assign tokens to brokers (i.e. broker with ordinal 2 will always have the same token). New brokers added to an existing cluster will be placed in the middle of the previous token range, splitting it in half. In the same way, removing brokers causes ranges to be twice the size.
 
 ![2 rings with 3 and 6 nodes respectively](https://user-images.githubusercontent.com/2931196/174292614-4124eddc-01f1-4495-8391-93796f32083e.png)
 
@@ -39,25 +39,25 @@ a message is just calling an HTTP endpoint.
 To consume events, a client should poll for new data to all live brokers. The brokers will determine when that consumer
 should be served with topic events of a given partition depending on the consumer placement.
 
-Barco guarantees that any consumer of a given topic and partition key will always read that events in the same order as
+PolarStreams guarantees that any consumer of a given topic and partition key will always read that events in the same order as
 they were written.
 
 ## I/O
 
-Internally, Barco uses a series of I/O-related techniques that make it both fast and lightweight, supporting high
+Internally, PolarStreams uses a series of I/O-related techniques that make it both fast and lightweight, supporting high
 throughput and consistently low latency while keeping compute and memory resource utilization low. Learn more about
 these techniques in the [I/O Documentation][io-docs].
 
 ## Interbroker communication
 
-Barco uses a series of TCP connections to communicate between brokers for different purposes:
+PolarStreams uses a series of TCP connections to communicate between brokers for different purposes:
 
-- **Gossip**: Barco uses a protocol to exchange state information about brokers participating in the cluster, called Gossip.
+- **Gossip**: PolarStreams uses a protocol to exchange state information about brokers participating in the cluster, called Gossip.
 Each broker uses the Gossip protocol to agree on token range ownership and consumers view/topology with neighboring brokers.
 - **Data replication**: All data is automatically replicated to the following brokers in the ring. Compressed groups of events of a certain partition are sent periodically to the followers of the partition leader.
 - **Producer routing**: When a producer client sends a new event message to a broker that is not the leader of the partition, the broker will route the message to the correct leader in the foreground.
 
 [direct-io]: https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/5/html/global_file_system/s1-manage-direct-io
 [io_uring]: https://en.wikipedia.org/wiki/Io_uring
-[file-formats]: https://github.com/barcostreams/barco/blob/main/docs/developer/FILE_FORMATS.md
+[file-formats]: https://github.com/polarstreams/polar/blob/main/docs/developer/FILE_FORMATS.md
 [io-docs]: ../features/io/

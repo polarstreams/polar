@@ -3,7 +3,7 @@
 package mocks
 
 import (
-	types "github.com/barcostreams/barco/internal/types"
+	types "github.com/polarstreams/polar/internal/types"
 	mock "github.com/stretchr/testify/mock"
 )
 

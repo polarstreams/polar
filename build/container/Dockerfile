@@ -18,22 +18,22 @@ RUN if [ "$TARGETARCH" = "arm64" ]; \
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal
 LABEL org.opencontainers.image.created="${BUILD_TIMESTAMP}"
-LABEL org.opencontainers.image.authors="Barco Streams <info@barcostreams.com>"
-LABEL org.opencontainers.image.documentation="https://github.com/barcostreams/barco/tree/main/docs"
-LABEL org.opencontainers.image.vendor="Barco Streams"
+LABEL org.opencontainers.image.authors="PolarStreams <info@polarstreams.io>"
+LABEL org.opencontainers.image.documentation="https://github.com/polarstreams/polar/tree/main/docs"
+LABEL org.opencontainers.image.vendor="PolarStreams"
 LABEL org.opencontainers.image.licenses="AGPL"
-LABEL org.opencontainers.image.title="Barco Streams"
+LABEL org.opencontainers.image.title="PolarStreams"
 LABEL org.opencontainers.image.description="Lightweight, elastic, kubernetes-native event streaming system."
 
 WORKDIR /work/
-COPY --from=builder /build/barco .
+COPY --from=builder /build/polar .
 
-RUN mkdir /var/lib/barco
+RUN mkdir /var/lib/polar
 
-RUN chgrp -R 0 /var/lib/barco && \
-    chmod -R g=u /var/lib/barco && \
-    chown -R 1001:0 /var/lib/barco
+RUN chgrp -R 0 /var/lib/polar && \
+    chmod -R g=u /var/lib/polar && \
+    chown -R 1001:0 /var/lib/polar
 
 USER 1001
 
-CMD ["/work/barco"]
+CMD ["/work/polar"]

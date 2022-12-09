@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/barcostreams/barco/internal/test/conf/mocks"
+	"github.com/polarstreams/polar/internal/test/conf/mocks"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )

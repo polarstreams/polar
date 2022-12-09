@@ -1,6 +1,6 @@
 package types
 
-import "github.com/barcostreams/barco/internal/metrics"
+import "github.com/polarstreams/polar/internal/metrics"
 
 type FlowController interface {
 	// Allocate makes sure that buffer memory usage remains within the predefined boundaries.

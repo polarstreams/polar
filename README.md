@@ -1,12 +1,12 @@
-# Barco Streams
+# PolarStreams
 
-Barco is a lightweight, elastic, Kubernetes-native event streaming system. It acts as a persistent buffer between
+PolarStreams is a lightweight, elastic, Kubernetes-native event streaming system. It acts as a persistent buffer between
 services providing at-least-once delivery guarantees.
 
-Barco Streams is optimized to be developer friendly, resource efficient, have minimal operational overhead, and be a
+PolarStreams is optimized to be developer friendly, resource efficient, have minimal operational overhead, and be a
 good K8s neighbor.
 
-![go build](https://github.com/barcostreams/barco/actions/workflows/go.yml/badge.svg)
+![go build](https://github.com/polarstreams/polar/actions/workflows/go.yml/badge.svg)
 
 ## Features
 
@@ -36,7 +36,7 @@ good K8s neighbor.
 
 <details>
 <summary>⚠️ <strong>The project is still in early development</strong> ⚠️</summary>
-Barco Streams is not production ready yet, expect bugs and things that don't work.
+PolarStreams is not production ready yet, expect bugs and things that don't work.
 
 We honestly value your contribution to make this project ready for general availability. If you want to contribute,
 check out the [Contributing Guide](./CONTRIBUTING.md).
@@ -47,8 +47,8 @@ check out the [Contributing Guide](./CONTRIBUTING.md).
 ## Resources
 
 - [Documentation Index](./docs/)
-- [Why Barco?](#why-barco-streams)
-- [How does Barco work?](./docs/technical_intro/)
+- [Why PolarStreams?](#why-polarstreams)
+- [How does PolarStreams work?](./docs/technical_intro/)
 - [Benchmarks][benchmarks]
 - [REST API docs][rest-api]
 - [Installing](./docs/install/)
@@ -56,24 +56,24 @@ check out the [Contributing Guide](./CONTRIBUTING.md).
 
 ## Getting Started
 
-Producing and consuming messages from Barco is as simple as sending a HTTP request. Use your favorite HTTP client in
+Producing and consuming messages from PolarStreams is as simple as sending a HTTP request. Use your favorite HTTP client in
 your technology stack to send and receive events. Additionally, we also provide a [Go Client Library][go-client].
 
 ### Getting Started on Kubernetes
 
-Get started with Barco on Kubernetes using [this guide](./docs/getting_started/on_kubernetes/).
+Get started with PolarStreams on Kubernetes using [this guide](./docs/getting_started/on_kubernetes/).
 
 ### Getting Started on Docker
 
-Barco Streams is distributed by default with a minimal size of 3 brokers for production use. You can run a
-single-broker using Docker / Podman with developer mode. Read more about [how to get started with Barco on
+PolarStreams is distributed by default with a minimal size of 3 brokers for production use. You can run a
+single-broker using Docker / Podman with developer mode. Read more about [how to get started with PolarStreams on
 Docker](./docs/getting_started/on_docker/).
 
 -----
 
-## Why Barco Streams?
+## Why PolarStreams?
 
-Barco Streams was created to provide a developer friendly and resource efficient event streaming solution for
+PolarStreams was created to provide a developer friendly and resource efficient event streaming solution for
 Kubernetes that is easy to use and operate.
 
 We believe that deploying and managing a persistent event streaming for a microservice architecture should be as easy as
@@ -92,7 +92,7 @@ go test -v ./...
 ```
 
 The [Contributing Guide](./CONTRIBUTING.md#environment-setup) has more information about environment setup and other
-topics that can help you to build Barco from source.
+topics that can help you to build PolarStreams from source.
 
 ## Design Principles
 
@@ -127,8 +127,8 @@ feature requests or feedback. To get started with contributing:
 
 - Have a look through GitHub issues labeled ["Good first issue"][good-first-issue].
 - Read the [contribution guide](./CONTRIBUTING.md).
-- See the [build instructions](#build), for details on building Barco.
-- [Create a fork][create-fork] of Barco and submit a pull
+- See the [build instructions](#build), for details on building PolarStreams.
+- [Create a fork][create-fork] of PolarStreams and submit a pull
 request with your proposed changes.
 
 ## License
@@ -147,8 +147,8 @@ GNU Affero General Public License for more details.
 
 https://www.gnu.org/licenses/agpl-3.0.html
 
-[good-first-issue]: https://github.com/barcostreams/barco/labels/good%20first%20issue
+[good-first-issue]: https://github.com/polarstreams/polar/labels/good%20first%20issue
 [create-fork]: https://docs.github.com/en/github/getting-started-with-github/fork-a-repo
-[go-client]: https://github.com/barcostreams/go-client
+[go-client]: https://github.com/polarstreams/go-client
 [rest-api]: ./docs/rest_api/
 [benchmarks]: ./docs/benchmarks/

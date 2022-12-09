@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/barcostreams/barco/internal/conf"
-	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
+	"github.com/polarstreams/polar/internal/conf"
+	. "github.com/polarstreams/polar/internal/types"
+	"github.com/polarstreams/polar/internal/utils"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
@@ -18,7 +18,7 @@ import (
 const noGenerationsStatusMessage = "Broker is unavailable to handle producer/consumer requests"
 
 type topologyClientMessage struct {
-	BaseName     string   `json:"baseName,omitempty"`    // When defined, base name to build the broker names, e.g. "barco-"
+	BaseName     string   `json:"baseName,omitempty"`    // When defined, base name to build the broker names, e.g. "polar-"
 	ServiceName  string   `json:"serviceName,omitempty"` // The name of the service to build the broker names: "<baseName><ordinal>.<service>"
 	Length       int      `json:"length"`                // The ring size
 	BrokerNames  []string `json:"names,omitempty"`

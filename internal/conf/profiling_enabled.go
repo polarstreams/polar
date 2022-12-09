@@ -14,7 +14,7 @@ import (
 
 // Enables profiling when the build tag is set
 func StartProfiling() bool {
-	fileName := fmt.Sprintf("barco-profile-%d.prof", time.Now().UnixMicro())
+	fileName := fmt.Sprintf("polar-profile-%d.prof", time.Now().UnixMicro())
 	f, err := os.Create(fileName)
 	if err != nil {
 		log.Panic().Err(err).Msgf("CPU profile file could not be created")

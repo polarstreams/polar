@@ -1,4 +1,4 @@
-module github.com/barcostreams/barco
+module github.com/polarstreams/polar
 
 go 1.19
 

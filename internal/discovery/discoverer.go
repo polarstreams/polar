@@ -11,16 +11,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/localdb"
-	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/localdb"
+	. "github.com/polarstreams/polar/internal/types"
+	"github.com/polarstreams/polar/internal/utils"
 	"github.com/rs/zerolog/log"
 )
 
 const (
-	envOrdinal     = "BARCO_ORDINAL"
-	envBrokerNames = "BARCO_BROKER_NAMES"
+	envOrdinal     = "POLAR_ORDINAL"
+	envBrokerNames = "POLAR_BROKER_NAMES"
 )
 
 var roundRobinRangeIndex uint32 = 0
@@ -129,7 +129,7 @@ func (d *discoverer) Init() error {
 	if !d.Topology().AmIIncluded() {
 		return fmt.Errorf(
 			"The current broker is not included in the Topology. " +
-				"Barco clusters must have a size of 3*2^n for this broker to be considered.")
+				"PolarStreams clusters must have a size of 3*2^n for this broker to be considered.")
 	}
 
 	if err := d.loadGenerations(); err != nil {
@@ -310,7 +310,7 @@ func (d *discoverer) createFixedTopology(ordinal int, names string) (*TopologyIn
 	}
 
 	// We expect the names or addresses to be sorted by ordinal
-	// e.g. barco-0, barco-1, barco-2, barco-3, barco-4, barco-5
+	// e.g. polar-0, polar-1, polar-2, polar-3, polar-4, polar-5
 	parts := strings.Split(names, ",")
 	if len(parts) < 3 && !d.config.DevMode() {
 		return nil, fmt.Errorf("Topology information can't contain less than 3 broker names, obtained %v", parts)

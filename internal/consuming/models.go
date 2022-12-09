@@ -11,11 +11,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/barcostreams/barco/internal/conf"
-	"github.com/barcostreams/barco/internal/data"
-	"github.com/barcostreams/barco/internal/types"
-	. "github.com/barcostreams/barco/internal/types"
-	"github.com/barcostreams/barco/internal/utils"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/data"
+	"github.com/polarstreams/polar/internal/types"
+	. "github.com/polarstreams/polar/internal/types"
+	"github.com/polarstreams/polar/internal/utils"
 	"github.com/google/uuid"
 	"github.com/karlseguin/jsonwriter"
 	"github.com/klauspost/compress/zstd"
@@ -219,7 +219,7 @@ type recordHeader struct {
 }
 
 // Noop workaround for manual committing
-// https://github.com/barcostreams/barco/issues/70
+// https://github.com/polarstreams/polar/issues/70
 type ignoreResponse struct{}
 
 func (i ignoreResponse) Header() http.Header {

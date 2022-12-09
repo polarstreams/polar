@@ -1,10 +1,10 @@
 package consuming
 
 import (
-	"github.com/barcostreams/barco/internal/data"
-	"github.com/barcostreams/barco/internal/interbroker"
-	. "github.com/barcostreams/barco/internal/types"
-	. "github.com/barcostreams/barco/internal/utils"
+	"github.com/polarstreams/polar/internal/data"
+	"github.com/polarstreams/polar/internal/interbroker"
+	. "github.com/polarstreams/polar/internal/types"
+	. "github.com/polarstreams/polar/internal/utils"
 )
 
 type replicationReaderFactory struct {

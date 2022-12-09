@@ -4,9 +4,9 @@ import (
 	"io/ioutil"
 	"time"
 
-	"github.com/barcostreams/barco/internal/test/conf/mocks"
-	mocks2 "github.com/barcostreams/barco/internal/test/types/mocks"
-	. "github.com/barcostreams/barco/internal/types"
+	"github.com/polarstreams/polar/internal/test/conf/mocks"
+	mocks2 "github.com/polarstreams/polar/internal/test/types/mocks"
+	. "github.com/polarstreams/polar/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"

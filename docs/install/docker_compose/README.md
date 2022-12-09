@@ -1,16 +1,16 @@
-# Run Barco with Docker Compose
+# Run PolarStreams with Docker Compose
 
-For local application development and CI environments, you can use [docker compose][docker-compose] to run Barco.
+For local application development and CI environments, you can use [docker compose][docker-compose] to run PolarStreams.
 
 You can run a single-broker cluster in developer mode using the following service definition:
 
 ```
 version: "3.9"
 services:
-  barco:
-    image: "barcostreams/barco:latest"
+  polar:
+    image: "polarstreams/polar:latest"
     environment:
-      - BARCO_DEV_MODE=true
+      - POLAR_DEV_MODE=true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9250/status"]
       interval: 1s
