@@ -35,9 +35,9 @@ recommend looking for the default number of [consumer ranges per broker (fan-out
 ## Why the project name change?
 
 PolarStreams project used to be called Barco Streams. We decided to change it because there was an existing large
-company named Barco with a product named SecureStream (unrelated to event streaming). The name of the project changed
+company named Barco with a product named SecureStream (unrelated to event streaming). The name changed
  but the goal of the project is the same: to provide a persistent, distributed, durable and elastic
-event streaming solution that easy to use and operate.
+event streaming solution that's easy to use and operate.
 
 [benchmarks]: ../benchmarks/
 [partitioning]: ../features/partitioning/
