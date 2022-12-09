@@ -26,7 +26,7 @@ On demand cost is $0.085 per hour.
 On demand cost is $0.17 per hour.
 
 <p align="center">
-    <img src="https://user-images.githubusercontent.com/2931196/197511787-551e3a43-70f2-4711-9a7c-514adda19c24.png" alt="Throughput by instance type">
+    <img src="https://user-images.githubusercontent.com/2931196/206732634-2055dfda-31e2-4f03-8a36-c3c653e70930.png" alt="Throughput by instance type">
     <br>
     <em>Messages per second by instance</em>
 </p>
@@ -37,7 +37,7 @@ composed of commodity instances. The max latency on all runs was under 100ms.
 Note that when running on `c6i.xlarge`, the benchmark is limited by the network bandwidth of the client (as `12.5 Gbps`
 is `1.45 GiB/s`).
 
-What we find specially interesting is that **PolarStreams can support writes of more than 99K msgs/s with baseline CPU
+What we find specially interesting is that **PolarStreams can support writes of more than 96K msgs/s with baseline CPU
 performance of `t4g.micro`, bursting up to 1M msgs/s**. This is also an example of what resource sharing might
 look like when running PolarStreams on Kubernetes with a wide [requests-limits resource range][k8s-resource-mgmt].
 
@@ -78,8 +78,8 @@ Apache Kafka brokers.
 The tool used to benchmark PolarStreams is [available on GitHub][tool-repo] and it can be used to reproduce these results with
 the following parameters:
 
-- PolarStreams Commit Hash: [8b141ee](https://github.com/polarstreams/polar/commit/8b141eeb71772bfd3bfbdbb530337e2120e5eeef)
-(`v0.4.1`).
+- PolarStreams Commit Hash: [a035ed2](https://github.com/polarstreams/polar/commit/a035ed2fccb9f67248c6e10bcb9bd5f806464447)
+(`v0.6.0`).
 - Tool parameters: `-c 32 -n 1000000 -m 16 -mr 64 -ch 16`
 
 There are also [terraform files available in the repository][terraform-files] to easily deploy the necessary resources
