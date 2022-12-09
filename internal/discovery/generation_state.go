@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	. "github.com/google/uuid"
 	. "github.com/polarstreams/polar/internal/types"
 	"github.com/polarstreams/polar/internal/utils"
-	. "github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 

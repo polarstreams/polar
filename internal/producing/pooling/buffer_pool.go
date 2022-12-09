@@ -1,7 +1,7 @@
 package pooling
 
 import (
-	"github.com/barcostreams/barco/internal/metrics"
+	"github.com/polarstreams/polar/internal/metrics"
 	"github.com/rs/zerolog/log"
 )
 

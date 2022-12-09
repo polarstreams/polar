@@ -4,11 +4,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	confMock "github.com/polarstreams/polar/internal/test/conf/mocks"
 	"github.com/polarstreams/polar/internal/test/discovery/mocks"
 	. "github.com/polarstreams/polar/internal/types"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("SendToFollowers()", func() {

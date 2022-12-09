@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/karlseguin/jsonwriter"
+	"github.com/klauspost/compress/zstd"
 	"github.com/polarstreams/polar/internal/conf"
 	"github.com/polarstreams/polar/internal/data"
 	. "github.com/polarstreams/polar/internal/data"
@@ -13,8 +15,6 @@ import (
 	"github.com/polarstreams/polar/internal/interbroker"
 	. "github.com/polarstreams/polar/internal/types"
 	"github.com/polarstreams/polar/internal/utils"
-	"github.com/karlseguin/jsonwriter"
-	"github.com/klauspost/compress/zstd"
 	"github.com/rs/zerolog/log"
 )
 

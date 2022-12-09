@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	. "github.com/google/uuid"
+	. "github.com/onsi/gomega"
 	. "github.com/polarstreams/polar/internal/test"
 	cMocks "github.com/polarstreams/polar/internal/test/conf/mocks"
 	"github.com/polarstreams/polar/internal/test/localdb/mocks"
 	. "github.com/polarstreams/polar/internal/types"
-	. "github.com/google/uuid"
-	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 )
 

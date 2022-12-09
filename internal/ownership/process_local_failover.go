@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"time"
 
-	. "github.com/polarstreams/polar/internal/types"
 	"github.com/google/uuid"
+	. "github.com/polarstreams/polar/internal/types"
 	"github.com/rs/zerolog/log"
 )
 

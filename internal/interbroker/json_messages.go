@@ -1,8 +1,8 @@
 package interbroker
 
 import (
-	. "github.com/polarstreams/polar/internal/types"
 	. "github.com/google/uuid"
+	. "github.com/polarstreams/polar/internal/types"
 )
 
 // Represents the interbroker api json message for proposing and accepting a generation to another broker.

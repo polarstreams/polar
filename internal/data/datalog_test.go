@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/polarstreams/polar/internal/conf"
-	"github.com/polarstreams/polar/internal/test/conf/mocks"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/test/conf/mocks"
 	"github.com/stretchr/testify/mock"
 )
 

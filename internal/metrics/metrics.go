@@ -57,8 +57,8 @@ var (
 		Buckets: prometheus.ExponentialBuckets(2, 7, 10), // buckets from 2 to 80MiB
 	})
 
-	AllocationPoolAvailableBytes = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "polar_producing_allocation_pool_available_bytes",
+	ProducerBufferPoolAvailable = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "polar_producer_buffer_pool_available_bytes",
 		Help: "The number of bytes available to allocate",
 	})
 

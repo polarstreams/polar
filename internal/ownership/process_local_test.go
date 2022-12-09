@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"testing"
 
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	"github.com/polarstreams/polar/internal/interbroker"
 	. "github.com/polarstreams/polar/internal/test/discovery/mocks"
 	. "github.com/polarstreams/polar/internal/test/interbroker/mocks"
 	. "github.com/polarstreams/polar/internal/test/localdb/mocks"
 	. "github.com/polarstreams/polar/internal/types"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/mock"
 )

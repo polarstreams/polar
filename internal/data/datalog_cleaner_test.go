@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/polarstreams/polar/internal/test/conf/mocks"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/polarstreams/polar/internal/test/conf/mocks"
 )
 
 var _ = Describe("datalog", func() {

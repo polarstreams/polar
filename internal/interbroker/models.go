@@ -4,8 +4,8 @@ import (
 	"io"
 	"net/url"
 
-	. "github.com/polarstreams/polar/internal/types"
 	. "github.com/google/uuid"
+	. "github.com/polarstreams/polar/internal/types"
 )
 
 // Represents a gossip listener to generation-related messages

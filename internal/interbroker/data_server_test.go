@@ -4,9 +4,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/polarstreams/polar/internal/test/fakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/polarstreams/polar/internal/test/fakes"
 	"github.com/rs/zerolog/log"
 )
 

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/polarstreams/polar/internal/conf"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/polarstreams/polar/internal/conf"
 )
 
 func TestData(t *testing.T) {

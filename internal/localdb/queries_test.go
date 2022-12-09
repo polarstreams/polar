@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/polarstreams/polar/internal/types"
-	"github.com/polarstreams/polar/internal/utils"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	. "github.com/polarstreams/polar/internal/types"
+	"github.com/polarstreams/polar/internal/utils"
 )
 
 func TestDbClient(t *testing.T) {

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"sync/atomic"
 
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/polarstreams/polar/internal/conf"
 	. "github.com/polarstreams/polar/internal/types"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/zerolog/log"
 )
 

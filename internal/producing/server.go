@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/julienschmidt/httprouter"
 	"github.com/polarstreams/polar/internal/conf"
 	"github.com/polarstreams/polar/internal/data"
 	"github.com/polarstreams/polar/internal/data/topics"
@@ -18,7 +19,6 @@ import (
 	"github.com/polarstreams/polar/internal/producing/pooling"
 	"github.com/polarstreams/polar/internal/types"
 	"github.com/polarstreams/polar/internal/utils"
-	"github.com/julienschmidt/httprouter"
 	"github.com/rs/zerolog/log"
 )
 
