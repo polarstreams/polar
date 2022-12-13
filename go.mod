@@ -8,7 +8,7 @@ require (
 	github.com/karlseguin/jsonwriter v1.0.3
 	github.com/klauspost/compress v1.15.11
 	github.com/mattn/go-sqlite3 v1.14.16
-	github.com/onsi/ginkgo v1.15.1
+	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.24.1
 	github.com/prometheus/client_golang v1.13.0
 	github.com/rs/zerolog v1.28.0
