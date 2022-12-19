@@ -30,8 +30,12 @@ type recordItem struct {
 }
 
 func (r *recordItem) marshal(w io.Writer) (totalRecords int, err error) {
-	if r.contentType == ContentTypeNDJSON {
+	if r.contentType == MIMETypeNDJSON {
 		return r.marshalRecordsByLine(w, r.length)
+	}
+
+	if r.contentType == MIMETypeProducerBinary {
+		return r.marshalFramedRecords(w, r.length)
 	}
 
 	return 1, marshalRecord(w, r.timestamp, r.length, r.buffers)
@@ -82,6 +86,41 @@ func (r *recordItem) marshalRecordsByLine(w io.Writer, length uint32) (totalReco
 	return
 }
 
+func (r *recordItem) marshalFramedRecords(w io.Writer, length uint32) (totalRecords int, err error) {
+	bufferIndex := 0
+	index := 0
+	totalRead := 0
+	for totalRead < int(length) {
+		recordLength := readUint32(r.buffers, &bufferIndex, &index)
+		totalRead += 4
+		if err := marshalRecordProps(r.timestamp, recordLength, w); err != nil {
+			return totalRecords, err
+		}
+		totalRecords++
+		remaining := int(recordLength)
+		for remaining > 0 {
+			buf := r.buffers[bufferIndex][index:]
+			n := len(buf)
+			if remaining < n {
+				n = remaining
+			}
+			remaining -= n
+
+			if err := utils.WriteBytes(w, buf[0:n]); err != nil {
+				return totalRecords, err
+			}
+			if remaining > 0 {
+				index = 0
+				bufferIndex++
+			} else {
+				index += n
+			}
+		}
+		totalRead += int(recordLength)
+	}
+	return totalRecords, nil
+}
+
 func marshalRecord(w io.Writer, timestamp int64, length uint32, buffers [][]byte) error {
 	if err := marshalRecordProps(timestamp, length, w); err != nil {
 		return err
@@ -112,6 +151,18 @@ func marshalRecordProps(timestamp int64, length uint32, w io.Writer) error {
 		return err
 	}
 	return nil
+}
+
+func readUint32(buffers [][]byte, bufferIndex *int, index *int) uint32 {
+	buf := buffers[*bufferIndex][*index:]
+	if len(buf) < 4 {
+		*bufferIndex++
+		*index = 4 - len(buf)
+		buf = append(buf, buffers[*bufferIndex]...)
+	} else {
+		*index += 4
+	}
+	return conf.Endianness.Uint32(buf)
 }
 
 // Represents a group of `recordItem` that get compressed and written into a single chunk
