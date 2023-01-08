@@ -27,6 +27,7 @@ type Producer interface {
 	types.Closer
 
 	AcceptConnections() error
+	AcceptBinaryConnections() error
 }
 
 func NewProducer(

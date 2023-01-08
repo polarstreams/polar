@@ -15,7 +15,7 @@ import (
 
 var _ = Describe("recordItem", func() {
 	Describe("marshal()", func() {
-		Context("JSON", func()  {
+		Context("JSON", func() {
 			It("should write a single record in a single buffer", func() {
 				const body = "something0\nsomething1\n"
 				buffers := [][]byte{[]byte(body)}
@@ -60,7 +60,7 @@ var _ = Describe("recordItem", func() {
 
 		})
 
-		Context("NDJSON", func()  {
+		Context("NDJSON", func() {
 			It("should write multiple records with line-separated format in multiple buffers", func() {
 				data := "something0\nsomething1\n\nsomething2\nsomething3\nsomething4\nsomething5\nsomething6\nsomething7\n"
 				dataBuf := []byte(data)
@@ -164,7 +164,7 @@ var _ = Describe("recordItem", func() {
 			})
 		})
 
-		Context("ProducerBinary", func()  {
+		Context("ProducerBinary", func() {
 			It("should write multiple records with frame format in multiple buffers", func() {
 				data := concat(messageFrame("something0"), messageFrame("something1"), messageFrame("something else"))
 				for i := 11; i < len(data)-1; i++ {
@@ -203,7 +203,7 @@ var _ = Describe("recordItem", func() {
 	})
 })
 
-func concat(buffers... []byte) []byte {
+func concat(buffers ...[]byte) []byte {
 	result := make([]byte, 0)
 	for _, b := range buffers {
 		result = append(result, b...)
