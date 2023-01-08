@@ -2,6 +2,7 @@ package producing
 
 import (
 	"encoding/binary"
+	"fmt"
 	"hash/crc32"
 
 	"github.com/polarstreams/polar/internal/conf"
@@ -12,6 +13,7 @@ import (
 type opcode uint8
 type streamId uint16
 type flags uint8
+type errorCode uint8
 
 const messageVersion = 1
 
@@ -31,6 +33,12 @@ const (
 	withTimestamp flags = 0b00000001
 )
 
+const (
+	serverError         errorCode = 0
+	routingError        errorCode = 1
+	leaderNotFoundError errorCode = 2
+)
+
 // Header for producer messages. Order of fields defines the serialization format.
 type binaryHeader struct {
 	Version    uint8
@@ -45,6 +53,7 @@ var binaryHeaderSize = utils.BinarySize(binaryHeader{})
 
 type binaryResponse interface {
 	Marshal(w BufferBackedWriter) error
+	BodyLength() int
 }
 
 type emptyResponse struct {
@@ -63,9 +72,13 @@ func (r *emptyResponse) Marshal(w BufferBackedWriter) error {
 	})
 }
 
+func (r *emptyResponse) BodyLength() int {
+	return 0
+}
+
 type errorResponse struct {
 	streamId streamId
-	op       opcode
+	code     errorCode
 	message  string
 }
 
@@ -75,13 +88,21 @@ func (r *errorResponse) Marshal(w BufferBackedWriter) error {
 		Version:    messageVersion,
 		StreamId:   r.streamId,
 		Op:         errorOp,
-		BodyLength: uint32(len(message)),
+		BodyLength: uint32(r.BodyLength()),
 	}); err != nil {
+		return err
+	}
+
+	if _, err := w.Write([]byte{byte(r.code)}); err != nil {
 		return err
 	}
 
 	_, err := w.Write(message)
 	return err
+}
+
+func (r *errorResponse) BodyLength() int {
+	return len(r.message) + 1
 }
 
 func writeHeader(w BufferBackedWriter, header *binaryHeader) error {
@@ -97,6 +118,27 @@ func writeHeader(w BufferBackedWriter, header *binaryHeader) error {
 	return nil
 }
 
+// Generic error response
 func newErrorResponse(message string, requestHeader *binaryHeader) binaryResponse {
-	return &errorResponse{message: message, streamId: requestHeader.StreamId}
+	return &errorResponse{
+		message:  message,
+		streamId: requestHeader.StreamId,
+		code:     serverError,
+	}
+}
+
+func newRoutingErrorResponse(err error, requestHeader *binaryHeader) binaryResponse {
+	return &errorResponse{
+		message:  err.Error(),
+		streamId: requestHeader.StreamId,
+		code:     routingError,
+	}
+}
+
+func newLeaderNotFoundErrorResponse(token Token, requestHeader *binaryHeader) binaryResponse {
+	return &errorResponse{
+		message:  fmt.Sprintf("Leader for token %d could not be found", token),
+		streamId: requestHeader.StreamId,
+		code:     leaderNotFoundError,
+	}
 }

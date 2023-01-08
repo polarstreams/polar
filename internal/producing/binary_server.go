@@ -5,12 +5,18 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"net/url"
+	"time"
 
 	"github.com/polarstreams/polar/internal/conf"
+	"github.com/polarstreams/polar/internal/discovery"
+	"github.com/polarstreams/polar/internal/interbroker"
 	"github.com/polarstreams/polar/internal/producing/pooling"
 	"github.com/polarstreams/polar/internal/utils"
 	"github.com/rs/zerolog/log"
 )
+
+const maxResponseGroupSize = 16 * 1024
 
 func (p *producer) AcceptBinaryConnections() error {
 	port := p.config.ProducerBinaryPort()
@@ -44,14 +50,27 @@ func (p *producer) AcceptBinaryConnections() error {
 }
 
 func (p *producer) handleBinaryConnection(conn net.Conn) {
-	// TODO: CREATE BINARY SERVER
+	s := binaryServer{
+		bufferPool:      p.bufferPool,
+		gossiper:        p.gossiper,
+		leaderGetter:    p.leaderGetter,
+		coalescerGetter: p,
+		conn:            conn,
+		responses:       make(chan binaryResponse, 128),
+	}
+
+	go s.serve()
+	go s.writeResponses()
 }
 
 type binaryServer struct {
-	bufferPool  pooling.BufferPool
-	conn        io.ReadCloser
-	initialized bool
-	responses   chan binaryResponse
+	bufferPool      pooling.BufferPool
+	gossiper        interbroker.Gossiper
+	leaderGetter    discovery.TopologyGetter
+	coalescerGetter coalescerGetter
+	conn            io.ReadWriteCloser
+	initialized     bool
+	responses       chan binaryResponse
 }
 
 func (s *binaryServer) serve() {
@@ -91,16 +110,88 @@ func (s *binaryServer) serve() {
 			continue
 		}
 
-		s.responses <- newErrorResponse("Only data replication operations are supported", header)
+		s.responses <- newErrorResponse("Only producer operations are supported", header)
 
 	}
 	log.Info().Msg("Data server reader closing connection")
 	_ = s.conn.Close()
 }
 
+func (s *binaryServer) writeResponses() {
+	w := utils.NewBufferCap(maxResponseGroupSize)
+
+	shouldExit := false
+	var item binaryResponse
+	for !shouldExit {
+		w.Reset()
+		groupSize := 0
+		group := make([]binaryResponse, 0)
+		canAddNext := true
+
+		if item == nil {
+			// Block for the first item
+			var ok bool
+			item, ok = <-s.responses
+			if !ok {
+				break
+			}
+		}
+
+		group = append(group, item)
+		groupSize += totalResponseSize(item)
+		item = nil
+
+		// Coalesce responses w/ Nagle disabled
+		for canAddNext && !shouldExit {
+			select {
+			case response, ok := <-s.responses:
+				if !ok {
+					shouldExit = true
+					break
+				}
+				responseSize := totalResponseSize(response)
+				if responseSize+w.Len() > maxResponseGroupSize {
+					canAddNext = false
+					item = response
+					break
+				}
+				group = append(group, response)
+				groupSize += responseSize
+
+			default:
+				canAddNext = false
+			}
+		}
+
+		for _, response := range group {
+			if err := response.Marshal(w); err != nil {
+				log.Warn().Err(err).Msg(
+					"There was an error while marshaling a producer client response, closing connection")
+				shouldExit = true
+				break
+			}
+		}
+
+		if w.Len() > 0 {
+			if _, err := s.conn.Write(w.Bytes()); err != nil {
+				log.Warn().Err(err).Msg("There was an error while writing to a producer client, closing connection")
+				break
+			}
+		}
+	}
+
+	log.Info().Msgf("Producer binary server writer closing connection to client")
+	_ = s.conn.Close()
+}
+
+func totalResponseSize(r binaryResponse) int {
+	return r.BodyLength() + binaryHeaderSize
+}
+
+// Handles the message in the background and it returns an error when it's not safe to continue
 func (s *binaryServer) handleProduceMessage(header *binaryHeader) error {
 	bodyBuffers := s.bufferPool.Get(int(header.BodyLength))
-	if err := s.readBody(bodyBuffers); err != nil {
+	if err := utils.ReadIntoBuffers(s.conn, bodyBuffers, int(header.BodyLength)); err != nil {
 		s.bufferPool.Free(bodyBuffers)
 		log.Warn().Err(err).Msgf("Error reading from producer client")
 		return err
@@ -116,44 +207,51 @@ func (s *binaryServer) handleProduceMessage(header *binaryHeader) error {
 
 func (s *binaryServer) processProduceMessage(header *binaryHeader, bodyBuffers [][]byte) binaryResponse {
 	defer s.bufferPool.Free(bodyBuffers)
+	body := utils.NewMultiBufferReader(bodyBuffers)
+	timestampMicros := time.Now().UnixMicro()
 	if header.Flags&withTimestamp > 0 {
-		err := binary.Read()
-
+		ts, err := body.ReadUint64()
+		if err != nil {
+			return newErrorResponse(err.Error(), header)
+		}
+		timestampMicros = int64(ts)
 	}
 
-	/*
-		timestampMicros := time.Now().UnixMicro()
-		if timestamp := querystring.Get("timestamp"); timestamp != "" {
-			if n, err := strconv.ParseInt(timestamp, 10, 64); err != nil {
-				timestampMicros = n
-			}
-		}
+	partitionKey, err := body.ReadStringBytes()
+	if err != nil {
+		return newErrorResponse(err.Error(), header)
+	}
 
-		coalescer := p.getCoalescer(topic, replication.Token, replication.RangeIndex)
-		if err := coalescer.append(replication, uint32(bodyLength), timestampMicros, contentType, buffers); err != nil {
-			return p.adaptCoalescerError(err)
+	topic, err := body.ReadStringBytes()
+	if err != nil {
+		return newErrorResponse(err.Error(), header)
+	}
+
+	replication := s.leaderGetter.Leader(partitionKey)
+	leader := replication.Leader
+
+	if leader == nil {
+		return newLeaderNotFoundErrorResponse(replication.Token, header)
+	}
+
+	payloadBuffers, payloadLength := body.Bytes()
+	if !leader.IsSelf {
+		// Route the message as-is
+		key := url.Values{}
+		if partitionKey != "" {
+			key.Set("partitionKey", partitionKey)
 		}
-	*/
+		err := s.gossiper.SendToLeader(replication, topic, key, int64(payloadLength), "", body)
+		if err != nil {
+			return newRoutingErrorResponse(err, header)
+		}
+		return &emptyResponse{streamId: header.StreamId, op: produceResponseOp}
+	}
+
+	coalescer := s.coalescerGetter.Coalescer(topic, replication.Token, replication.RangeIndex)
+	if err := coalescer.append(replication, uint32(payloadLength), timestampMicros, "", payloadBuffers); err != nil {
+		return newErrorResponse(err.Error(), header)
+	}
 
 	return &emptyResponse{streamId: header.StreamId, op: produceResponseOp}
-}
-
-func (s *binaryServer) readBody(buffers [][]byte) error {
-	// TODO: ADAPT TO USE LENGTH
-	length := 0
-	for i, b := range buffers {
-		n, err := io.ReadFull(s.conn, b)
-		length += n
-		if err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				if i == len(buffers)-1 {
-					// EOF is expected on the last buffer
-					return nil
-				}
-			}
-			return err
-		}
-	}
-
-	return nil
 }

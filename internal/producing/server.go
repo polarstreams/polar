@@ -30,6 +30,10 @@ type Producer interface {
 	AcceptBinaryConnections() error
 }
 
+type coalescerGetter interface {
+	Coalescer(topicName string, token types.Token, rangeIndex types.RangeIndex) *coalescer
+}
+
 func NewProducer(
 	config conf.ProducerConfig,
 	topicGetter topics.TopicGetter,
@@ -179,7 +183,7 @@ func (p *producer) handleMessage(
 		}
 	}
 
-	coalescer := p.getCoalescer(topic, replication.Token, replication.RangeIndex)
+	coalescer := p.Coalescer(topic, replication.Token, replication.RangeIndex)
 	if err := coalescer.append(replication, uint32(bodyLength), timestampMicros, contentType, buffers); err != nil {
 		return p.adaptCoalescerError(err)
 	}
@@ -215,7 +219,8 @@ func readBody(buffers [][]byte, body io.Reader) (int, error) {
 	return length, nil
 }
 
-func (p *producer) getCoalescer(topicName string, token types.Token, rangeIndex types.RangeIndex) *coalescer {
+// Gets or creates the coalescer for a given topic
+func (p *producer) Coalescer(topicName string, token types.Token, rangeIndex types.RangeIndex) *coalescer {
 	key := coalescerKey{topicName, token, rangeIndex}
 	c, loaded, _ := p.coalescerMap.LoadOrStore(key, func() (interface{}, error) {
 		return newCoalescer(topicName, token, rangeIndex, p.leaderGetter, p.gossiper, p.config), nil
