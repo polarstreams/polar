@@ -26,7 +26,14 @@ type MultiBufferReader interface {
 }
 
 // Returns a reader that wraps multiple []byte buffers and tries to read without allocating new buffers.
-func NewMultiBufferReader(buffers [][]byte) MultiBufferReader {
+func NewMultiBufferReader(buffers [][]byte, bufferSize int, length int) MultiBufferReader {
+	mod := length % bufferSize
+	if mod > 0 {
+		lastBufferIndex := len(buffers) - 1
+		// Crop the last buffer
+		buffers[lastBufferIndex] = buffers[lastBufferIndex][:mod]
+	}
+
 	return &multiBufferReader{
 		buffers:     buffers,
 		bufferIndex: 0,

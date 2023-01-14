@@ -15,12 +15,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/polarstreams/polar/internal/conf"
-	. "github.com/polarstreams/polar/internal/test/integration"
-	. "github.com/polarstreams/polar/internal/types"
 	"github.com/klauspost/compress/zstd"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/polarstreams/polar/internal/conf"
+	. "github.com/polarstreams/polar/internal/test/integration"
+	. "github.com/polarstreams/polar/internal/types"
 	"github.com/rs/zerolog/log"
 )
 
@@ -454,7 +454,7 @@ var _ = Describe("A 3 node cluster", func() {
 			b3.LookForErrors(10)
 		})
 
-		It("should support starting from earliest and latest depending on the group policy", func ()  {
+		It("should support starting from earliest and latest depending on the group policy", func() {
 			b0.WaitForStart().WaitForVersion1()
 			b1.WaitForStart().WaitForVersion1()
 			b2.WaitForStart().WaitForVersion1()
@@ -566,7 +566,7 @@ func pollTimes(clusterSize int, client *http.Client, consumerId string, times in
 // Produces messages using partition keys on B0, B1 and B2.
 // The messages have the shape: {"id": %d}. Total messages must be multiples of 3.
 func produceOrderedJson(client *TestClient, topic string, startIndex int, totalMessages int) {
-	if totalMessages % 3 != 0 {
+	if totalMessages%3 != 0 {
 		panic("totalMessages must be multiples of 3")
 	}
 	const message = `{"id": %d}`

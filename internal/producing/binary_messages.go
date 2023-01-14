@@ -83,7 +83,6 @@ type errorResponse struct {
 }
 
 func (r *errorResponse) Marshal(w BufferBackedWriter) error {
-	message := []byte(r.message)
 	if err := writeHeader(w, &binaryHeader{
 		Version:    messageVersion,
 		StreamId:   r.streamId,
@@ -97,7 +96,7 @@ func (r *errorResponse) Marshal(w BufferBackedWriter) error {
 		return err
 	}
 
-	_, err := w.Write(message)
+	_, err := w.Write([]byte(r.message))
 	return err
 }
 

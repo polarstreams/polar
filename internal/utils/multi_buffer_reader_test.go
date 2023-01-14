@@ -192,6 +192,24 @@ var _ = Describe("multiBufferReader()", func() {
 			})
 		})
 	})
+
+	Describe("NewMultiBufferReader()", func() {
+		It("should crop bytes past length", func() {
+			r := NewMultiBufferReader([][]byte{[]byte("ABCDEFGH"), []byte("IJKLMNOP")}, 8, 10)
+			buffers, length := r.Bytes()
+			Expect(length).To(Equal(10))
+			Expect(buffers[0]).To(Equal([]byte("ABCDEFGH")))
+			Expect(buffers[1]).To(Equal([]byte("IJ")))
+		})
+
+		It("should should not crop when length matches", func() {
+			r := NewMultiBufferReader([][]byte{[]byte("ABCDEFGH"), []byte("IJKLMNOP")}, 8, 16)
+			buffers, length := r.Bytes()
+			Expect(length).To(Equal(16))
+			Expect(buffers[0]).To(Equal([]byte("ABCDEFGH")))
+			Expect(buffers[1]).To(Equal([]byte("IJKLMNOP")))
+		})
+	})
 })
 
 func testReadUint32(buffers [][]byte, initialOffset int) {

@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	. "github.com/polarstreams/polar/internal/test/integration"
-	. "github.com/polarstreams/polar/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	. "github.com/polarstreams/polar/internal/test/integration"
+	. "github.com/polarstreams/polar/internal/types"
 	"github.com/rs/zerolog/log"
 )
 
@@ -107,5 +107,30 @@ var _ = Describe("Dev mode", func() {
 
 		req, _ = http.NewRequest(http.MethodPost, "http://127.0.0.1:9252/v1/consumer/goodbye?consumerId=c1", nil)
 		doRequest(consumerClient, req, http.StatusOK)
+	})
+
+	It("produces using the binary protocol", func() {
+		const topic = "binary-topic1"
+		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
+		b0.WaitForStart()
+
+		consumerClient := NewTestClient(nil)
+		consumerClient.RegisterAsConsumer(1,
+			fmt.Sprintf(`{"id": "c_%s", "group": "g_%s", "topics": ["%s"], "onNewGroup": 1}`, topic, topic, topic))
+
+		client := NewBinaryProducerClient(1)
+		defer client.Close()
+
+		message := `{"hello": "ABCDEF"}`
+		client.Send(0, topic, message, "")
+
+		// Wait for the consumer to be considered
+		time.Sleep(1 * time.Second)
+
+		resp := consumerClient.ConsumerPoll(0)
+		messages := readConsumerResponse(resp)
+		expectFindRecord(messages, message)
+
+		b0.LookForErrors(30)
 	})
 })

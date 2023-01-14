@@ -88,6 +88,7 @@ type BasicConfig interface {
 	ConsumerRanges() int // The number of ranges to partition any token range.
 	ShutdownDelay() time.Duration
 	ProducerPort() int
+	ProducerBinaryPort() int
 	ConsumerPort() int
 }
 
@@ -127,7 +128,6 @@ type ProducerConfig interface {
 	BasicConfig
 	DatalogConfig
 	ProducerBufferPoolSize() int
-	ProducerBinaryPort() int
 }
 
 type ConsumerConfig interface {

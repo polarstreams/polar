@@ -18,7 +18,7 @@ import (
 
 const maxResponseGroupSize = 16 * 1024
 
-func (p *producer) AcceptBinaryConnections() error {
+func (p *producer) acceptBinaryConnections() error {
 	port := p.config.ProducerBinaryPort()
 	address := utils.GetServiceAddress(port, p.leaderGetter.LocalInfo(), p.config)
 
@@ -76,16 +76,17 @@ type binaryServer struct {
 func (s *binaryServer) serve() {
 	headerBuf := make([]byte, binaryHeaderSize)
 	header := &binaryHeader{} // Reuse allocation
-	reader := bytes.NewReader(headerBuf)
+	headerReader := bytes.NewReader(headerBuf)
 
 	for {
 		if n, err := io.ReadFull(s.conn, headerBuf); err != nil {
 			log.Warn().Err(err).Int("n", n).Msg("There was an error reading header from peer client")
 			break
 		}
-		err := binary.Read(reader, conf.Endianness, header)
+		headerReader.Reset(headerBuf)
+		err := binary.Read(headerReader, conf.Endianness, header)
 		if err != nil {
-			log.Warn().Msg("Invalid data header from producer client, closing connection")
+			log.Warn().Err(err).Msg("Invalid data header from producer client, closing connection")
 			break
 		}
 
@@ -207,7 +208,7 @@ func (s *binaryServer) handleProduceMessage(header *binaryHeader) error {
 
 func (s *binaryServer) processProduceMessage(header *binaryHeader, bodyBuffers [][]byte) binaryResponse {
 	defer s.bufferPool.Free(bodyBuffers)
-	body := utils.NewMultiBufferReader(bodyBuffers)
+	body := utils.NewMultiBufferReader(bodyBuffers, s.bufferPool.BufferSize(), int(header.BodyLength))
 	timestampMicros := time.Now().UnixMicro()
 	if header.Flags&withTimestamp > 0 {
 		ts, err := body.ReadUint64()

@@ -25,6 +25,7 @@ var _ = Describe("discoverer", func() {
 			config.On("ListenOnAllAddresses").Return(true)
 			config.On("ClientDiscoveryPort").Return(port)
 			config.On("ProducerPort").Return(8901)
+			config.On("ProducerBinaryPort").Return(8904)
 			config.On("ConsumerPort").Return(8902)
 
 			d := &discoverer{
@@ -54,10 +55,11 @@ var _ = Describe("discoverer", func() {
 			err = json.NewDecoder(r.Body).Decode(&result)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(Equal(topologyClientMessage{
-				Length:       3,
-				BrokerNames:  []string{"polar1-0.svc.streams", "polar1-1.svc.streams", "polar1-2.svc.streams"},
-				ProducerPort: 8901,
-				ConsumerPort: 8902,
+				Length:             3,
+				BrokerNames:        []string{"polar1-0.svc.streams", "polar1-1.svc.streams", "polar1-2.svc.streams"},
+				ProducerPort:       8901,
+				ProducerBinaryPort: 8904,
+				ConsumerPort:       8902,
 			}))
 		})
 
@@ -72,6 +74,7 @@ var _ = Describe("discoverer", func() {
 			config.On("ListenOnAllAddresses").Return(true)
 			config.On("ClientDiscoveryPort").Return(port)
 			config.On("ProducerPort").Return(8901)
+			config.On("ProducerBinaryPort").Return(8904)
 			config.On("ConsumerPort").Return(8902)
 
 			d := &discoverer{
@@ -101,11 +104,12 @@ var _ = Describe("discoverer", func() {
 			err = json.NewDecoder(r.Body).Decode(&result)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(Equal(topologyClientMessage{
-				BaseName:     "polarsample-",
-				ServiceName:  "svc2.streams2",
-				Length:       6,
-				ProducerPort: 8901,
-				ConsumerPort: 8902,
+				BaseName:           "polarsample-",
+				ServiceName:        "svc2.streams2",
+				Length:             6,
+				ProducerPort:       8901,
+				ProducerBinaryPort: 8904,
+				ConsumerPort:       8902,
 			}))
 		})
 	})

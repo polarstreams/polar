@@ -27,7 +27,6 @@ type Producer interface {
 	types.Closer
 
 	AcceptConnections() error
-	AcceptBinaryConnections() error
 }
 
 type coalescerGetter interface {
@@ -105,7 +104,7 @@ func (p *producer) AcceptConnections() error {
 	<-c
 	p.server = server
 	log.Info().Msgf("Start listening to producers on %s", address)
-	return nil
+	return p.acceptBinaryConnections()
 }
 
 func (p *producer) Close() {
