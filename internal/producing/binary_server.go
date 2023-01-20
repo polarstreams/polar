@@ -12,6 +12,7 @@ import (
 	"github.com/polarstreams/polar/internal/discovery"
 	"github.com/polarstreams/polar/internal/interbroker"
 	"github.com/polarstreams/polar/internal/producing/pooling"
+	. "github.com/polarstreams/polar/internal/types"
 	"github.com/polarstreams/polar/internal/utils"
 	"github.com/rs/zerolog/log"
 )
@@ -250,7 +251,7 @@ func (s *binaryServer) processProduceMessage(header *binaryHeader, bodyBuffers [
 	}
 
 	coalescer := s.coalescerGetter.Coalescer(topic, replication.Token, replication.RangeIndex)
-	if err := coalescer.append(replication, uint32(payloadLength), timestampMicros, "", payloadBuffers); err != nil {
+	if err := coalescer.append(replication, uint32(payloadLength), timestampMicros, MIMETypeProducerBinary, payloadBuffers); err != nil {
 		return newErrorResponse(err.Error(), header)
 	}
 

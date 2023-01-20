@@ -49,7 +49,7 @@ func (c *binaryProducerConnection) receiveResponses() {
 		}
 		var body []byte = nil
 		if header.BodyLength > 0 {
-			body := make([]byte, header.BodyLength)
+			body = make([]byte, header.BodyLength)
 			if _, err := io.ReadFull(c.inner, body); err != nil {
 				lastError = err
 				break

@@ -233,7 +233,7 @@ func (b *TestBroker) match(output []string, r *regexp.Regexp) (bool, string) {
 
 // Waits for generation version 1
 func (b *TestBroker) WaitForVersion1() {
-	b.WaitOutput("Committing \\[.*\\] v1 with B%d as leader", b.ordinal)
+	b.WaitOutput("Committ\\w{2,3} \\[.*\\] v1 with B%d as leader", b.ordinal)
 }
 
 func (b *TestBroker) StartShutdown() {

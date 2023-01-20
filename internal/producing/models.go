@@ -153,13 +153,15 @@ func marshalRecordProps(timestamp int64, length uint32, w io.Writer) error {
 	return nil
 }
 
-// TODO: REUSING THE SAME BUFFER CAN BE AN ISSUE
 func readUint32(buffers [][]byte, bufferIndex *int, index *int) uint32 {
 	buf := buffers[*bufferIndex][*index:]
 	if len(buf) < 4 {
 		*bufferIndex++
-		*index = 4 - len(buf)
-		buf = append(buf, buffers[*bufferIndex]...)
+		previous := buf
+		buf = make([]byte, 4)
+		n := copy(buf, previous)
+		n = copy(buf[n:], buffers[*bufferIndex])
+		*index = n
 	} else {
 		*index += 4
 	}

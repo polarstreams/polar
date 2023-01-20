@@ -28,7 +28,7 @@ var _ = Describe("Dev mode", func() {
 
 	It("produces and consumes", func() {
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
-		b0.WaitOutput("PolarStreams started")
+		b0.WaitForStart().WaitForVersion1()
 
 		client := NewTestClient(nil)
 		message := `{"hello": "world"}`
@@ -48,7 +48,7 @@ var _ = Describe("Dev mode", func() {
 
 	It("supports restarting without cleaning the directory", func() {
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
-		b0.WaitForStart()
+		b0.WaitForStart().WaitForVersion1()
 		b0.Shutdown()
 
 		// Restart
@@ -64,7 +64,7 @@ var _ = Describe("Dev mode", func() {
 
 	It("produces and consumes using REST API", func() {
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
-		b0.WaitOutput("PolarStreams started")
+		b0.WaitForStart().WaitForVersion1()
 		pClient := NewTestClient(nil)
 
 		const messagesByGroup = 5
@@ -112,7 +112,7 @@ var _ = Describe("Dev mode", func() {
 	It("produces using the binary protocol", func() {
 		const topic = "binary-topic1"
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
-		b0.WaitForStart()
+		b0.WaitForStart().WaitForVersion1()
 
 		consumerClient := NewTestClient(nil)
 		consumerClient.RegisterAsConsumer(1,
