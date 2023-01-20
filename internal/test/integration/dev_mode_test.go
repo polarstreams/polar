@@ -121,15 +121,17 @@ var _ = Describe("Dev mode", func() {
 		client := NewBinaryProducerClient(1)
 		defer client.Close()
 
-		message := `{"hello": "ABCDEF"}`
-		client.Send(0, topic, message, "")
+		message1 := `{"hello": "ABCDEF"}`
+		message2 := `{"hello": "GHIJKL"}`
+		client.Send(0, topic, message1, "")
+		client.Send(0, topic, message2, "")
 
-		// Wait for the consumer to be considered
-		time.Sleep(1 * time.Second)
+		time.Sleep(SegmentFlushInterval)
 
 		resp := consumerClient.ConsumerPoll(0)
 		messages := readConsumerResponse(resp)
-		expectFindRecord(messages, message)
+		expectFindRecord(messages, message1)
+		expectFindRecord(messages, message2)
 
 		b0.LookForErrors(30)
 	})

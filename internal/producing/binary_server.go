@@ -243,7 +243,7 @@ func (s *binaryServer) processProduceMessage(header *binaryHeader, bodyBuffers [
 		if partitionKey != "" {
 			key.Set("partitionKey", partitionKey)
 		}
-		err := s.gossiper.SendToLeader(replication, topic, key, int64(payloadLength), "", body)
+		err := s.gossiper.SendToLeader(replication, topic, key, int64(payloadLength), MIMETypeProducerBinary, body)
 		if err != nil {
 			return newRoutingErrorResponse(err, header)
 		}

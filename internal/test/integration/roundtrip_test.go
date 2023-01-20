@@ -423,13 +423,9 @@ var _ = Describe("A 3 node cluster", func() {
 		})
 
 		It("should get topology changes and resize the ring", func() {
-			b0.WaitForStart()
-			b1.WaitForStart()
-			b2.WaitForStart()
-
-			b0.WaitForVersion1()
-			b1.WaitForVersion1()
-			b2.WaitForVersion1()
+			b0.WaitForStart().WaitForVersion1()
+			b1.WaitForStart().WaitForVersion1()
+			b2.WaitForStart().WaitForVersion1()
 
 			b0.UpdateTopologyFile(6)
 			b1.UpdateTopologyFile(6)
@@ -505,6 +501,42 @@ var _ = Describe("A 3 node cluster", func() {
 			for i := messagesByGroup; i < messagesByGroup*2; i++ {
 				Expect(messages).To(ContainElement(map[string]any{"id": float64(i)}))
 			}
+		})
+
+		It("should reroute messages using binary protocol", func ()  {
+			const topic = "binary-topic-reroute1"
+			b0.WaitForStart().WaitForVersion1()
+			b1.WaitForStart().WaitForVersion1()
+			b2.WaitForStart().WaitForVersion1()
+			consumerClient := NewTestClient(nil)
+			consumerClient.RegisterAsConsumer(3,
+				fmt.Sprintf(`{"id": "c_%s", "group": "g_%s", "topics": ["%s"], "onNewGroup": 1}`, topic, topic, topic))
+
+			client := NewBinaryProducerClient(3)
+			defer client.Close()
+
+			message := `{"ordinal": %d, "message": %d}`
+			// Send to B0
+			client.Send(0, topic, fmt.Sprintf(message, 0, 0), partitionKeyT0Range)
+
+			// Send to B0 a message for B1
+			client.Send(0, topic, fmt.Sprintf(message, 1, 1), partitionKeyT1Range)
+
+			// Send to B1
+			client.Send(1, topic, fmt.Sprintf(message, 1, 2), partitionKeyT1Range)
+
+			time.Sleep(SegmentFlushInterval)
+
+			// Poll B0 to find message 0
+			resp := consumerClient.ConsumerPoll(0)
+			messages := readConsumerResponse(resp)
+			expectFindRecord(messages, fmt.Sprintf(message, 0, 0))
+
+			// Poll B1 several times to find message 1 and 2
+			messages = readConsumerResponse(consumerClient.ConsumerPoll(1))
+			messages = append(messages, readConsumerResponse(consumerClient.ConsumerPoll(1))...)
+			expectFindRecord(messages, fmt.Sprintf(message, 1, 1))
+			expectFindRecord(messages, fmt.Sprintf(message, 1, 2))
 		})
 	})
 })
