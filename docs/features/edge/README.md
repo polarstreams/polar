@@ -14,7 +14,7 @@ These are the PolarStreams features that make it a great choice for Edge Computi
 - [REST API][rest-api]: PolarStreams provides simple HTTP API endpoints that expose all the functionality to produce and
 consume events without requiring additional drivers or client libraries.
 - Support for Production workloads with less than vCPU and a limited memory footprint starting at 0.5 GiB.
-- Kubernetes native: Whether it's with [KubeEdge][kubeedge], Kubernetes on bare metal or EKS on AWS Outposts,
+- Kubernetes native: Whether it's with [KubeEdge][kubeedge], [MicroShift][microshift],  Kubernetes on bare metal or EKS on AWS Outposts,
 Kubernetes is rising to be the default control plane for new iterations of Edge deployments. PolarStreams is specifically
 designed to run on Kubernetes and support K8s deployment lifecycle seamlessly.
 
@@ -22,3 +22,4 @@ designed to run on Kubernetes and support K8s deployment lifecycle seamlessly.
 [benchmarks]: ../../benchmarks/
 [rest-api]: ../../rest_api/
 [kubeedge]: https://kubeedge.io/en/
+[microshift]: https://github.com/openshift/microshift
