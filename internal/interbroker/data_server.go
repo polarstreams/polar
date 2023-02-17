@@ -263,7 +263,7 @@ func (s *peerDataServer) writeResponses() {
 					break
 				}
 				responseSize := totalResponseSize(response)
-				if responseSize+w.Len() > maxResponseGroupSize {
+				if groupSize+responseSize > maxResponseGroupSize {
 					canAddNext = false
 					item = response
 					break

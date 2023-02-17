@@ -25,6 +25,7 @@ const (
 	errorOp           opcode = 3
 	produceOp         opcode = 4
 	produceResponseOp opcode = 5
+	heartbeatOp       opcode = 6
 )
 
 // Flags.

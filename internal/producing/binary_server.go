@@ -1,7 +1,6 @@
 package producing
 
 import (
-	"bytes"
 	"encoding/binary"
 	"io"
 	"net"
@@ -75,19 +74,13 @@ type binaryServer struct {
 }
 
 func (s *binaryServer) serve() {
-	headerBuf := make([]byte, binaryHeaderSize)
-	header := &binaryHeader{} // Reuse allocation
-	headerReader := bytes.NewReader(headerBuf)
-
 	for {
-		if n, err := io.ReadFull(s.conn, headerBuf); err != nil {
-			log.Warn().Err(err).Int("n", n).Msg("There was an error reading header from peer client")
-			break
-		}
-		headerReader.Reset(headerBuf)
-		err := binary.Read(headerReader, conf.Endianness, header)
+		header := &binaryHeader{} // Reuse allocation
+		err := binary.Read(s.conn, conf.Endianness, header)
 		if err != nil {
-			log.Warn().Err(err).Msg("Invalid data header from producer client, closing connection")
+			if err != io.EOF {
+				log.Warn().Err(err).Msg("Invalid data header from producer client, closing connection")
+			}
 			break
 		}
 
@@ -112,10 +105,15 @@ func (s *binaryServer) serve() {
 			continue
 		}
 
+		if header.Op == heartbeatOp {
+			s.responses <- &emptyResponse{streamId: header.StreamId, op: readyOp}
+			continue
+		}
+
 		s.responses <- newErrorResponse("Only producer operations are supported", header)
 
 	}
-	log.Info().Msg("Data server reader closing connection")
+	log.Debug().Msg("Closing producer client connection")
 	_ = s.conn.Close()
 }
 
@@ -152,7 +150,7 @@ func (s *binaryServer) writeResponses() {
 					break
 				}
 				responseSize := totalResponseSize(response)
-				if responseSize+w.Len() > maxResponseGroupSize {
+				if responseSize+groupSize > maxResponseGroupSize {
 					canAddNext = false
 					item = response
 					break

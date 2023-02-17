@@ -43,6 +43,7 @@ func (c *binaryProducerConnection) receiveResponses() {
 			lastError = err
 			break
 		}
+
 		if err := binary.Read(bytes.NewReader(headerBuf), conf.Endianness, header); err != nil {
 			lastError = err
 			break
@@ -55,6 +56,7 @@ func (c *binaryProducerConnection) receiveResponses() {
 				break
 			}
 		}
+
 		c.muHandlers.Lock()
 		handler := c.handlers[header.StreamId]
 		delete(c.handlers, header.StreamId)
@@ -70,6 +72,7 @@ func (c *binaryProducerConnection) receiveResponses() {
 			panic(fmt.Sprintf("handler for stream id %d is nil", header.StreamId))
 		}
 		handler(res)
+		c.streamIds <- header.StreamId
 	}
 	log.Debug().Err(lastError).Msgf("Binary producer connection closed")
 }
