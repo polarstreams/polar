@@ -29,9 +29,13 @@ type MultiBufferReader interface {
 func NewMultiBufferReader(buffers [][]byte, bufferSize int, length int) MultiBufferReader {
 	mod := length % bufferSize
 	if mod > 0 {
-		lastBufferIndex := len(buffers) - 1
 		// Crop the last buffer
-		buffers[lastBufferIndex] = buffers[lastBufferIndex][:mod]
+		lastBufferIndex := len(buffers) - 1
+		// We MUST shallow clone buffers, we can't assign to it
+		newBuffers := make([][]byte, 0, len(buffers))
+		newBuffers = append(newBuffers, buffers[:lastBufferIndex]...)
+		newBuffers = append(newBuffers, buffers[lastBufferIndex][:mod])
+		buffers = newBuffers
 	}
 
 	return &multiBufferReader{
