@@ -12,7 +12,7 @@ require (
 	github.com/onsi/gomega v1.25.0
 	github.com/prometheus/client_golang v1.14.0
 	github.com/rs/zerolog v1.28.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	golang.org/x/net v0.7.0
 	k8s.io/api v0.26.1
 	k8s.io/apimachinery v0.26.1
