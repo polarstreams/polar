@@ -46,6 +46,8 @@ const (
 	envPodName                         = "POLAR_POD_NAME"
 	envPodNamespace                    = "POLAR_POD_NAMESPACE"
 	EnvDebug                           = "POLAR_DEBUG"
+	envMaxMessageSize                  = "POLAR_MAX_MESSAGE_SIZE"
+	envMaxGroupSize                    = "POLAR_MAX_GROUP_SIZE"
 )
 
 // Port defaults
@@ -241,11 +243,11 @@ func (c *config) ConsumerRanges() int {
 }
 
 func (c *config) MaxMessageSize() int {
-	return MiB
+	return envInt(envMaxMessageSize, MiB)
 }
 
 func (c *config) MaxGroupSize() int {
-	return 2 * MiB
+	return envInt(envMaxGroupSize, 2*MiB)
 }
 
 func (c *config) ReadAheadSize() int {
