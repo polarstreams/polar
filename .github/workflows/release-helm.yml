@@ -4,8 +4,9 @@ on:
   push:
     branches:
       - main
-    paths:
-      - "charts/**"
+      - chart_tests
+    # paths:
+    #   - "charts/**"
 
 jobs:
   release:
@@ -29,8 +30,6 @@ jobs:
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@be16258da8010256c6e82849661221415f031968 # pin@v1.5.0
-        with:
-          config: cr.yaml
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
 
