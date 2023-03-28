@@ -2,7 +2,7 @@
 
 ## Installing on Kubernetes
 
-You can install PolarStreams on Kubernetes using `kubectl` by using [our kustomize base](../deploy/kubernetes/).
+You can install PolarStreams on Kubernetes using `kubectl` by using [our kustomize base](../deploy/kubernetes/) or using our [Helm Chart](../../charts/polar).
 
 Follow [our guide to install on K8s](./kubernetes/).
 

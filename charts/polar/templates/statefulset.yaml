@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "polar.fullname" . }}
+  namespace: {{ include "polar.namespace" . | quote }}
+  labels:
+    {{- include "polar.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "polar.selectorLabels" . | nindent 6 }}
+  serviceName: polar
+  template:
+    metadata:
+      labels:
+        {{- include "polar.selectorLabels" . | nindent 8 }}
+      {{- if or .Values.prometheus.enabled .Values.podAnnotations }}
+      annotations:
+      {{- if .Values.prometheus.annotations }}
+        {{- toYaml (.Values.podAnnotations) . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.prometheus.enabled }}
+        prometheus.io/port: "{{ .Values.prometheus.port }}"
+        prometheus.io/scrape: "true"
+      {{- end }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "polar.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.podSecurityContext }}
+      securityContext: {{- tpl (toYaml (omit .Values.podSecurityContext "enabled")) . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ template "polar.fullname" . }}
+        image: "{{ template "polar.image" .Values.image }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext: {{- tpl (toYaml (omit .Values.securityContext "enabled")) . | nindent 10 }}
+        ports:
+        {{- range .Values.service.ports }}
+          - containerPort: {{ .port }}
+            name: {{ .name }}
+        {{- end }}
+        env:
+        - name: POLAR_SERVICE_NAME
+          value: {{ template "polar.fullname" . }}
+        - name: POLAR_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POLAR_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CONTAINER_CPU_REQUEST_MILLICORES
+          valueFrom:
+            resourceFieldRef:
+              resource: requests.cpu
+              divisor: {{ .Values.resourceFieldRef.requestsCpu.divisor }}
+        - name: CONTAINER_MEMORY_LIMIT_KIBIBYTES
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.memory
+              divisor: {{ .Values.resourceFieldRef.limitsMemory.divisor }}
+        {{- if .Values.extraEnvVars }}
+        {{- tpl (toYaml .Values.extraEnvVars) .  | nindent 8 }}
+        {{- end }}
+        resources:
+          {{- tpl (toYaml .Values.resources) . | nindent 10 }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{- tpl (toYaml .Values.nodeSelector) .  | nindent 8 }}
+      {{- end }}
+      {{- if .Values.affinity }}
+      affinity:
+        {{- tpl (toYaml .Values.affinity) .  | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations }}
+      tolerations:
+        {{- tpl (toYaml .Values.tolerations) .  | nindent 8 }}
+      {{- end }}

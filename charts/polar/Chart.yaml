@@ -1,0 +1,7 @@
+apiVersion: v2
+name: polar
+description: A Helm chart for deploying Polar
+version: 0.1.0
+home: https://github.com/polarstreams/polar
+sources:
+  - https://github.com/polarstreams/polar
