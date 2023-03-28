@@ -1,8 +1,15 @@
 # Installing PolarStreams on Kubernetes
 
-You can use `kubectl` to install PolarStreams on Kubernetes.
+There are multiple methods that can be used to install PolarStreams on Kubernetes:
 
-#### Define PolarStreams's namespace
+* [Kustomize](https://kustomize.io)
+* [Helm](https://helm.sh)
+
+## Kustomize
+
+Use the following steps to deploy PolarStreams on Kubernetes using Kustomize.
+
+### Define PolarStreams's namespace
 
 We recommend running PolarStreams in its own Kubernetes namespace. In the instructions here we’ll use `streams` as a namespace
 but you’re free to choose your own.
@@ -53,3 +60,37 @@ kubectl apply -k .
 
 Kubernetes command line tool should create the Namespace, StatefulSet and other resources. You can checkout PolarStreams
 logs of a broker by using `kubectl logs -n streams statefulset/polar`.
+
+## Helm
+
+Use the following steps to deploy PolarStreams on Kubernetes using Helm.
+
+### Installing the Helm CLI
+
+Follow the [Helm documentation](https://helm.sh/docs/intro/install) to install the Helm CLI to your machine.
+
+### Add the Polar Chart Repository
+
+Add the Polar chart repository
+
+```shell
+helm repo add polar https://polarstreams.github.io/polar/
+```
+
+### Install the Polar Helm Chart
+
+Install the Polar Helm Chart to deploy Polar to a namespace called `streams`:
+
+```shell
+helm upgrade -i polar polar/polar -n streams --create-namespace
+```
+
+Once the chart has been installed successfully, check the logs of a broker by using `kubectl logs -n streams statefulset/polar`.
+
+### Install the Polar Helm Chart (OCI Registry)
+
+The Polar Helm chart is also available from an OCI registry. Execute the command to install the chart to a namespace called `streams`.
+
+```shell
+helm upgrade -i <release_name> oci://ghcr.io/polarstreams/polar/polar --version=<version>
+```

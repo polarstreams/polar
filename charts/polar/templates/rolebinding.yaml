@@ -1,0 +1,17 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ template "polar.fullname" . }}
+  namespace: {{ include "polar.namespace" . | quote }}
+  labels:
+    {{- include "polar.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ template "polar.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "polar.serviceAccountName" . }}
+    namespace: {{ include "polar.namespace" . | quote }}
+{{- end }}
