@@ -284,3 +284,31 @@ func IfEmpty(value string, defaultValue string) string {
 func IsSuccess(code int) bool {
 	return code >= 200 && code < 300
 }
+
+// Reads from the reader into the provided buffers until length, returning an error otherwise
+func ReadIntoBuffers(reader io.Reader, buffers [][]byte, length int) error {
+	remaining := length
+	for _, b := range buffers {
+		if remaining < len(b) {
+			b = b[:remaining]
+		}
+		n, err := io.ReadFull(reader, b)
+		remaining -= n
+		if remaining == 0 {
+			return nil
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+	}
+
+	if remaining > 0 {
+		return io.EOF
+	}
+
+	return nil
+}

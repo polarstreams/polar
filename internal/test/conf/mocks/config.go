@@ -423,6 +423,20 @@ func (_m *Config) PodNamespace() string {
 	return r0
 }
 
+// ProducerBinaryPort provides a mock function with given fields:
+func (_m *Config) ProducerBinaryPort() int {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
 // ProducerBufferPoolSize provides a mock function with given fields:
 func (_m *Config) ProducerBufferPoolSize() int {
 	ret := _m.Called()

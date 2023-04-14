@@ -410,7 +410,7 @@ func (c *consumer) postPoll(
 	groupReadQueue := c.getOrCreateReadQueue(group)
 
 	format := compressedBinaryFormat
-	if r.Header.Get("Accept") == ContentTypeJSON {
+	if r.Header.Get("Accept") == MIMETypeJSON {
 		format = jsonFormat
 	}
 

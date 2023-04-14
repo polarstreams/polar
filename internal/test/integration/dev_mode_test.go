@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	. "github.com/polarstreams/polar/internal/test/integration"
-	. "github.com/polarstreams/polar/internal/types"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	. "github.com/polarstreams/polar/internal/test/integration"
+	. "github.com/polarstreams/polar/internal/types"
 	"github.com/rs/zerolog/log"
 )
 
@@ -28,7 +28,7 @@ var _ = Describe("Dev mode", func() {
 
 	It("produces and consumes", func() {
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
-		b0.WaitOutput("PolarStreams started")
+		b0.WaitForStart().WaitForVersion1()
 
 		client := NewTestClient(nil)
 		message := `{"hello": "world"}`
@@ -48,7 +48,7 @@ var _ = Describe("Dev mode", func() {
 
 	It("supports restarting without cleaning the directory", func() {
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
-		b0.WaitForStart()
+		b0.WaitForStart().WaitForVersion1()
 		b0.Shutdown()
 
 		// Restart
@@ -64,7 +64,7 @@ var _ = Describe("Dev mode", func() {
 
 	It("produces and consumes using REST API", func() {
 		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
-		b0.WaitOutput("PolarStreams started")
+		b0.WaitForStart().WaitForVersion1()
 		pClient := NewTestClient(nil)
 
 		const messagesByGroup = 5
@@ -107,5 +107,32 @@ var _ = Describe("Dev mode", func() {
 
 		req, _ = http.NewRequest(http.MethodPost, "http://127.0.0.1:9252/v1/consumer/goodbye?consumerId=c1", nil)
 		doRequest(consumerClient, req, http.StatusOK)
+	})
+
+	It("produces using the binary protocol", func() {
+		const topic = "binary-topic1"
+		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true})
+		b0.WaitForStart().WaitForVersion1()
+
+		consumerClient := NewTestClient(nil)
+		consumerClient.RegisterAsConsumer(1,
+			fmt.Sprintf(`{"id": "c_%s", "group": "g_%s", "topics": ["%s"], "onNewGroup": 1}`, topic, topic, topic))
+
+		client := NewBinaryProducerClient(1)
+		defer client.Close()
+
+		message1 := `{"hello": "ABCDEF"}`
+		message2 := `{"hello": "GHIJKL"}`
+		client.Send(0, topic, message1, "")
+		client.Send(0, topic, message2, "")
+
+		time.Sleep(SegmentFlushInterval)
+
+		resp := consumerClient.ConsumerPoll(0)
+		messages := readConsumerResponse(resp)
+		expectFindRecord(messages, message1)
+		expectFindRecord(messages, message2)
+
+		b0.LookForErrors(30)
 	})
 })

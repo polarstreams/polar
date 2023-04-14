@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -40,6 +41,49 @@ var _ = Describe("utils", func() {
 			for _, v := range values {
 				Expect(ValidRingLength(v[0])).To(Equal(v[1]), "Doesn't match for %v", v)
 			}
+		})
+	})
+
+	Describe("ReadIntoBuffers()", func() {
+		It("should read into the first buffer", func() {
+			buffers := [][]byte{
+				make([]byte, 8),
+				make([]byte, 8),
+			}
+
+			value := "something"
+			err := ReadIntoBuffers(strings.NewReader(value), buffers, 4)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(buffers[0][:4]).To(Equal([]byte("some")))
+			Expect(buffers[0][4:]).To(Equal(make([]byte, 4)))
+			Expect(buffers[1]).To(Equal(make([]byte, 8)))
+		})
+
+		It("should read into the second buffer", func() {
+			buffers := [][]byte{
+				make([]byte, 8),
+				make([]byte, 8),
+			}
+
+			value := "something"
+			err := ReadIntoBuffers(strings.NewReader(value), buffers, 9)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(buffers[0]).To(Equal([]byte("somethin")))
+			Expect(buffers[1][:1]).To(Equal([]byte("g")))
+			Expect(buffers[1][1:]).To(Equal(make([]byte, 7)))
+		})
+
+		It("should read into the exact length", func() {
+			buffers := [][]byte{
+				make([]byte, 8),
+				make([]byte, 8),
+			}
+
+			value := "hello something!"
+			err := ReadIntoBuffers(strings.NewReader(value), buffers, 16)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(buffers[0]).To(Equal([]byte("hello so")))
+			Expect(buffers[1]).To(Equal([]byte("mething!")))
 		})
 	})
 })

@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/polarstreams/polar/internal/conf"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/polarstreams/polar/internal/conf"
 	"github.com/rs/zerolog/log"
 )
 
@@ -207,7 +207,7 @@ func (b *TestBroker) getOutput() []string {
 // Checks for output messages in the last n messages
 func (b *TestBroker) LookForErrors(nMessages int) {
 	output := b.getOutput()
-	startIndex := len(output)-nMessages
+	startIndex := len(output) - nMessages
 	if startIndex < 0 {
 		startIndex = 0
 	}
@@ -233,7 +233,7 @@ func (b *TestBroker) match(output []string, r *regexp.Regexp) (bool, string) {
 
 // Waits for generation version 1
 func (b *TestBroker) WaitForVersion1() {
-	b.WaitOutput("Committing \\[.*\\] v1 with B%d as leader", b.ordinal)
+	b.WaitOutput("Committ\\w{2,3} \\[.*\\] v1 with B%d as leader", b.ordinal)
 }
 
 func (b *TestBroker) StartShutdown() {

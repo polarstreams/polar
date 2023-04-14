@@ -18,12 +18,13 @@ import (
 const noGenerationsStatusMessage = "Broker is unavailable to handle producer/consumer requests"
 
 type topologyClientMessage struct {
-	BaseName     string   `json:"baseName,omitempty"`    // When defined, base name to build the broker names, e.g. "polar-"
-	ServiceName  string   `json:"serviceName,omitempty"` // The name of the service to build the broker names: "<baseName><ordinal>.<service>"
-	Length       int      `json:"length"`                // The ring size
-	BrokerNames  []string `json:"names,omitempty"`
-	ProducerPort int      `json:"producerPort"`
-	ConsumerPort int      `json:"consumerPort"`
+	BaseName           string   `json:"baseName,omitempty"`    // When defined, base name to build the broker names, e.g. "polar-"
+	ServiceName        string   `json:"serviceName,omitempty"` // The name of the service to build the broker names: "<baseName><ordinal>.<service>"
+	Length             int      `json:"length"`                // The ring size
+	BrokerNames        []string `json:"names,omitempty"`
+	ProducerPort       int      `json:"producerPort"`
+	ProducerBinaryPort int      `json:"producerBinaryPort"`
+	ConsumerPort       int      `json:"consumerPort"`
 }
 
 func (d *discoverer) startClientDiscoveryServer() error {
@@ -96,10 +97,11 @@ func (d *discoverer) newResponseTopology(t *TopologyInfo) *topologyClientMessage
 	}
 
 	result := topologyClientMessage{
-		Length:       len(t.Brokers),
-		ProducerPort: d.config.ProducerPort(),
-		ConsumerPort: d.config.ConsumerPort(),
-		BrokerNames:  brokerNames,
+		Length:             len(t.Brokers),
+		ProducerPort:       d.config.ProducerPort(),
+		ProducerBinaryPort: d.config.ProducerBinaryPort(),
+		ConsumerPort:       d.config.ConsumerPort(),
+		BrokerNames:        brokerNames,
 	}
 	return &result
 }
@@ -111,11 +113,12 @@ func (d *discoverer) newResponseTopologyUsingOrdinals(t *TopologyInfo) *topology
 	}
 
 	result := topologyClientMessage{
-		BaseName:     d.config.BaseHostName(),
-		ServiceName:  serviceName,
-		Length:       len(t.Brokers),
-		ProducerPort: d.config.ProducerPort(),
-		ConsumerPort: d.config.ConsumerPort(),
+		BaseName:           d.config.BaseHostName(),
+		ServiceName:        serviceName,
+		Length:             len(t.Brokers),
+		ProducerPort:       d.config.ProducerPort(),
+		ProducerBinaryPort: d.config.ProducerBinaryPort(),
+		ConsumerPort:       d.config.ConsumerPort(),
 	}
 	return &result
 }
