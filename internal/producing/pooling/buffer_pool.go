@@ -10,6 +10,7 @@ const baseSize = 8192
 type BufferPool interface {
 	Free(buffers [][]byte)
 	Get(length int) [][]byte
+	BufferSize() int
 }
 
 type bufferPool struct {
@@ -82,4 +83,8 @@ func (p *bufferPool) Get(length int) [][]byte {
 	}
 	p.requests <- r
 	return <-r.result
+}
+
+func (p *bufferPool) BufferSize() int {
+	return baseSize
 }

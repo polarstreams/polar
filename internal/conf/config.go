@@ -25,6 +25,7 @@ const (
 	envHome                            = "POLAR_HOME"
 	envListenOnAllAddresses            = "POLAR_LISTEN_ON_ALL"
 	envProducerPort                    = "POLAR_PRODUCER_PORT"
+	envProducerBinaryPort              = "POLAR_PRODUCER_BINARY_PORT"
 	envConsumerPort                    = "POLAR_CONSUMER_PORT"
 	envClientDiscoveryPort             = "POLAR_CLIENT_DISCOVERY_PORT"
 	envMetricsPort                     = "POLAR_METRICS_PORT"
@@ -56,8 +57,9 @@ const (
 	DefaultProducerPort        = 9251
 	DefaultConsumerPort        = 9252
 	DefaultMetricsPort         = 9253
-	DefaultGossipPort          = 9254
-	DefaultGossipDataPort      = 9255
+	DefaultProducerBinaryPort  = 9254
+	DefaultGossipPort          = 9255
+	DefaultGossipDataPort      = 9256
 )
 
 const (
@@ -88,6 +90,7 @@ type BasicConfig interface {
 	ConsumerRanges() int // The number of ranges to partition any token range.
 	ShutdownDelay() time.Duration
 	ProducerPort() int
+	ProducerBinaryPort() int
 	ConsumerPort() int
 }
 
@@ -208,6 +211,10 @@ func (c *config) Init() error {
 
 func (c *config) ProducerPort() int {
 	return envInt(envProducerPort, DefaultProducerPort)
+}
+
+func (c *config) ProducerBinaryPort() int {
+	return envInt(envProducerBinaryPort, DefaultProducerBinaryPort)
 }
 
 func (c *config) ConsumerPort() int {

@@ -382,14 +382,14 @@ func (d *discoverer) RepairCommitted(gen *Generation) error {
 	// Set the transaction and the generation value as committed
 	gen.Status = StatusCommitted
 
-	log.Info().Msgf(
-		"Committing [%d, %d] v%d with B%d as leader as part of repair", gen.Start, gen.End, gen.Version, gen.Leader)
-
 	if err := d.localDb.CommitGeneration(gen, nil); err != nil {
 		return err
 	}
 
 	copyAndStore(&d.generations, *gen, nil)
+
+	log.Info().Msgf(
+		"Committed [%d, %d] v%d with B%d as leader as part of repair", gen.Start, gen.End, gen.Version, gen.Leader)
 
 	// Remove from proposed
 	delete(d.genProposed, gen.Start)

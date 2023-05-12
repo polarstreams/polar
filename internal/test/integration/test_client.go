@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/polarstreams/polar/internal/conf"
 	. "github.com/onsi/gomega"
+	"github.com/polarstreams/polar/internal/conf"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/net/http2"
 )
@@ -33,7 +33,6 @@ const (
 	consumerPort = conf.DefaultConsumerPort
 )
 
-// Creates a htt
 func NewTestClient(options *TestClientOptions) *TestClient {
 	if options == nil {
 		options = &TestClientOptions{}

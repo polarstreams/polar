@@ -2,8 +2,8 @@
 
 We tested PolarStreams performance on different AWS instance types to provide
 detailed information on what to expect in terms of throughput and latency for given hardware specs. The goal is not
-to push the upper limits of PolarStreams as it's still in early development but to define the direction it's heading in terms
-of performance.
+to push the upper limits of PolarStreams as it's still in early development but to define the direction it's
+heading in terms of performance.
 
 The workload is designed to post 1 KiB messages containing JSON data. The message is composed by a large portion of
 random data alongside dictionary values, numbers and UUIDs to try to represent real world data. PolarStreams uses
@@ -26,20 +26,30 @@ On demand cost is $0.085 per hour.
 On demand cost is $0.17 per hour.
 
 <p align="center">
-    <img src="https://user-images.githubusercontent.com/2931196/206732634-2055dfda-31e2-4f03-8a36-c3c653e70930.png" alt="Throughput by instance type">
+    <img src="https://user-images.githubusercontent.com/2931196/232050558-8843aba2-5b4f-41b9-b593-daf000f3fd0d.png" alt="Throughput by instance type">
     <br>
     <em>Messages per second by instance</em>
 </p>
 
-The results show that PolarStreams can process more than one million messages per second (1 GiB/s) when writing on a cluster
-composed of commodity instances. The max latency on all runs was under 100ms.
+The results show that PolarStreams can process more than one million messages per second (1 GiB/s) when writing on a
+cluster composed of commodity instances with a single vCPU each. The max latency on all runs was under 20ms.
 
-Note that when running on `c6i.xlarge`, the benchmark is limited by the network bandwidth of the client (as `12.5 Gbps`
-is `1.45 GiB/s`).
-
-What we find specially interesting is that **PolarStreams can support writes of more than 96K msgs/s with baseline CPU
-performance of `t4g.micro`, bursting up to 1M msgs/s**. This is also an example of what resource sharing might
+What we find specially interesting is that **PolarStreams can support writes of more than 84K msgs/s with baseline CPU
+performance of `t4g.micro`, bursting up to 890K msgs/s**. This is also an example of what resource sharing might
 look like when running PolarStreams on Kubernetes with a wide [requests-limits resource range][k8s-resource-mgmt].
+
+The benchmarks benefit from [message packing made by the client][message-packing] when sending data without partition
+key defined. To understand what should be the expected results when using partition keys (guaranteed order by key),
+we ran a separate benchmark:
+
+<p align="center">
+    <img src="https://user-images.githubusercontent.com/2931196/232051794-0322e272-1dfe-480f-83cb-fb535312c3cc.png" alt="Throughput by instance type">
+    <br>
+    <em>Messages per second by instance (with partition key)</em>
+</p>
+
+With key defined results show that PolarStreams can process more than 250K messages per second on a
+cluster composed of commodity instances with a single vCPU each. The max latency on these runs was under 50ms.
 
 ## Capacity planning compared to Apache Kafka
 
@@ -78,9 +88,9 @@ Apache Kafka brokers.
 The tool used to benchmark PolarStreams is [available on GitHub][tool-repo] and it can be used to reproduce these results with
 the following parameters:
 
-- PolarStreams Commit Hash: [a035ed2](https://github.com/polarstreams/polar/commit/a035ed2fccb9f67248c6e10bcb9bd5f806464447)
-(`v0.6.0`).
-- Tool parameters: `-c 32 -n 1000000 -m 16 -mr 64 -ch 16`
+- PolarStreams Commit Hash: [9c3687b](https://github.com/polarstreams/polar/commit/9c3687b0f83cb416ee84f23504df6ea63cb14b5f)
+(`v0.7.0`).
+- Tool parameters: `-w binary -c 6 -n 2000000 -m 1024 -ch 1`
 
 There are also [terraform files available in the repository][terraform-files] to easily deploy the necessary resources
 on AWS.
@@ -96,3 +106,4 @@ low latencies, you can read our [I/O Documentation][io-docs].
 [confluent-system]: https://docs.confluent.io/platform/current/installation/system-requirements.html#confluent-system-requirements
 [k8s-resource-mgmt]: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 [io-docs]: ../features/io/
+[message-packing]: https://github.com/polarstreams/go-client/pull/28

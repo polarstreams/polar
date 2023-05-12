@@ -4,7 +4,7 @@ PolarStreams is distributed by default with a minimal size of 3 brokers for prod
 single-broker using Docker / Podman with developer mode enabled to get started quickly.
 
 ```shell
-docker run --rm --env POLAR_DEV_MODE=true -p 9250-9252:9250-9252 polarstreams/polar:latest
+docker run --rm --env POLAR_DEV_MODE=true -p 9250-9254:9250-9254 polarstreams/polar:latest
 ```
 
 You can start producing messages using a [client library][go-client] or directly invoking the PolarStreams's

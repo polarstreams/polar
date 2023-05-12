@@ -9,9 +9,10 @@ import (
 const notFoundIndex BrokerIndex = -1
 
 const (
-	ContentTypeJSON      = "application/json"
-	ContentTypeNDJSON    = "application/x-ndjson"
-	ContentTypeHeaderKey = "Content-Type"
+	MIMETypeJSON           = "application/json"
+	MIMETypeNDJSON         = "application/x-ndjson"
+	MIMETypeProducerBinary = "application/vnd.polar.producer.frames" // {uint32_length}{bytes}{uint32_length}{bytes}...
+	ContentTypeHeaderKey   = "Content-Type"
 )
 
 // BrokerInfo contains information about a broker

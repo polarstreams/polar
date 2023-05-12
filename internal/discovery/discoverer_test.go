@@ -320,6 +320,10 @@ func (c *configFake) ProducerPort() int {
 	return 8082
 }
 
+func (c *configFake) ProducerBinaryPort() int {
+	return 9995
+}
+
 func (c *configFake) ClientDiscoveryPort() int {
 	return 9089
 }
