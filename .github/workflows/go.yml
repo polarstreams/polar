@@ -58,10 +58,12 @@ jobs:
         distro: [ubuntu20.04]
     steps:
       - uses: actions/checkout@v2
+      
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
           go-version: 1.19
+          
       - name: Cache Go build and module directories
         uses: actions/cache@v3
         with:
@@ -71,6 +73,7 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
+            
       - name: Run on arch $ { { matrix.arch }}
         uses: uraimo/run-on-arch-action@v2
         with:
@@ -79,11 +82,9 @@ jobs:
           githubToken: $ { { github.token }}
           run: |
             go build ./...
-            go test ./... -json | tee tests.json
-      - name: Go Test Action
-        uses: preslavmihaylov/go-test-action@v1.0.0
-        with:
-          test-results-file: tests.json
+            go test ./... 
+            go test -v -tags=integration ./... 
+   
             
     
     
