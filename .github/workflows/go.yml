@@ -81,7 +81,6 @@ jobs:
         with:
           arch: aarch64
           distro: ubuntu_latest
-          githubToken: $ {{ github.token }}
           run: |
             go build ./...
             go test ./... 
