@@ -49,3 +49,41 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           args: --tests=false --timeout=3m
+  run-on-arch:
+    name: Run on arch
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [aarch64]
+        distro: [ubuntu20.04]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.19
+      - name: Cache Go build and module directories
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Run on arch $ { { matrix.arch }}
+        uses: uraimo/run-on-arch-action@v2
+        with:
+          arch: $ { { matrix.arch }}
+          distro: $ { { matrix.distro }}
+          githubToken: $ { { github.token }}
+          run: |
+            go build ./...
+            go test ./... -json | tee tests.json
+      - name: Go Test Action
+        uses: preslavmihaylov/go-test-action@v1.0.0
+        with:
+          test-results-file: tests.json
+            
+    
+    
