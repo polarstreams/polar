@@ -54,8 +54,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [aarch64]
-        distro: [ubuntu20.04]
+        include:
+          - arch: aarch64
+            distro: ubuntu20.04
     steps:
       - uses: actions/checkout@v2
       
@@ -77,9 +78,9 @@ jobs:
       - name: Run on arch $ { { matrix.arch }}
         uses: uraimo/run-on-arch-action@v2
         with:
-          arch: $ { { matrix.arch }}
-          distro: $ { { matrix.distro }}
-          githubToken: $ { { github.token }}
+          arch: $ {{ matrix.arch }}
+          distro: $ {{ matrix.distro }}
+          githubToken: $ {{ github.token }}
           run: |
             go build ./...
             go test ./... 
