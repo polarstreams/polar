@@ -52,6 +52,7 @@ jobs:
           
   run_on_arm64:
       runs-on: ubuntu-latest
+      timeout-minutes: 10
       steps:
        - uses: actions/checkout@v3
 
@@ -69,8 +70,10 @@ jobs:
           install: |
               apt-get update && \
               apt-get install -q -y git && \
-              apt-get install -y golang-go
-     
+              apt-get install -y snapd && \ 
+              snap install core && \
+              snap install go --classic
+ 
           run: |
             go build -buildvcs=false ./...
             go test -v ./... 
