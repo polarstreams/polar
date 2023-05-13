@@ -70,9 +70,7 @@ jobs:
           install: |
               apt-get update && \
               apt-get install -q -y git && \
-              apt-get install -y snapd && \ 
-              snap install core && \
-              snap install go --classic
+              apt-get install -y golang-go
  
           run: |
             go build -buildvcs=false ./...
