@@ -50,41 +50,31 @@ jobs:
         with:
           args: --tests=false --timeout=3m
           
-  run-on-arch:
-    name: Run on arch
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - arch: aarch64
-            distro: ubuntu20.04
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Setup Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.19
-          
-      - name: Cache Go build and module directories
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-            
-      - name: Run on arch aarch64
-        uses: uraimo/run-on-arch-action@v2
-        with:
+  run_on_arm64:
+      runs-on: ubuntu-latest
+      steps:
+       - uses: actions/checkout@v3
+
+       - name: Set up Go
+         uses: actions/setup-go@v3
+         with:
+           go-version: 1.19
+         
+       - name: Run on aarch64
+         uses: uraimo/run-on-arch-action@v2
+         with:
           arch: aarch64
           distro: ubuntu_latest
+          githubToken: ${{ github.token }}
+          install: |
+              apt-get update && \
+              apt-get install -q -y git && \
+              apt-get install -y golang-go
+     
           run: |
-            go build ./...
-            go test ./... 
-            go test -v -tags=integration ./... 
+            go build -buildvcs=false ./...
+            go test -v ./... 
+            go test -v -tags=integration -p=1 ./internal/test/integration
    
             
     
