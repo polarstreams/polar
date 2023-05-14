@@ -68,8 +68,11 @@ jobs:
           distro: ubuntu_latest
           githubToken: ${{ github.token }}
           base_image: golang:1.19
-
+          install: |
+                apt-get update -q -y
+                apt-get install -q -y git
           run: |
+            git config --global --add safe.directory "$PWD"
             go build ./...
             go test -v ./... 
             go test -v -tags=integration -p=1 ./internal/test/integration
