@@ -49,3 +49,34 @@ jobs:
         uses: golangci/golangci-lint-action@v3
         with:
           args: --tests=false --timeout=3m
+          
+  run_on_arm64:
+      runs-on: ubuntu-latest
+#       timeout-minutes: 10
+      steps:
+       - uses: actions/checkout@v3
+
+#        - name: Set up Go
+#          uses: actions/setup-go@v3
+#          with:
+#            go-version: 1.19
+         
+       - name: Run on aarch64
+         uses: uraimo/run-on-arch-action@v2
+         with:
+          arch: aarch64
+          distro: ubuntu_latest
+          githubToken: ${{ github.token }}
+          base_image: golang:1.19
+          install: |
+                apt-get update -q -y
+                apt-get install -q -y git
+          run: |
+            git config --global --add safe.directory "$PWD"
+            go build ./...
+            go test -v ./... 
+            go test -v -tags=integration -p=1 ./internal/test/integration
+   
+            
+    
+    
