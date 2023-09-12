@@ -1,7 +1,7 @@
 package data
 
 import (
-	"io/ioutil"
+	"os"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -12,7 +12,7 @@ import (
 
 var _ = Describe("offsetFileWriter and reader", func() {
 	It("should read and write", func() {
-		dir, err := ioutil.TempDir("", "offset_file_test")
+		dir, err := os.MkdirTemp("", "offset_file_test")
 		Expect(err).NotTo(HaveOccurred())
 
 		config := new(mocks.Config)

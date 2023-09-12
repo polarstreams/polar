@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -22,7 +21,7 @@ var _ = Describe("indexFileWriter", func() {
 		config := new(mocks.Config)
 		config.On("IndexFilePeriodBytes").Return(200)
 
-		dir, err := ioutil.TempDir("", "test_index")
+		dir, err := os.MkdirTemp("", "test_index")
 		Expect(err).NotTo(HaveOccurred())
 
 		w := &indexFileWriter{
@@ -57,7 +56,7 @@ var _ = Describe("indexFileWriter", func() {
 		config := new(mocks.Config)
 		config.On("IndexFilePeriodBytes").Return(200)
 
-		dir, err := ioutil.TempDir("", "test_index_close")
+		dir, err := os.MkdirTemp("", "test_index_close")
 		Expect(err).NotTo(HaveOccurred())
 
 		w := &indexFileWriter{
@@ -91,7 +90,7 @@ var _ = Describe("indexFileWriter", func() {
 		config := new(mocks.Config)
 		config.On("IndexFilePeriodBytes").Return(200)
 
-		dir, err := ioutil.TempDir("", "test_index_and_offset")
+		dir, err := os.MkdirTemp("", "test_index_and_offset")
 		Expect(err).NotTo(HaveOccurred())
 
 		w := &indexFileWriter{

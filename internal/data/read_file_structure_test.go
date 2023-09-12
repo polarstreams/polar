@@ -1,7 +1,6 @@
 package data
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -13,7 +12,7 @@ import (
 
 var _ = Describe("ReadFileStructure()", func() {
 	It("should return the filenames that might contain the offset", func() {
-		dir, err := ioutil.TempDir("", "file_structure_test")
+		dir, err := os.MkdirTemp("", "file_structure_test")
 		Expect(err).NotTo(HaveOccurred())
 
 		topic := &TopicDataId{}

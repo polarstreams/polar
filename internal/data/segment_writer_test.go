@@ -1,7 +1,7 @@
 package data
 
 import (
-	"io/ioutil"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -61,7 +61,7 @@ var _ = Describe("SegmentWriter", func() {
 			replicator := new(mocks2.Replicator)
 			replicator.On("SendToFollowers", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-			dir, err := ioutil.TempDir("", "test_write_loop_leader")
+			dir, err := os.MkdirTemp("", "test_write_loop_leader")
 			Expect(err).NotTo(HaveOccurred())
 			s := &SegmentWriter{
 				Items:      make(chan SegmentChunk, 0),

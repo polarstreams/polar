@@ -2,7 +2,7 @@ package data
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -12,7 +12,7 @@ import (
 var _ = Describe("tryReadIndexFile()", func() {
 	It("Should give the file offset closest (lower bound) to the provided one", func() {
 
-		dir, err := ioutil.TempDir("", "test_index")
+		dir, err := os.MkdirTemp("", "test_index")
 		Expect(err).NotTo(HaveOccurred())
 		writeIndexFile(dir, 50)
 		filePrefix := fmt.Sprintf("%020d", 0)

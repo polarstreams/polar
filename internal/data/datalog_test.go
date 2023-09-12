@@ -1,7 +1,6 @@
 package data
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -186,7 +185,7 @@ var _ = Describe("datalog", func() {
 })
 
 func createSegmentFileAndConfig(segmentId int64, chunks [][]byte) *mocks.Config {
-	dir, err := ioutil.TempDir("", "read_file_from")
+	dir, err := os.MkdirTemp("", "read_file_from")
 	Expect(err).NotTo(HaveOccurred())
 
 	config := new(mocks.Config)

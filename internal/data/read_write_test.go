@@ -2,7 +2,6 @@ package data
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,7 +21,7 @@ const blockSize = 512
 var _ = Describe("I/O Techniques", func() {
 	It("should write blocks with direct I/O", func() {
 		// Shows the basic technique for alignment
-		dir, err := ioutil.TempDir("", "test_writeflags*")
+		dir, err := os.MkdirTemp("", "test_writeflags*")
 		Expect(err).NotTo(HaveOccurred())
 
 		filename := filepath.Join(dir, "sample.txt")
@@ -72,7 +71,7 @@ var _ = Describe("I/O Techniques", func() {
 	})
 
 	It("reading and writing concurrently ", func() {
-		dir, err := ioutil.TempDir("", "test_read_write*")
+		dir, err := os.MkdirTemp("", "test_read_write*")
 		Expect(err).NotTo(HaveOccurred())
 
 		filename := filepath.Join(dir, "sample.txt")
