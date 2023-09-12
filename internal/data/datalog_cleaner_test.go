@@ -1,7 +1,6 @@
 package data
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,7 +13,7 @@ import (
 var _ = Describe("datalog", func() {
 	Describe("cleanUpDir()", func() {
 		It("should remove files that are older than retention", func() {
-			dir, err := ioutil.TempDir("", "clean_up_test")
+			dir, err := os.MkdirTemp("", "clean_up_test")
 			Expect(err).NotTo(HaveOccurred())
 			createFilesToClean(dir)
 			config := new(mocks.Config)

@@ -1,9 +1,9 @@
 package localdb
 
 import (
-	"io/ioutil"
 	"math"
 	"path/filepath"
+	"os"
 	"testing"
 	"time"
 
@@ -429,7 +429,7 @@ func newTestClient() *client {
 type testConfig struct{}
 
 func (c *testConfig) LocalDbPath() string {
-	dir, err := ioutil.TempDir("", "example")
+	dir, err := os.MkdirTemp("", "example")
 	panicIfError(err)
 	return filepath.Join(dir, "local.db")
 }
