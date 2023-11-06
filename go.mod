@@ -9,7 +9,7 @@ require (
 	github.com/klauspost/compress v1.16.5
 	github.com/mattn/go-sqlite3 v1.14.16
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.28.1
+	github.com/onsi/gomega v1.29.0
 	github.com/prometheus/client_golang v1.14.0
 	github.com/rs/zerolog v1.29.1
 	github.com/stretchr/testify v1.8.2
