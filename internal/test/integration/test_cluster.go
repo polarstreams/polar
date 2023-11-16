@@ -39,6 +39,7 @@ type TestBroker struct {
 type TestBrokerOptions struct {
 	InitialClusterSize int
 	DevMode            bool
+	EnableKafkaApi     bool
 }
 
 // Creates and starts a broker
@@ -104,6 +105,10 @@ func (b *TestBroker) Start() {
 			"POLAR_LISTEN_ON_ALL=false")
 	} else {
 		envs = append(envs, "POLAR_DEV_MODE=true")
+	}
+
+	if b.options.EnableKafkaApi {
+		envs = append(envs, "BARCO_KAFKA_API_ENABLED=true")
 	}
 
 	cmd.Env = envs

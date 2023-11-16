@@ -267,6 +267,34 @@ func (_m *Config) Init() error {
 	return r0
 }
 
+// IsKafkaApiEnabled provides a mock function with given fields:
+func (_m *Config) IsKafkaApiEnabled() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	return r0
+}
+
+// KafkaPort provides a mock function with given fields:
+func (_m *Config) KafkaPort() int {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
 // ListenOnAllAddresses provides a mock function with given fields:
 func (_m *Config) ListenOnAllAddresses() bool {
 	ret := _m.Called()

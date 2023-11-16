@@ -13,6 +13,7 @@ import (
 	. "github.com/polarstreams/polar/internal/test/integration"
 	. "github.com/polarstreams/polar/internal/types"
 	"github.com/rs/zerolog/log"
+	"github.com/segmentio/kafka-go"
 )
 
 var _ = Describe("Dev mode", func() {
@@ -107,6 +108,21 @@ var _ = Describe("Dev mode", func() {
 
 		req, _ = http.NewRequest(http.MethodPost, "http://127.0.0.1:9252/v1/consumer/goodbye?consumerId=c1", nil)
 		doRequest(consumerClient, req, http.StatusOK)
+	})
+
+	It("should support the Kafka API for consuming", func()  {
+		b0 = NewTestBroker(0, &TestBrokerOptions{DevMode: true, EnableKafkaApi: true})
+		b0.WaitOutput("Barco started")
+		conn, err := kafka.Dial("tcp", "127.0.0.1:9092")
+		Expect(err).NotTo(HaveOccurred())
+		b, err := conn.Controller()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(b).To(Equal(kafka.Broker{
+			Host: "abc",
+			Port: 9092,
+			ID:   0,
+			Rack: "rack1",
+		}))
 	})
 
 	It("produces using the binary protocol", func() {

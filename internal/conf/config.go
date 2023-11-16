@@ -42,6 +42,8 @@ const (
 	envConsumerRanges                  = "POLAR_CONSUMER_RANGES"
 	envTopologyFilePollDelayMs         = "POLAR_TOPOLOGY_FILE_POLL_DELAY_MS"
 	envShutdownDelaySecs               = "POLAR_SHUTDOWN_DELAY_SECS"
+	envKafkaPort                       = "POLAR_KAFKA_PORT"
+	envKafkaApiEnabled                 = "POLAR_KAFKA_API_ENABLED"
 	envDevMode                         = "POLAR_DEV_MODE"
 	envServiceName                     = "POLAR_SERVICE_NAME"
 	envPodName                         = "POLAR_POD_NAME"
@@ -60,6 +62,7 @@ const (
 	DefaultProducerBinaryPort  = 9254
 	DefaultGossipPort          = 9255
 	DefaultGossipDataPort      = 9256
+	DefaultKafkaPort           = 9092
 )
 
 const (
@@ -92,6 +95,8 @@ type BasicConfig interface {
 	ProducerPort() int
 	ProducerBinaryPort() int
 	ConsumerPort() int
+	KafkaPort() int
+	IsKafkaApiEnabled() bool
 }
 
 type LocalDbConfig interface {
@@ -229,12 +234,20 @@ func (c *config) MetricsPort() int {
 	return envInt(envMetricsPort, DefaultMetricsPort)
 }
 
+func (c *config) KafkaPort() int {
+	return envInt(envKafkaPort, DefaultKafkaPort)
+}
+
 func (c *config) GossipPort() int {
 	return envInt(envGossipPort, DefaultGossipPort)
 }
 
 func (c *config) GossipDataPort() int {
 	return envInt(envGossipDataPort, DefaultGossipDataPort)
+}
+
+func (c *config) IsKafkaApiEnabled() bool {
+	return os.Getenv(envKafkaApiEnabled) == "true"
 }
 
 func (c *config) ListenOnAllAddresses() bool {

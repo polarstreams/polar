@@ -12,6 +12,7 @@ require (
 	github.com/onsi/gomega v1.28.1
 	github.com/prometheus/client_golang v1.14.0
 	github.com/rs/zerolog v1.29.1
+	github.com/segmentio/kafka-go v0.4.38
 	github.com/stretchr/testify v1.8.2
 	golang.org/x/net v0.17.0
 	k8s.io/api v0.28.1
@@ -45,6 +46,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
+	github.com/pierrec/lz4/v4 v4.1.15 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect

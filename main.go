@@ -15,6 +15,7 @@ import (
 	"github.com/polarstreams/polar/internal/data/topics"
 	"github.com/polarstreams/polar/internal/discovery"
 	"github.com/polarstreams/polar/internal/interbroker"
+	"github.com/polarstreams/polar/internal/interop/kafka_api"
 	"github.com/polarstreams/polar/internal/localdb"
 	"github.com/polarstreams/polar/internal/metrics"
 	"github.com/polarstreams/polar/internal/ownership"
@@ -72,8 +73,10 @@ func main() {
 	generator := ownership.NewGenerator(config, discoverer, gossiper, localDbClient)
 	producer := producing.NewProducer(config, topicHandler, discoverer, datalog, gossiper)
 	consumer := consuming.NewConsumer(config, localDbClient, discoverer, datalog, gossiper)
+	kafkaServer := kafka_api.NewKafkaServer(config, localDbClient, discoverer)
 
-	toInit := []types.Initializer{localDbClient, topicHandler, discoverer, gossiper, generator, producer, consumer}
+	toInit := []types.Initializer{
+		localDbClient, topicHandler, discoverer, gossiper, generator, producer, consumer, kafkaServer}
 
 	for _, item := range toInit {
 		if err := item.Init(); err != nil {
@@ -101,6 +104,12 @@ func main() {
 
 	if err := consumer.AcceptConnections(); err != nil {
 		log.Fatal().Err(err).Msg("Exiting")
+	}
+
+	if config.IsKafkaApiEnabled() {
+		if err := kafkaServer.AcceptConnections(); err != nil {
+			log.Fatal().Err(err).Msg("Exiting")
+		}
 	}
 
 	log.Info().Msg("PolarStreams started")

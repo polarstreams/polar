@@ -332,6 +332,14 @@ func (c *configFake) ListenOnAllAddresses() bool {
 	return true
 }
 
+func (c *configFake) IsKafkaApiEnabled() bool {
+	return false
+}
+
+func (c *configFake) KafkaPort() int {
+	return 9092
+}
+
 func (c *configFake) DevMode() bool {
 	return false
 }
